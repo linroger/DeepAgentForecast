@@ -83,8 +83,8 @@ def _configured_rates(raw: str) -> tuple[tuple[str, tuple[float, float]], ...]:
     return tuple(rates.items())
 
 
-def capture_cost_quote(provider: str, model: str) -> dict[str, Any]:
-    """Resolve once before dispatch; dollar-enabled requests require a price."""
+def capture_cost_context(provider: str, model: str) -> tuple[dict[str, Any], bool]:
+    """Capture one price and dollar-enablement decision before dispatch."""
     from ..config import Config
     from .telemetry import BudgetExceeded, _COST_PER_1K
 
@@ -116,9 +116,14 @@ def capture_cost_quote(provider: str, model: str) -> dict[str, Any]:
             raise ValueError("Dollar budget must be finite and nonnegative")
         if limit > 0 and source == "unpriced":
             raise ValueError("Dollar-enabled API request has no price; configure LLM_COST_PER_MTOK")
-        return quote
+        return quote, limit > 0
     except (ValueError, TypeError, AttributeError, OverflowError) as exc:
         raise BudgetExceeded(f"Cannot price API request: {exc}") from exc
+
+
+def capture_cost_quote(provider: str, model: str) -> dict[str, Any]:
+    """Resolve an independent estimate; dollar-enabled requests need a price."""
+    return capture_cost_context(provider, model)[0]
 
 
 def quote_cost(quote: dict[str, Any], prompt_tokens: int, completion_tokens: int) -> float:

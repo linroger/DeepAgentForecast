@@ -445,6 +445,7 @@ class LLMMeter:
                         cost_quote: Optional[Dict[str, Any]] = None,
                         baseline_included: bool = False,
                         token_reservation: Optional[Dict[str, Any]] = None,
+                        require_cost_coverage: bool = False,
                         _fallback: bool = False) -> Dict[str, Any]:
         """Reconcile one stable cumulative observation, never an anonymous sum.
 
@@ -461,6 +462,10 @@ class LLMMeter:
         stg = stage or _current_stage.get() or cls.default_stage(rid) or "_unstaged"
         with cls._lock:
             bound_at_validation = rid in cls._durable
+        if not isinstance(require_cost_coverage, bool) or (require_cost_coverage and not bound_at_validation):
+            raise BudgetExceeded("Price coverage requires an explicit durable API observation")
+        if require_cost_coverage and (source != "llm_api_attempt" or status != "in_flight" or baseline_included):
+            raise BudgetExceeded("Price coverage requires a new zero-counter priced API marker")
         try:
             selected_quote = None
             if cost_quote is not None:
@@ -497,6 +502,8 @@ class LLMMeter:
         with cls._lock:
             binding = cls._durable.get(rid)
             if binding is None:
+                if require_cost_coverage:
+                    raise BudgetExceeded("Price coverage requires a durable run binding")
                 if token_reservation is not None:
                     raise BudgetExceeded("Token reservation requires a durable run binding")
                 if baseline_included:
@@ -527,7 +534,7 @@ class LLMMeter:
             return binding.ledger.record_snapshot(
                 run_id=rid, attempt_id=binding.attempt_id, source=source, operation_id=operation_id,
                 metadata=metadata, counters=counters, status=status, baseline_included=baseline_included,
-                token_reservation=token_reservation)
+                token_reservation=token_reservation, require_cost_coverage=require_cost_coverage)
         except UsageLedgerBudgetExceeded as exc:
             raise BudgetExceeded(str(exc)) from exc
         except UsageLedgerUnresolvedError:
@@ -686,6 +693,8 @@ class LLMMeter:
             result["api_operation_state"] = snap["api_operation_state"]
         if "token_reservation_state" in snap:
             result["token_reservation_state"] = snap["token_reservation_state"]
+        if "cost_coverage" in snap:
+            result["cost_coverage"] = snap["cost_coverage"]
         return result
 
     @classmethod
@@ -745,6 +754,7 @@ class LLMMeter:
                 data["cumulative_by_stage"] = cumulative["by_stage"]
                 data["api_operation_state"] = cumulative["api_operation_state"]
                 data["token_reservation_state"] = cumulative["token_reservation_state"]
+                data["cost_coverage"] = cumulative["cost_coverage"]
             else:
                 current = data.get("total") or {}
                 data["cumulative_total"] = {key: round((base.get(key) or 0) + (current.get(key) or 0), 6)

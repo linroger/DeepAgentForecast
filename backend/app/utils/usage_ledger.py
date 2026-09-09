@@ -25,6 +25,66 @@ METRICS = (
 _FLOAT_METRICS = {"latency_ms", "cost_usd"}
 _USAGE_CLASSES = {"known", "estimated", "unknown", "mixed"}
 
+# Built-in SQL only: every writer, including older processes, maintains this
+# expression index. Keep the indexed expressions identical in reads/admission.
+_COST_QUOTE_VALID_SQL = """
+    json_type(metadata_json, '$.cost_quote')='object'
+    AND json_remove(json_extract(metadata_json, '$.cost_quote'),
+        '$.schema', '$.provider', '$.model', '$.source', '$.rate_key',
+        '$.input_usd_per_1k', '$.output_usd_per_1k')='{}'
+    AND json_extract(metadata_json, '$.cost_quote.schema')='api-cost-quote/v1'
+    AND json_type(metadata_json, '$.cost_quote.provider')='text'
+    AND length(json_extract(metadata_json, '$.cost_quote.provider')) BETWEEN 1 AND 512
+    AND json_extract(metadata_json, '$.cost_quote.provider')=json_extract(metadata_json, '$.provider')
+    AND json_type(metadata_json, '$.cost_quote.model')='text'
+    AND length(json_extract(metadata_json, '$.cost_quote.model')) BETWEEN 1 AND 512
+    AND json_extract(metadata_json, '$.cost_quote.model')=json_extract(metadata_json, '$.model')
+    AND ((json_extract(metadata_json, '$.cost_quote.source')='unpriced'
+        AND json_type(metadata_json, '$.cost_quote.rate_key')='null'
+        AND json_type(metadata_json, '$.cost_quote.input_usd_per_1k')='null'
+        AND json_type(metadata_json, '$.cost_quote.output_usd_per_1k')='null')
+      OR (json_extract(metadata_json, '$.cost_quote.source') IN
+            ('configured_model', 'configured_provider', 'builtin_provider')
+        AND json_type(metadata_json, '$.cost_quote.rate_key')='text'
+        AND json_extract(metadata_json, '$.cost_quote.rate_key')=CASE
+            WHEN json_extract(metadata_json, '$.cost_quote.source')='configured_model'
+            THEN lower(trim(json_extract(metadata_json, '$.cost_quote.provider')))
+                || ':' || json_extract(metadata_json, '$.cost_quote.model')
+            ELSE lower(trim(json_extract(metadata_json, '$.cost_quote.provider'))) END
+        AND json_type(metadata_json, '$.cost_quote.input_usd_per_1k') IN ('integer', 'real')
+        AND json_type(metadata_json, '$.cost_quote.output_usd_per_1k') IN ('integer', 'real')
+        AND json_extract(metadata_json, '$.cost_quote.input_usd_per_1k') BETWEEN 0 AND 9007199254740992
+        AND json_extract(metadata_json, '$.cost_quote.output_usd_per_1k') BETWEEN 0 AND 9007199254740992))
+"""
+_COST_ZERO_TOKENS_SQL = " AND ".join(
+    f"json_type(counter_json, '$.{key}')='integer' AND json_extract(counter_json, '$.{key}')=0"
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens", "cache_read_tokens",
+                "cache_write_tokens", "uncached_tokens"))
+_COST_CACHE_ONLY_SQL = f"""
+    source='llm_call' AND status='completed'
+    AND json_extract(metadata_json, '$.usage_class')='known'
+    AND json_type(counter_json, '$.calls')='integer'
+    AND json_extract(counter_json, '$.calls')>0
+    AND json_type(counter_json, '$.cached')='integer'
+    AND json_extract(counter_json, '$.cached')=json_extract(counter_json, '$.calls')
+    AND {_COST_ZERO_TOKENS_SQL}
+    AND json_type(counter_json, '$.cost_usd') IN ('integer', 'real')
+    AND json_extract(counter_json, '$.cost_usd')=0
+"""
+_COST_PRICE_CLASS_SQL = f"""CASE WHEN source='llm_api_attempt' THEN CASE
+    WHEN (json_type(metadata_json, '$.cost_quote.provider')='text' AND (
+        json_extract(metadata_json, '$.cost_quote.provider') GLOB '*[^ -~]*'
+        OR instr(json_extract(metadata_json, '$.cost_quote.provider'), char(0))>0))
+        OR instr(json_extract(metadata_json, '$.cost_quote.model'), char(0))>0 THEN 'api_validate'
+    WHEN ({_COST_QUOTE_VALID_SQL}) THEN CASE
+        WHEN json_extract(metadata_json, '$.cost_quote.source')='unpriced' THEN 'api_unpriced'
+        ELSE 'api_priced' END
+    ELSE 'api_unquoted' END
+    WHEN ({_COST_CACHE_ONLY_SQL}) THEN 'cache_only' ELSE 'non_api' END"""
+_COST_INEXACT_SQL = """CASE WHEN source='llm_api_attempt' AND (
+    status IN ('in_flight', 'accounting_error')
+    OR json_extract(metadata_json, '$.usage_class') IS NOT 'known') THEN 1 ELSE 0 END"""
+
 
 class UsageLedgerStorageError(RuntimeError):
     """Durable accounting is unavailable; callers must not assume zero spend."""
@@ -210,6 +270,8 @@ class UsageLedger:
                   WHERE run_id=NEW.run_id AND source=NEW.source AND operation_id=NEW.operation_id)
             BEGIN SELECT RAISE(ABORT, 'Token reservation required before API dispatch'); END""")
         UsageLedger._cost_quote_guards(conn)
+        conn.execute(f"CREATE INDEX IF NOT EXISTS usage_operations_cost_coverage ON usage_operations "
+                     f"(run_id, ({_COST_PRICE_CLASS_SQL}), ({_COST_INEXACT_SQL}))")
 
     @staticmethod
     def _cost_quote_guards(conn: sqlite3.Connection) -> None:
@@ -319,7 +381,12 @@ class UsageLedger:
     def record_snapshot(self, *, run_id: str, attempt_id: str, source: str,
                         operation_id: str, metadata: dict, counters: dict,
                         status: str = "completed", baseline_included: bool = False,
-                        token_reservation: dict[str, Any] | None = None) -> dict[str, Any]:
+                        token_reservation: dict[str, Any] | None = None,
+                        require_cost_coverage: bool = False) -> dict[str, Any]:
+        if not isinstance(require_cost_coverage, bool):
+            raise UsageLedgerBudgetExceeded("Price coverage requirement must be a boolean")
+        if require_cost_coverage and (source != "llm_api_attempt" or status != "in_flight" or baseline_included):
+            raise UsageLedgerBudgetExceeded("Price coverage requires a new zero-counter priced API marker")
         for name, value in (("run_id", run_id), ("attempt_id", attempt_id), ("source", source),
                             ("operation_id", operation_id), ("status", status)):
             _label(value, name)
@@ -345,6 +412,11 @@ class UsageLedger:
             if current["cost_usd"] != quote_cost(cost_quote, current["prompt_tokens"], current["completion_tokens"]):
                 raise ValueError("API cost does not match its captured quote")
             meta["cost_quote"] = cost_quote
+        if require_cost_coverage and (
+            source != "llm_api_attempt" or status != "in_flight" or any(current.values())
+            or baseline_included or cost_quote is None or cost_quote["source"] == "unpriced"
+        ):
+            raise UsageLedgerBudgetExceeded("Price coverage requires a new zero-counter priced API marker")
         if token_reservation is not None:
             self._validate_token_reservation(token_reservation)
             if source != "llm_api_attempt" or status != "in_flight" or any(current.values()) or baseline_included:
@@ -365,6 +437,10 @@ class UsageLedger:
                 raise ValueError("A baseline-included snapshot requires an imported legacy baseline")
             old = conn.execute("SELECT * FROM usage_operations WHERE run_id=? AND source=? AND operation_id=?",
                                (run_id, source, operation_id)).fetchone()
+            if require_cost_coverage:
+                if old is not None:
+                    raise UsageLedgerBudgetExceeded("Price coverage requires a new API operation")
+                self._assert_cost_coverage(conn, run_id, legacy_baseline_present=run["legacy_json"] is not None)
             if source == "llm_api_attempt" and status == "in_flight" and old is None:
                 # Serialize dispatch markers across attempt owners. Read/check
                 # races cannot authorize a second owner after the first marker.
@@ -537,6 +613,70 @@ class UsageLedger:
                 "active_operations": row["operations"], "reserved_tokens": row["tokens"]}
 
     @staticmethod
+    def _validated_cost_class(metadata_json: str) -> str:
+        """Rare provider labels need Python's Unicode strip/lower semantics."""
+        from .api_cost import validate_cost_quote
+        try:
+            metadata = json.loads(metadata_json)
+            if not isinstance(metadata, dict):
+                raise ValueError("Invalid operation metadata")
+            selected = validate_cost_quote(metadata.get("cost_quote"),
+                provider=_label(metadata.get("provider"), "provider"),
+                model=_label(metadata.get("model"), "model"))
+            return "api_unpriced" if selected["source"] == "unpriced" else "api_priced"
+        except (ValueError, TypeError):
+            return "api_unquoted"
+
+    @staticmethod
+    def _cost_validation_rows(conn: sqlite3.Connection, run_id: str) -> sqlite3.Cursor:
+        return conn.execute(f"SELECT metadata_json FROM usage_operations WHERE run_id=? "
+                            f"AND ({_COST_PRICE_CLASS_SQL})='api_validate'", (run_id,))
+
+    @staticmethod
+    def _assert_cost_coverage(conn: sqlite3.Connection, run_id: str, *,
+                              legacy_baseline_present: bool = False) -> None:
+        """Reject missing historical prices, without serializing priced work."""
+        if legacy_baseline_present or conn.execute(
+            f"SELECT 1 FROM usage_operations WHERE run_id=? AND ({_COST_PRICE_CLASS_SQL}) "
+            "IN ('api_unpriced', 'api_unquoted', 'non_api') LIMIT 1", (run_id,),
+        ).fetchone():
+            raise UsageLedgerBudgetExceeded("Recorded usage has incomplete price coverage")
+        for row in UsageLedger._cost_validation_rows(conn, run_id):
+            if UsageLedger._validated_cost_class(row["metadata_json"]) != "api_priced":
+                raise UsageLedgerBudgetExceeded("Recorded usage has incomplete price coverage")
+
+    @staticmethod
+    def _cost_coverage_state(conn: sqlite3.Connection, run_id: str, *,
+                             legacy_baseline_present: bool = False,
+                             legacy_baseline_ambiguous: bool = False) -> dict[str, Any]:
+        """Run-wide operation counts; price coverage never asserts exact usage."""
+        state = {"schema": "cost-coverage-state/v1", "coverage": "recorded_operations",
+                 "priced_api_operations": 0, "unpriced_api_operations": 0,
+                 "unquoted_api_operations": 0, "inexact_api_operations": 0,
+                 "non_api_operations": 0, "cache_only_operations": 0,
+                 "legacy_baseline_present": legacy_baseline_present,
+                 "legacy_baseline_ambiguous": legacy_baseline_ambiguous,
+                 "price_coverage_complete": False, "usage_complete": False}
+        names = {"api_priced": "priced_api_operations", "api_unpriced": "unpriced_api_operations",
+                 "api_unquoted": "unquoted_api_operations", "non_api": "non_api_operations",
+                 "cache_only": "cache_only_operations"}
+        rows = conn.execute(
+            f"SELECT ({_COST_PRICE_CLASS_SQL}) AS price_class, ({_COST_INEXACT_SQL}) AS inexact, "
+            "COUNT(*) AS operations FROM usage_operations WHERE run_id=? "
+            f"GROUP BY ({_COST_PRICE_CLASS_SQL}), ({_COST_INEXACT_SQL})", (run_id,),
+        ).fetchall()
+        for row in rows:
+            if row["price_class"] != "api_validate":
+                state[names[row["price_class"]]] += row["operations"]
+            if row["inexact"]:
+                state["inexact_api_operations"] += row["operations"]
+        for row in UsageLedger._cost_validation_rows(conn, run_id):
+            state[names[UsageLedger._validated_cost_class(row["metadata_json"])]] += 1
+        state["price_coverage_complete"] = not (legacy_baseline_present or any(
+            state[key] for key in ("unpriced_api_operations", "unquoted_api_operations", "non_api_operations")))
+        return state
+
+    @staticmethod
     def _api_operation_state(conn: sqlite3.Connection, run_id: str,
                              current_attempt_id: str | None) -> dict[str, Any]:
         """Run-wide operation state, independent of delta attribution filters."""
@@ -665,10 +805,14 @@ class UsageLedger:
                 counter["cost_usd"] = round(counter["cost_usd"], 6)
             api_operation_state = self._api_operation_state(conn, run_id, current_attempt_id)
             token_reservation_state = self._token_reservation_state(conn, run_id)
+            cost_coverage = self._cost_coverage_state(
+                conn, run_id, legacy_baseline_present=run["legacy_json"] is not None,
+                legacy_baseline_ambiguous=bool(run["legacy_ambiguous"]))
             conn.commit()
             return {"run_id": run_id, "attempt_id": attempt_id, "total": total,
                     "api_operation_state": api_operation_state,
                     "token_reservation_state": token_reservation_state,
+                    "cost_coverage": cost_coverage,
                     "by_stage": by_stage, "by_model": by_model,
                     "usage_by_class": by_source, "fallback_attributed": fallback,
                     "cost_estimated": estimated, "cost_basis": next(iter(bases)) if len(bases) == 1 else ("mixed" if bases else "unknown"),

@@ -13,7 +13,7 @@ from typing import Any
 
 from .llm_client import LLMClient
 from .api_budget import plan_token_reservation
-from .api_cost import capture_cost_quote
+from .api_cost import capture_cost_context
 from .telemetry import (
     BudgetExceeded, LLMMeter, UsageLedgerConflict, UsageLedgerStorageError,
     UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
@@ -56,7 +56,8 @@ class _Attempt:
         self.provider = provider
         self.operation_id = LLMMeter.new_operation_id(self.run_id)
         self.reservation = plan_token_reservation(body, self.run_id)
-        self.cost_quote = capture_cost_quote(provider, self.model)
+        self.cost_quote, dollar_enabled = capture_cost_context(provider, self.model)
+        self.require_cost_coverage = dollar_enabled and LLMMeter.is_durable_run(self.run_id)
         self.record(calls=0, status="in_flight")
         self.started = time.monotonic()
 
@@ -71,6 +72,7 @@ class _Attempt:
             uncached_tokens=None, **cache,
             token_reservation=self.reservation if status == "in_flight" else None,
             cost_quote=self.cost_quote,
+            require_cost_coverage=self.require_cost_coverage if status == "in_flight" else False,
         )
 
     def unknown(self) -> None:

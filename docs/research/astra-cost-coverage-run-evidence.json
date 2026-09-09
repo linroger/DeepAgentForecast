@@ -1,0 +1,497 @@
+{
+  "schema": "astra-cost-coverage-run-evidence/v1",
+  "validated_at": "2026-09-08T02:17:11.980427+00:00",
+  "iteration_baseline": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+  "scope": "Read-only bounded saved-run price-coverage refresh and pinned graph/report recovery evidence. No runtime/provider action, original writes or private payload exports.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipts": [
+    {
+      "path": "docs/research/astra-monetary-run-evidence.json",
+      "sha256": "7688261c16f49fbd343aa48e1fec07070926655e157f47e43afdea1f188f5fab"
+    },
+    {
+      "path": "docs/research/astra-api-cost-verification.json",
+      "sha256": "08649cdd319f499492fd0222044428977a14bbb53400ee750d9835b1699a0c02"
+    },
+    {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264"
+    },
+    {
+      "path": "docs/research/astra-api-run-evidence.json",
+      "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be"
+    },
+    {
+      "path": "docs/research/astra-simulation-run-evidence.json",
+      "sha256": "ce479031708da725d197919d635f0b82e2a3438dbed94eb40f77e742ced86037"
+    }
+  ],
+  "validation": {
+    "saved_artifacts": {
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+      "new_or_changed_logs_parsed": 0,
+      "parsed_aggregates": [],
+      "prior_aggregates_reused": true,
+      "prior_aggregate_reference": "astra-reservation-run-evidence.json reused_log_aggregates; counts remain nonexclusive literal log markers."
+    },
+    "selected_child_health": {
+      "checked": 4,
+      "all_hashes_match": true,
+      "all_parent_run_entries_still_absent": true,
+      "all_child_token_snapshots_still_absent": true
+    },
+    "selected_documents": {
+      "count": 16,
+      "matched_prior_hashes": 16,
+      "prior_source_inventory": "astra-monetary-run-evidence.json selected_runs[*].sources"
+    }
+  },
+  "coverage_lookup": {
+    "exact_key_allowlist": [
+      "cost_quote",
+      "cost_coverage",
+      "price_coverage",
+      "pricing_coverage",
+      "rate_policy",
+      "usd_budget_policy",
+      "quoted_operations",
+      "unquoted_operations",
+      "unpriced_tokens",
+      "unpriced_calls",
+      "known_price_calls",
+      "unknown_price_calls",
+      "invoice_usd",
+      "billed_cost_usd",
+      "LLM_RUN_BUDGET_USD",
+      "LLM_COST_PER_MTOK"
+    ],
+    "scope": "Recursive exact-key lookup in four selected telemetry files, pipeline states, manifests and simulation configurations. Non-numeric values are omitted; no environment files or active ledgers are inspected.",
+    "empty_matches_mean": "No inspected saved coverage/rate/cap field; historical unknown-price activity and enabled dollar caps remain unknown, not zero.",
+    "raw_legacy_labels": "cost_estimated=false and cost_basis=api are copied observations, not evidence of invoice accuracy or complete per-operation pricing."
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "simulation_id": "sim_a0a936f8104c",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "source_inventory_reference": "astra-monetary-run-evidence.json#/selected_runs/0/sources",
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+        "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240"
+      },
+      "current_key_path": "$.total",
+      "current_calls": 136,
+      "current_total_tokens": 82983739,
+      "current_cost_usd": 26.279737,
+      "cumulative_key_path": "$.cumulative_total",
+      "cumulative_present": false,
+      "cumulative_values": null,
+      "raw_cost_estimated": false,
+      "raw_cost_basis": "api",
+      "coverage_key_matches_by_document": {
+        "meter": [],
+        "state": [],
+        "manifest": [],
+        "simulation_config": []
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "known_priced_history_complete": null,
+      "billed_invoice_cost_usd": null,
+      "raw_run_meter_present": false,
+      "embedded_run_cost_usd": 0.0,
+      "child_token_snapshot_exists": false,
+      "cumulative_values_are_selected_aggregates": true,
+      "embedded_run_cost_key_path": "$.options.llm_telemetry.by_stage.run.est_cost_usd"
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "simulation_id": "sim_85b123350ee3",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "source_inventory_reference": "astra-monetary-run-evidence.json#/selected_runs/1/sources",
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json",
+        "sha256": "c6281f59d12a9d6e84f70254d9218c3799f2082469ae5d96263671fe43fad1a6"
+      },
+      "current_key_path": "$.total",
+      "current_calls": 131,
+      "current_total_tokens": 2386860,
+      "current_cost_usd": 0.809589,
+      "cumulative_key_path": "$.cumulative_total",
+      "cumulative_present": true,
+      "cumulative_values": {
+        "calls": 629,
+        "cached": 20,
+        "prompt_tokens": 29338770,
+        "completion_tokens": 983612,
+        "total_tokens": 30322382,
+        "cost_usd": 9.883604
+      },
+      "raw_cost_estimated": false,
+      "raw_cost_basis": "api",
+      "coverage_key_matches_by_document": {
+        "meter": [],
+        "state": [],
+        "manifest": [],
+        "simulation_config": []
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "known_priced_history_complete": null,
+      "billed_invoice_cost_usd": null,
+      "raw_run_meter_present": false,
+      "embedded_run_cost_usd": 0.0,
+      "child_token_snapshot_exists": false,
+      "cumulative_values_are_selected_aggregates": true,
+      "embedded_run_cost_key_path": "$.options.llm_telemetry.by_stage.run.est_cost_usd"
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "simulation_id": "sim_05ab2bdebbd2",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "source_inventory_reference": "astra-monetary-run-evidence.json#/selected_runs/2/sources",
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+        "sha256": "42dace2bb7276a04eb3f987ee232fee04905852bd97691449cc59dcb1e22ff1e"
+      },
+      "current_key_path": "$.total",
+      "current_calls": 217,
+      "current_total_tokens": 2558618,
+      "current_cost_usd": 0.934069,
+      "cumulative_key_path": "$.cumulative_total",
+      "cumulative_present": true,
+      "cumulative_values": {
+        "calls": 335,
+        "cached": 12,
+        "prompt_tokens": 4970191,
+        "completion_tokens": 383094,
+        "total_tokens": 5353285,
+        "cost_usd": 1.912461
+      },
+      "raw_cost_estimated": false,
+      "raw_cost_basis": "api",
+      "coverage_key_matches_by_document": {
+        "meter": [],
+        "state": [],
+        "manifest": [],
+        "simulation_config": []
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "known_priced_history_complete": null,
+      "billed_invoice_cost_usd": null,
+      "raw_run_meter_present": false,
+      "embedded_run_cost_usd": 0.0,
+      "child_token_snapshot_exists": false,
+      "cumulative_values_are_selected_aggregates": true,
+      "embedded_run_cost_key_path": "$.options.llm_telemetry.by_stage.run.est_cost_usd"
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "simulation_id": "sim_9fc88d28ccb1",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "source_inventory_reference": "astra-monetary-run-evidence.json#/selected_runs/3/sources",
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+        "sha256": "71f60f4930ba2d325c8ce6f395f1b897cbbcd4c17aaa912d0ce936e46ecad968"
+      },
+      "current_key_path": "$.total",
+      "current_calls": 252,
+      "current_total_tokens": 2940662,
+      "current_cost_usd": 1.090763,
+      "cumulative_key_path": "$.cumulative_total",
+      "cumulative_present": true,
+      "cumulative_values": {
+        "calls": 255,
+        "cached": 26,
+        "prompt_tokens": 2688582,
+        "completion_tokens": 266168,
+        "total_tokens": 2954750,
+        "cost_usd": 1.099359
+      },
+      "raw_cost_estimated": false,
+      "raw_cost_basis": "api",
+      "coverage_key_matches_by_document": {
+        "meter": [],
+        "state": [],
+        "manifest": [],
+        "simulation_config": []
+      },
+      "historical_active_usd_cap": null,
+      "historical_rate_policy": null,
+      "historical_unknown_price_request_count": null,
+      "known_priced_history_complete": null,
+      "billed_invoice_cost_usd": null,
+      "raw_run_meter_present": false,
+      "embedded_run_cost_usd": 0.0,
+      "child_token_snapshot_exists": false,
+      "cumulative_values_are_selected_aggregates": true,
+      "embedded_run_cost_key_path": "$.options.llm_telemetry.by_stage.run.est_cost_usd"
+    }
+  ],
+  "pinned_source_snapshots": [
+    {
+      "path": "backend/app/utils/usage_ledger.py",
+      "revision": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+      "sha256": "537ca61e6582657f0c5d99f7108af7a4ec60d52d14bb26c881ecc5f3b49250e6",
+      "anchors": {
+        "def initialize": 277,
+        "opaque-legacy-baseline/v1": 300,
+        "def _budget_totals": 561,
+        "def budget_totals": 594,
+        "def snapshot": 616,
+        "\"usage_complete\": False": 679
+      }
+    },
+    {
+      "path": "backend/app/utils/api_cost.py",
+      "revision": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+      "sha256": "e2c1339751791ef4c786b8d72a51763387ae367391adeb36bb7a3b6ebbd8b7d9",
+      "anchors": {
+        "def capture_cost_quote": 86,
+        "source, rate_key, rates = \"unpriced\"": 109,
+        "if limit > 0 and source == \"unpriced\"": 117,
+        "def quote_cost": 124
+      }
+    },
+    {
+      "path": "backend/app/utils/telemetry.py",
+      "revision": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+      "sha256": "8ee28b27c8951937b5821c9583d62c6b30ec759f537b21a0bf1e3aaf00f17725",
+      "anchors": {
+        "def check_budget": 756,
+        "max_cost = float": 765,
+        "cumulative = LLMMeter.cumulative_budget_totals": 774
+      }
+    },
+    {
+      "path": "backend/app/services/graphiti_client/runtime.py",
+      "revision": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+      "sha256": "a9461c52de48efb0c8d49eb3068094c1db6c7334b58df95144c8c13834907028",
+      "anchors": {
+        "def run(self, coro": 224,
+        "return future.result(eff)": 233,
+        "future.cancel()": 242,
+        "def add_episodes_concurrent": 1071,
+        "async def _add_episodes_concurrent": 1092,
+        "results = await asyncio.gather(": 1124
+      }
+    },
+    {
+      "path": "backend/app/services/report_agent.py",
+      "revision": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+      "sha256": "e1431e0957bc44fdbe8f874ea49d9946c41833c1e0a3520d0da8f2b30e264b14",
+      "anchors": {
+        "def _generate_sections_concurrent": 9206,
+        "contents[idx] = content": 9245,
+        "_precomputed = self._generate_sections_concurrent": 10445,
+        "_sec_telemetry_on = _telemetry_on and _precomputed is None": 10472,
+        "outer save_section after concurrent helper": 10555
+      }
+    },
+    {
+      "path": "backend/app/services/pipeline_orchestrator.py",
+      "revision": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+      "sha256": "707492ac77c55c9e25ca6dc0f5a876f8ad28fc1e4fe6394660211edc4caeeea6",
+      "anchors": {
+        "graph_stage_done = state.stages.get(STAGE_GRAPH)": 12607
+      }
+    }
+  ],
+  "baseline_cost_coverage_facts": {
+    "ledger_return_keys": {
+      "_budget_totals": [
+        [
+          "total_tokens",
+          "cost_usd"
+        ]
+      ],
+      "snapshot": [
+        [
+          "run_id",
+          "attempt_id",
+          "total",
+          "api_operation_state",
+          "token_reservation_state",
+          "by_stage",
+          "by_model",
+          "usage_by_class",
+          "fallback_attributed",
+          "cost_estimated",
+          "cost_basis",
+          "cache_partition_known",
+          "durable",
+          "ledger_schema",
+          "legacy_baseline_present",
+          "legacy_baseline_ambiguous",
+          "coverage",
+          "usage_complete"
+        ]
+      ]
+    },
+    "per_operation_quote_capture_present": true,
+    "unpriced_quote_rates": null,
+    "unpriced_quote_numeric_cost": 0,
+    "new_unpriced_request_rejected_when_usd_cap_positive": true,
+    "legacy_import_schema": "opaque-legacy-baseline/v1",
+    "legacy_import_has_operation_price_history": false,
+    "aggregate_price_coverage_projection_present": false,
+    "run_wide_rate_policy_present": false,
+    "monetary_reservations_present": false,
+    "interpretation": "Baseline capture protects new per-operation estimates from drift. It does not make historical unpriced/legacy costs known, expose complete aggregate pricing coverage or serialize a shared dollar remainder."
+  },
+  "reused_recovery_aggregates": {
+    "receipt": "docs/research/astra-iteration-04-run-evidence.json",
+    "selected_runs": [
+      {
+        "pipeline_id": "pipe_f23527f7d903",
+        "state_source": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "graph_stage_span_seconds": 31050.610534,
+        "graph_stage_time_key_paths": [
+          "$.stages.graph.started_at",
+          "$.stages.graph.finished_at"
+        ],
+        "graph_total_chunks": 466,
+        "graph_skipped_chunks": 278,
+        "graph_skip_counter_key_paths": [
+          "$.options.graph_total_chunks",
+          "$.options.graph_skipped_chunks"
+        ],
+        "graph_skipped_pct_recomputed": 59.657,
+        "report_id": "report_a03be154febc",
+        "report_telemetry_source": "backend/uploads/reports/report_a03be154febc/telemetry.json",
+        "report_agent_log_source": "backend/uploads/reports/report_a03be154febc/agent_log.jsonl",
+        "reported_tool_calls": 0,
+        "previously_parsed_logged_tool_calls": 57,
+        "previously_parsed_exact_parameter_repeats": 8,
+        "report_log_reparsed": false
+      },
+      {
+        "pipeline_id": "pipe_91aaf91f6392",
+        "state_source": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "graph_stage_span_seconds": 13535.791631,
+        "graph_stage_time_key_paths": [
+          "$.stages.graph.started_at",
+          "$.stages.graph.finished_at"
+        ],
+        "graph_total_chunks": 44,
+        "graph_skipped_chunks": 14,
+        "graph_skip_counter_key_paths": [
+          "$.options.graph_total_chunks",
+          "$.options.graph_skipped_chunks"
+        ],
+        "graph_skipped_pct_recomputed": 31.818,
+        "report_id": "report_9147b3f6a0a9",
+        "report_telemetry_source": "backend/uploads/reports/report_9147b3f6a0a9/telemetry.json",
+        "report_agent_log_source": "backend/uploads/reports/report_9147b3f6a0a9/agent_log.jsonl",
+        "reported_tool_calls": 0,
+        "previously_parsed_logged_tool_calls": 47,
+        "previously_parsed_exact_parameter_repeats": 0,
+        "report_log_reparsed": false
+      },
+      {
+        "pipeline_id": "pipe_bef6879b2e94",
+        "state_source": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "graph_stage_span_seconds": 5991.835988,
+        "graph_stage_time_key_paths": [
+          "$.stages.graph.started_at",
+          "$.stages.graph.finished_at"
+        ],
+        "graph_total_chunks": 79,
+        "graph_skipped_chunks": 36,
+        "graph_skip_counter_key_paths": [
+          "$.options.graph_total_chunks",
+          "$.options.graph_skipped_chunks"
+        ],
+        "graph_skipped_pct_recomputed": 45.57,
+        "report_id": "report_970e5aa53841",
+        "report_telemetry_source": "backend/uploads/reports/report_970e5aa53841/telemetry.json",
+        "report_agent_log_source": "backend/uploads/reports/report_970e5aa53841/agent_log.jsonl",
+        "reported_tool_calls": 0,
+        "previously_parsed_logged_tool_calls": 33,
+        "previously_parsed_exact_parameter_repeats": 0,
+        "report_log_reparsed": false
+      },
+      {
+        "pipeline_id": "pipe_0e1b84d2682a",
+        "state_source": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "graph_stage_span_seconds": 3238.177338,
+        "graph_stage_time_key_paths": [
+          "$.stages.graph.started_at",
+          "$.stages.graph.finished_at"
+        ],
+        "graph_total_chunks": 91,
+        "graph_skipped_chunks": 20,
+        "graph_skip_counter_key_paths": [
+          "$.options.graph_total_chunks",
+          "$.options.graph_skipped_chunks"
+        ],
+        "graph_skipped_pct_recomputed": 21.978,
+        "report_id": "report_54f0a34a90b6",
+        "report_telemetry_source": "backend/uploads/reports/report_54f0a34a90b6/telemetry.json",
+        "report_agent_log_source": "backend/uploads/reports/report_54f0a34a90b6/agent_log.jsonl",
+        "reported_tool_calls": 0,
+        "previously_parsed_logged_tool_calls": 37,
+        "previously_parsed_exact_parameter_repeats": 0,
+        "report_log_reparsed": false
+      }
+    ],
+    "limits": [
+      "Graph durations are saved stage-endpoint spans and can include resume downtime or historical restamping; they are not current throughput or recoverable wasted time.",
+      "Report agent-log counts were previously parsed and are reused only after source hash verification. They are model/tool event markers, not unique physical requests or proven cache misses.",
+      "Report token/cost totals overlap parent telemetry. Different current/previous/cumulative scopes are not additive."
+    ]
+  },
+  "next_recovery_candidates": [
+    {
+      "priority_order": 1,
+      "recommendation": "ASTRA-06",
+      "mechanism": "The synchronous Graphiti bridge waits for the whole operation and cancels the submitted coroutine on timeout. Concurrent ingestion holds the graph lock around gather and returns successful episode IDs after the batch. Parent graph reuse requires a completed GRAPH stage.",
+      "hypothesis": "Persist each completed episode receipt with stable content/ontology/source-time/policy identity; resume verified completed work after partial timeout without duplicate extraction or graph writes.",
+      "acceptance": "Offline batch fixture with fast successes and one hung episode; after timeout and restart, verified completed chunks cause zero repeat extraction and ambiguous database completion is reconciled.",
+      "limits": "Existing cancellation, concurrency, per-chunk retry bounds and provenance checks already exist. This is a recovery-boundary improvement, not a reason to increase concurrency; current fan-out documents a deduplication race."
+    },
+    {
+      "priority_order": 2,
+      "recommendation": "ASTRA-05 / ASTRA-12",
+      "mechanism": "Concurrent report body results accumulate in contents; tail sections run before the helper returns, and the outer save_section loop starts afterward. Concurrent per-section meter differencing is explicitly disabled because the counter is shared.",
+      "hypothesis": "Persist completed sections immediately under a dependency manifest, with section-local operation attribution; reuse only validated results while preserving publication and repair gates.",
+      "acceptance": "Offline interruption after two body sections finish while a tail section remains pending; restart reuses exactly those valid sections, does not skip affected quality gates, and reconciles section tool events.",
+      "limits": "Existing serial section saves and completed-report reuse already exist. Saved zero tool totals versus 33-57 logged events do not alone prove duplicate requests or quantifiable savings."
+    }
+  ],
+  "interpretation": [
+    "The exact 77-artifact and 32-state inventories and 12 bounded logs are unchanged. No fresh production run or changed-log observation is established.",
+    "The four selected raw telemetry files still lack per-operation quote and price-coverage metadata. A new priced request does not establish coverage of earlier unknown or opaque aggregate usage.",
+    "Raw RUN telemetry entries and child token snapshots remain absent while embedded stage projections retain explicit zero placeholders. Their costs must remain unknown rather than free.",
+    "Current quotes are estimated rates, not bills. Historical caps, configured prices, invoices and actual unknown-price request counts remain unproven.",
+    "A source-backed aggregate coverage prerequisite is feasible to validate offline; monetary admission still requires explicit rate/cap and uncertainty policy. If that policy cannot be justified, graph episode recovery is the strongest existing next candidate, followed by report section recovery/attribution.",
+    "This receipt claims no production improvement, historical overshoot amount, invoice ceiling, repeated physical request count or global Pareto optimum."
+  ]
+}

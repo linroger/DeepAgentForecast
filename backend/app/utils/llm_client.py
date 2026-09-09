@@ -454,7 +454,7 @@ class LLMClient:
             UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
         )
         from .api_budget import prepare_token_request
-        from .api_cost import capture_cost_quote
+        from .api_cost import capture_cost_context
         run_id, stage, inferred = resolve_run_attribution()
         LLMMeter.assert_accounting_available(run_id)
         check_budget(run_id)
@@ -469,14 +469,18 @@ class LLMClient:
             if not isinstance(kwargs["extra_body"], dict) or "model" in kwargs["extra_body"]:
                 raise BudgetExceeded("API price attribution cannot use an extra_body model override")
             kwargs["extra_body"] = dict(kwargs["extra_body"])
-        cost_quote = capture_cost_quote(provider, model)
+        cost_quote, dollar_enabled = capture_cost_context(provider, model)
+        require_cost_coverage = dollar_enabled and LLMMeter.is_durable_run(run_id)
         self._last_usage = None
         # Request-local options also cover shared/injected SDK clients whose
         # constructor defaults still permit retries. Lightweight offline fakes
         # expose create only and have no hidden SDK retry machinery.
         if callable(getattr(client, "with_options", None)):
             client = client.with_options(max_retries=0)
-        metered = Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id)
+        # Captured admission requirements survive a concurrent binding reset;
+        # the facade must reject the lost binding before any physical send.
+        metered = (reservation is not None or require_cost_coverage
+                   or Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id))
         operation_id = LLMMeter.new_operation_id(run_id)
 
         def record(*, calls: int = 1, status: str = "completed", latency_ms: float = 0.0,
@@ -490,6 +494,7 @@ class LLMClient:
                     usage_source=usage_source, uncached_tokens=None,
                     token_reservation=reservation if status == "in_flight" else None,
                     cost_quote=cost_quote,
+                    require_cost_coverage=require_cost_coverage if status == "in_flight" else False,
                     _fallback=inferred, **cache,
                 )
 

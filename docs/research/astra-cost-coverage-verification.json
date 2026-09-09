@@ -1,0 +1,627 @@
+{
+  "schema": "astra-cost-coverage-verification/v1",
+  "slice": "ASTRA-04b5b3b1",
+  "verified_at": "2026-09-09T14:25:44.400264+00:00",
+  "status": "verified_offline",
+  "baseline_commit": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+  "scope": "Recorded price coverage and transactional predispatch gap rejection for currently dollar-enabled durably bound shared/native API requests. Monetary reservations remain pending.",
+  "source_sha256": {
+    "backend/app/services/pipeline_orchestrator.py": "aea62e019e67cf620e1765f26daad2433fe37adf44d5244d07fe6808a8f553d0",
+    "backend/app/utils/api_cost.py": "0285a07e0114c3d1dc688c4f13c61672dcdb1b0d05a3a0191f8460722426ddf5",
+    "backend/app/utils/llm_client.py": "8900b22226ac871b551c90b7ca140c0046ade281280e1cae3604881843b9cf74",
+    "backend/app/utils/oasis_usage.py": "7b86f59bd9b2d0b9c562fc850b71fea6080cdc627dfcda68fd55a1c4d9517a19",
+    "backend/app/utils/telemetry.py": "15ee3ed7ef737e6ddca74d67bf79132fe6f6e5b305d252f905ce940074251b70",
+    "backend/app/utils/usage_ledger.py": "c73be24c26145761e93a104566cb1d544021d776e9550bf2b7efe2450818d188",
+    "backend/scripts/benchmark_cost_coverage.py": "197c7a77f18d448142f5e2a46730861acc07dfbadce18b004bcff72581479e5e",
+    "backend/tests/test_cost_coverage_ledger.py": "355a57663f0cac687eae2e3d8ccf787e700924c2d62b8ef2a27553520329a8d2",
+    "backend/tests/test_cost_coverage_boundary.py": "97f207be4b3a39f78bca9440ff232ee04ed6b25ea1b3684de35ed1b9a094d65a",
+    "backend/tests/test_cost_coverage_status.py": "ef438d0200823dcb6f17f906f54a8daa8afc968f242a5d254e681724969f477d",
+    ".env.example": "8f185567c5bfb4aeeab1b4886d8a52afd8093f92d8239f059aca5d9d4e45438d"
+  },
+  "gates": {
+    "backend": {
+      "passed": 1363,
+      "skipped": 1,
+      "failures": 0,
+      "errors": 0,
+      "skip_details": [
+        {
+          "name": "test_bridge_matches_deployed",
+          "message": "deployed deer-flow checkout absent"
+        }
+      ],
+      "command": {
+        "argv": [
+          "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-o",
+          "addopts=",
+          "-q",
+          "backend/tests/test_usage_ledger.py",
+          "backend/tests/test_durable_telemetry.py",
+          "backend/tests/test_llm_durable_accounting_stop.py",
+          "backend/tests/test_durable_pipeline_usage.py",
+          "backend/tests/test_usage_completion_gate.py",
+          "backend/tests/test_telemetry.py",
+          "backend/tests/test_telemetry_fallback_attribution.py",
+          "backend/tests/test_audit_fixes_infra.py",
+          "backend/tests/test_research_spend_flush.py",
+          "backend/tests/test_wave9_orchestrator.py",
+          "backend/tests/test_orchestrator_research_wiring.py",
+          "backend/tests/test_token_budget.py",
+          "backend/tests/test_seed_ensemble.py",
+          "backend/tests/test_status_live_block.py",
+          "backend/tests/test_launch_intent_api.py",
+          "backend/tests/test_launch_intents.py",
+          "backend/tests/test_sim_meter_persistence.py",
+          "backend/tests/test_persona_meter_context.py",
+          "backend/tests/test_sim_context_persona.py",
+          "backend/tests/test_actor_role_prompt.py",
+          "backend/tests/test_research_stream_usage.py",
+          "backend/tests/test_research_cache_observations.py",
+          "backend/tests/test_wave9_research_speed.py",
+          "backend/tests/test_audit_fixes_research.py",
+          "backend/tests/test_astra_compaction_bridge.py",
+          "backend/tests/test_deerflow_bridge_sync_guard.py",
+          "backend/tests/test_loop010_global_synthesis.py",
+          "--disable-warnings",
+          "--maxfail=3",
+          "backend/tests/test_llm_physical_attempts.py",
+          "backend/tests/test_llm_sdk_attempt_boundary.py",
+          "backend/tests/test_llm_fallback_model.py",
+          "backend/tests/test_graph_cost_containment.py",
+          "backend/tests/test_graph_optimizations.py",
+          "backend/tests/test_wave9_kg.py",
+          "backend/tests/test_report_chart_quality.py",
+          "backend/tests/test_unresolved_usage_ledger.py",
+          "backend/tests/test_unresolved_usage_pipeline.py",
+          "backend/tests/test_simulation_shared_usage.py",
+          "backend/tests/test_audit_fixes_runner.py",
+          "backend/tests/test_audit_fixes_runloop.py",
+          "backend/tests/test_simulation_runner_throttle.py",
+          "backend/tests/test_oasis_v1_provenance.py",
+          "backend/tests/test_decision_channel.py",
+          "backend/tests/test_oasis_physical_usage.py",
+          "backend/tests/test_budget_totals.py",
+          "backend/tests/test_budget_guard_boundary.py",
+          "backend/tests/test_token_reservations.py",
+          "backend/tests/test_api_token_reservations.py",
+          "backend/tests/test_token_reservation_status.py",
+          "--tb=short",
+          "backend/tests/test_native_output_launch.py",
+          "backend/tests/test_oasis_output_policy.py",
+          "backend/tests/test_simulation_config_seal.py",
+          "backend/tests/test_config_optimization_defaults.py",
+          "backend/tests/test_sim_config_v1_provenance.py",
+          "backend/tests/test_sim_config_incentives.py",
+          "backend/tests/test_api_cost_boundary.py",
+          "backend/tests/test_api_cost_ledger.py",
+          "backend/tests/test_api_cost_child.py",
+          "backend/tests/test_cost_coverage_ledger.py",
+          "backend/tests/test_cost_coverage_boundary.py",
+          "backend/tests/test_cost_coverage_status.py",
+          "--junitxml=/Users/rogerlin/.codex/astra-evidence/cost-coverage-20260909/backend.xml"
+        ],
+        "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+        "started_at": "2026-09-09T14:21:26.022107+00:00",
+        "source_sha256": {
+          "backend/app/services/pipeline_orchestrator.py": "aea62e019e67cf620e1765f26daad2433fe37adf44d5244d07fe6808a8f553d0",
+          "backend/app/utils/api_cost.py": "0285a07e0114c3d1dc688c4f13c61672dcdb1b0d05a3a0191f8460722426ddf5",
+          "backend/app/utils/llm_client.py": "8900b22226ac871b551c90b7ca140c0046ade281280e1cae3604881843b9cf74",
+          "backend/app/utils/oasis_usage.py": "7b86f59bd9b2d0b9c562fc850b71fea6080cdc627dfcda68fd55a1c4d9517a19",
+          "backend/app/utils/telemetry.py": "15ee3ed7ef737e6ddca74d67bf79132fe6f6e5b305d252f905ce940074251b70",
+          "backend/app/utils/usage_ledger.py": "c73be24c26145761e93a104566cb1d544021d776e9550bf2b7efe2450818d188",
+          "backend/scripts/benchmark_cost_coverage.py": "197c7a77f18d448142f5e2a46730861acc07dfbadce18b004bcff72581479e5e",
+          "backend/tests/test_cost_coverage_ledger.py": "355a57663f0cac687eae2e3d8ccf787e700924c2d62b8ef2a27553520329a8d2",
+          "backend/tests/test_cost_coverage_boundary.py": "97f207be4b3a39f78bca9440ff232ee04ed6b25ea1b3684de35ed1b9a094d65a",
+          "backend/tests/test_cost_coverage_status.py": "ef438d0200823dcb6f17f906f54a8daa8afc968f242a5d254e681724969f477d"
+        },
+        "completed_at": "2026-09-09T14:22:22.398177+00:00",
+        "exit_code": 0
+      },
+      "raw_log": "/Users/rogerlin/.codex/astra-evidence/cost-coverage-20260909/backend.log",
+      "raw_log_sha256": "f064110e6d21ddf5375b9daf0d1bdd28c085c3d5f6295f2b8ba5cfa03cfd25df",
+      "junit_xml": "/Users/rogerlin/.codex/astra-evidence/cost-coverage-20260909/backend.xml",
+      "junit_xml_sha256": "36efd42eb583428de0bd42f854917b611d443dd0eb9242feda35698580b5dcaa",
+      "source_hashes_unchanged_since_suite_start": true
+    },
+    "static": {
+      "checked_at": "2026-09-09T14:21:42.474474+00:00",
+      "python_ast_files": [
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/utils/api_cost.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/benchmark_cost_coverage.py",
+        "backend/tests/test_cost_coverage_ledger.py",
+        "backend/tests/test_cost_coverage_boundary.py",
+        "backend/tests/test_cost_coverage_status.py"
+      ],
+      "python_ast_passed": 10,
+      "ruff_argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "--config",
+        "backend/pyproject.toml",
+        "--output-format",
+        "json",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/utils/api_cost.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/benchmark_cost_coverage.py",
+        "backend/tests/test_cost_coverage_ledger.py",
+        "backend/tests/test_cost_coverage_boundary.py",
+        "backend/tests/test_cost_coverage_status.py"
+      ],
+      "ruff_exit_code": 0,
+      "ruff_findings": [],
+      "shell_syntax_exit_code": 0
+    },
+    "smoke": {
+      "shell_syntax": "bash -n init.sh scripts/start.sh scripts/setup.sh passed",
+      "note": "Original checkout Python supplies dependencies. No private backend/.venv exists in this worktree; init.sh was inspected and syntax-checked rather than reported as executed.",
+      "json_documents": [
+        "astra-improvement-state.json",
+        "feature_list.json",
+        "frontend/package.json",
+        "docs/research/astra-cost-coverage-verification.json",
+        "docs/research/astra-cost-coverage-comparison.json",
+        "docs/research/astra-cost-coverage-run-evidence.json"
+      ],
+      "runbook_local_links_checked": 10
+    },
+    "evidence_recovery": "The September8 final1363-test log and XML were in temporary storage and are no longer available. The affected gate was rerun September9; all final claims cite the fresh durable evidence.",
+    "diff_check": "passed"
+  },
+  "independent_review": {
+    "reviewed_at": "2026-09-09",
+    "status": "clear",
+    "passed": 97,
+    "new_cases": {
+      "ledger": 63,
+      "boundary": 29,
+      "status_and_child": 5
+    },
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/test_cost_coverage_boundary.py",
+      "tests/test_cost_coverage_ledger.py",
+      "tests/test_cost_coverage_status.py"
+    ],
+    "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend",
+    "source_edits": false,
+    "findings_resolved": [
+      "SQL/Python normalization parity uses indexed rare-label validation.",
+      "Cache-only classification rejects JSON boolean counter values.",
+      "Facade binding lookup rechecks the required durable binding after validation.",
+      "Captured token and price admission remain metered after SDK-options binding reset with ordinary telemetry disabled."
+    ]
+  },
+  "comparison": {
+    "path": "docs/research/astra-cost-coverage-comparison.json",
+    "sha256": "e0e70e31804e710148451be7c8f5fe795ed9caae5a6d638380db7f36ea37cf7d",
+    "generated_at": "2026-09-08T02:42:12.397370+00:00",
+    "baseline_commit": "a000e29dfb080ad741da4a23fc2312dd9280b3ef",
+    "scenario_mode_invocations": 30,
+    "mock_transmissions": 39,
+    "provider_requests": 0,
+    "network_connection_attempts": 0,
+    "historical_gap_routes": 3,
+    "historical_gap_additional_transmissions": {
+      "baseline": 1,
+      "current": 0
+    },
+    "same_owner_peak_concurrency": {
+      "baseline": 2,
+      "current": 2
+    },
+    "read_scaling": [
+      {
+        "operation_rows": 100,
+        "queries": {
+          "projection": {
+            "median_method_ms": {
+              "indexed": 0.072042,
+              "not_indexed": 3.2325
+            },
+            "reduction_percent": 97.771,
+            "samples_per_mode": 20
+          },
+          "price_gap_admission": {
+            "median_method_ms": {
+              "indexed": 0.019354,
+              "not_indexed": 3.202313
+            },
+            "reduction_percent": 99.396,
+            "samples_per_mode": 20
+          }
+        }
+      },
+      {
+        "operation_rows": 1000,
+        "queries": {
+          "projection": {
+            "median_method_ms": {
+              "indexed": 0.286083,
+              "not_indexed": 31.649605
+            },
+            "reduction_percent": 99.096,
+            "samples_per_mode": 20
+          },
+          "price_gap_admission": {
+            "median_method_ms": {
+              "indexed": 0.027438,
+              "not_indexed": 31.806438
+            },
+            "reduction_percent": 99.914,
+            "samples_per_mode": 20
+          }
+        }
+      },
+      {
+        "operation_rows": 10000,
+        "queries": {
+          "projection": {
+            "median_method_ms": {
+              "indexed": 2.310521,
+              "not_indexed": 338.115958
+            },
+            "reduction_percent": 99.317,
+            "samples_per_mode": 20
+          },
+          "price_gap_admission": {
+            "median_method_ms": {
+              "indexed": 0.048959,
+              "not_indexed": 324.998812
+            },
+            "reduction_percent": 99.985,
+            "samples_per_mode": 20
+          }
+        }
+      }
+    ],
+    "method": "Only pinned shared _create_openai_completion and native _Attempt replace dispatch boundaries. Both modes retain current captured prices, SDK, native ModelFactory, meter, ledger and token reservation behavior. Baseline does not require prior price coverage; current does when the captured dollar-enabled request is durably bound. MockTransport is installed before native instrumentation.",
+    "indexed_read_method": "Execute current _cost_coverage_state and _assert_cost_coverage through symmetric SQL access-hint adapters. Both production queries and Python aggregation run inside each sample. Normal-ASCII fixtures yield zero rare-validation rows; complete states and unforced plans are verified separately."
+  },
+  "saved_run_evidence": {
+    "path": "docs/research/astra-cost-coverage-run-evidence.json",
+    "sha256": "d93058f3cc79d7a5119651613d72d667d830c9d08f9b26e91c4680dc3066ef69",
+    "fresh_independent_recheck_at": "2026-09-09T14:22:07+00:00",
+    "saved_artifacts_checked_and_matching": 77,
+    "selected_documents_checked_and_matching": 16,
+    "bounded_logs_checked_and_matching": 12,
+    "selected_health_checked_and_matching": 4,
+    "pipeline_inventory_count": 32,
+    "pipeline_status_counts": {
+      "completed": 26,
+      "failed": 3,
+      "cancelled": 3
+    },
+    "latest_pipeline_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "new_or_changed_logs_parsed": 0,
+    "historical_rate_policy": null,
+    "historical_enabled_dollar_cap": null,
+    "historical_unknown_price_count": null,
+    "invoice_cost": null,
+    "interpretation": "Selected historical RUN meter entries and child token snapshots remain absent, not known zero. Unchanged bounded aggregates were reused."
+  },
+  "coverage_contract": {
+    "schema": "cost-coverage-state/v1",
+    "coverage": "recorded_operations",
+    "usage_complete": false,
+    "price_classes": [
+      "priced_api_operations",
+      "unpriced_api_operations",
+      "unquoted_api_operations",
+      "non_api_operations",
+      "cache_only_operations"
+    ],
+    "overlapping_usage_count": "inexact_api_operations",
+    "legacy_flags": [
+      "legacy_baseline_present",
+      "legacy_baseline_ambiguous"
+    ],
+    "empty_recorded_price_scope_complete": true,
+    "admission_transaction": "BEGIN IMMEDIATE; price gap check before API owner admission, token policy/hold, marker and delta writes",
+    "failure": "Recoverable BudgetExceeded; not a storage latch",
+    "same_owner_priced_concurrency": "Preserved; this check is price-only",
+    "older_readonly_ledger": "Correct without migration or index; higher read cost"
+  },
+  "acceptance_trace": [
+    {
+      "requirement": "Prior missing prices stop new USD-enabled physical calls before any accounting mutation.",
+      "evidence": [
+        "backend/tests/test_cost_coverage_boundary.py",
+        "backend/tests/test_cost_coverage_ledger.py",
+        "docs/research/astra-cost-coverage-comparison.json"
+      ]
+    },
+    {
+      "requirement": "Captured token/price requirements cannot be bypassed by binding reset with telemetry disabled.",
+      "evidence": [
+        "backend/tests/test_cost_coverage_boundary.py::test_captured_admission_cannot_be_skipped_when_telemetry_is_disabled_and_binding_resets",
+        "backend/tests/test_cost_coverage_ledger.py"
+      ]
+    },
+    {
+      "requirement": "Saved, restarted, public and attempt-filtered status consistently exposes run-wide coverage.",
+      "evidence": [
+        "backend/tests/test_cost_coverage_status.py"
+      ]
+    },
+    {
+      "requirement": "Old writers and missing-index readonly reads preserve classification; indexed checks avoid repeated JSON parsing in normal cases.",
+      "evidence": [
+        "backend/tests/test_cost_coverage_ledger.py",
+        "docs/research/astra-cost-coverage-comparison.json"
+      ]
+    }
+  ],
+  "limits": [
+    "Historical unpriced use is one synthetic known-usage API response under USD0, followed by configured rates [1,2] dollars per million and USD1. Avoided transmissions are fixture behavior, not a historical physical-request or billed-savings claim.",
+    "Explicit configured zero rates are priced estimates. Built-in missing/zero placeholders remain unpriced; no invoice accuracy, cache discount or complete consumption coverage is claimed.",
+    "Same-owner priced requests overlap deliberately. This price-only prerequisite does not serialize or reserve a shared dollar remainder, pin run-wide rates/caps or fence all older writers.",
+    "Both sides use the current coverage projection; no claim is made that the baseline implemented that projection. Exact operation-history equality includes no new marker, delta or token hold after rejection.",
+    "Defaults refer to disabled monetary/token limits and empty configured prices. Every fixture retains an explicit output cap and disables cache, fallback and routing for isolation.",
+    "Indexed timings compare identical current SQL with INDEXED BY versus NOT INDEXED, not a historical coverage implementation. Samples are local read latency with warm caches; writes and provider latency are excluded.",
+    "100 synthetic operations approximate small recorded histories; 1000 is sensitivity and 10000 is scaling stress. Saved aggregate call counters do not establish actual operation-row counts.",
+    "Scaling uses normal ASCII provider/model attribution and valid priced known terminal operations only; it does not measure malformed or Unicode fallback classification paths.",
+    "No provider, CLI subprocess, deployment, original saved-run mutation, production speedup, billed savings or Pareto optimum is claimed.",
+    "Index maintenance/write/storage/migration cost is unmeasured; grouping remains proportional to recorded operations.",
+    "Monetary reservations, run-wide rate/cap pinning, CLI physical provenance and complete consumption coverage remain pending.",
+    "Global/Pareto optimality, invoice accuracy and production speedups are not established."
+  ],
+  "next_slice": "ASTRA-04b5b3b2: pin run-wide rate/cap and uncertainty policy before atomic joint token/dollar admission and settlement. Preserve exact usage versus held estimates and avoid orphan dollar holds on committed token denial.",
+  "loop": {
+    "id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE",
+    "cadence": "hourly",
+    "fresh_view_at": "2026-09-09T14:20:00+00:00",
+    "scope": "One coherent source-backed verified slice per continuation; no duplicate automation."
+  },
+  "publication": "Local commits authorized; GitHub auth rejection previously observed, not retried without changed evidence. No deployment or provider actions.",
+  "independent_evidence_audit": {
+    "checked_at": "2026-09-09T14:22:07+00:00",
+    "status": "clear",
+    "benchmark_current_sources_matching": 11,
+    "baseline_source_and_ast_hashes_matching": 4,
+    "prior_receipts_matching": 5,
+    "pinned_historical_source_hashes_and_anchors_matching": 6,
+    "scaling_median_reduction_pairs_verified": 6,
+    "unforced_index_plans_verified": true,
+    "index_and_expression_hashes_reconstructed": true,
+    "saved_hashes_freshly_rechecked": true,
+    "final_documentation_audit": {
+      "checked_at": "2026-09-09T14:29:47.374059+00:00",
+      "status": "clear_for_commit",
+      "final_source_hashes_matching": 11,
+      "fresh_junit_cases": 1364,
+      "fresh_junit_passed": 1363,
+      "fresh_junit_skipped": 1,
+      "new_cases_verified": 97,
+      "command_and_static_receipts_match": true,
+      "raw_gate_hashes_match": true,
+      "dollar_gap_artifacts_and_embedded_result_match": true,
+      "state_and_new_links_consistent": true
+    }
+  },
+  "remaining_dollar_concurrency": {
+    "artifacts": {
+      "reproduce.py": {
+        "path": "/Users/rogerlin/.codex/astra-evidence/cost-coverage-20260909/dollar-gap/reproduce.py",
+        "sha256": "b4eb3b3c7902a1c430c0f07a5448f2746c9ea7ddec548ce42c4279b617e39598"
+      },
+      "result.json": {
+        "path": "/Users/rogerlin/.codex/astra-evidence/cost-coverage-20260909/dollar-gap/result.json",
+        "sha256": "885163b596e9ae872059f0e81df67e3bddf6171c905b5e8bfc00dd8a619f96d1"
+      },
+      "result.log": {
+        "path": "/Users/rogerlin/.codex/astra-evidence/cost-coverage-20260909/dollar-gap/result.log",
+        "sha256": "885163b596e9ae872059f0e81df67e3bddf6171c905b5e8bfc00dd8a619f96d1"
+      }
+    },
+    "result": {
+      "completed_at_utc": "2026-09-09T14:24:19.107410+00:00",
+      "configured_budget_usd": 0.75,
+      "configured_rates_usd_per_million": {
+        "input": 100000,
+        "output": 100000
+      },
+      "configured_token_budget": 0,
+      "final_cost_coverage": {
+        "cache_only_operations": 0,
+        "coverage": "recorded_operations",
+        "inexact_api_operations": 0,
+        "legacy_baseline_ambiguous": false,
+        "legacy_baseline_present": false,
+        "non_api_operations": 0,
+        "price_coverage_complete": true,
+        "priced_api_operations": 2,
+        "schema": "cost-coverage-state/v1",
+        "unpriced_api_operations": 0,
+        "unquoted_api_operations": 0,
+        "usage_complete": false
+      },
+      "final_total": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached": 0,
+        "calls": 2,
+        "completion_tokens": 4,
+        "cost_usd": 1.0,
+        "latency_ms": 181.8,
+        "prompt_tokens": 6,
+        "total_tokens": 10,
+        "uncached_tokens": 0
+      },
+      "in_flight_cost_coverage": {
+        "cache_only_operations": 0,
+        "coverage": "recorded_operations",
+        "inexact_api_operations": 2,
+        "legacy_baseline_ambiguous": false,
+        "legacy_baseline_present": false,
+        "non_api_operations": 0,
+        "price_coverage_complete": true,
+        "priced_api_operations": 2,
+        "schema": "cost-coverage-state/v1",
+        "unpriced_api_operations": 0,
+        "unquoted_api_operations": 0,
+        "usage_complete": false
+      },
+      "in_flight_total": {
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached": 0,
+        "calls": 0,
+        "completion_tokens": 0,
+        "cost_usd": 0.0,
+        "latency_ms": 0.0,
+        "prompt_tokens": 0,
+        "total_tokens": 0,
+        "uncached_tokens": 0
+      },
+      "mock_physical_sends": 2,
+      "operations": [
+        {
+          "counters": {
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached": 0,
+            "calls": 1,
+            "completion_tokens": 2,
+            "cost_usd": 0.5,
+            "latency_ms": 174.58716700002697,
+            "prompt_tokens": 3,
+            "total_tokens": 5,
+            "uncached_tokens": 0
+          },
+          "metadata": {
+            "billing_basis": "api",
+            "cache_partition_known": false,
+            "cost_estimated": true,
+            "cost_quote": {
+              "input_usd_per_1k": 100.0,
+              "model": "offline-model",
+              "output_usd_per_1k": 100.0,
+              "provider": "openai",
+              "rate_key": "openai",
+              "schema": "api-cost-quote/v1",
+              "source": "configured_provider"
+            },
+            "fallback": false,
+            "model": "offline-model",
+            "provider": "openai",
+            "stage": "report",
+            "usage_class": "known",
+            "usage_source": "known"
+          },
+          "owner_attempt_id": "same-owner",
+          "source": "llm_api_attempt",
+          "status": "completed"
+        },
+        {
+          "counters": {
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached": 0,
+            "calls": 1,
+            "completion_tokens": 2,
+            "cost_usd": 0.5,
+            "latency_ms": 7.185833999983515,
+            "prompt_tokens": 3,
+            "total_tokens": 5,
+            "uncached_tokens": 0
+          },
+          "metadata": {
+            "billing_basis": "api",
+            "cache_partition_known": false,
+            "cost_estimated": true,
+            "cost_quote": {
+              "input_usd_per_1k": 100.0,
+              "model": "offline-model",
+              "output_usd_per_1k": 100.0,
+              "provider": "openai",
+              "rate_key": "openai",
+              "schema": "api-cost-quote/v1",
+              "source": "configured_provider"
+            },
+            "fallback": false,
+            "model": "offline-model",
+            "provider": "openai",
+            "stage": "report",
+            "usage_class": "known",
+            "usage_source": "known"
+          },
+          "owner_attempt_id": "same-owner",
+          "source": "llm_api_attempt",
+          "status": "completed"
+        }
+      ],
+      "outcomes": [
+        {
+          "exception": "BudgetExceeded",
+          "message": "run exceeded cost budget: $1.0000 > $0.7500",
+          "outcome": "post_response_budget_exception"
+        },
+        {
+          "content": "accepted",
+          "outcome": "returned"
+        }
+      ],
+      "overshoot_usd": 0.25,
+      "provider_calls": 0,
+      "python": "3.12.6",
+      "recorded_cost_usd": 1.0,
+      "recorded_tokens": 10,
+      "remaining_work": "ASTRA-04b5b3b2 run-wide policy and atomic joint token and dollar reservations",
+      "result": "unresolved_gap_reproduced",
+      "schema": "astra-dollar-concurrency-gap-evidence/v1",
+      "scope": "Synthetic offline admission evidence; no provider calls, invoices, historical savings, or production performance claim.",
+      "script_sha256": "b4eb3b3c7902a1c430c0f07a5448f2746c9ea7ddec548ce42c4279b617e39598",
+      "socket_connection_attempts": 0,
+      "source_sha256": {
+        "backend/app/config.py": "a32a47506ee26832087374f91810a45e205661b0c8a689fb470108dc88caaa19",
+        "backend/app/utils/api_budget.py": "e1ad29975c37181bbaabe81a15a27d16aa98f1100344a76c9d27499872d20b37",
+        "backend/app/utils/api_cost.py": "0285a07e0114c3d1dc688c4f13c61672dcdb1b0d05a3a0191f8460722426ddf5",
+        "backend/app/utils/llm_client.py": "8900b22226ac871b551c90b7ca140c0046ade281280e1cae3604881843b9cf74",
+        "backend/app/utils/telemetry.py": "15ee3ed7ef737e6ddca74d67bf79132fe6f6e5b305d252f905ce940074251b70",
+        "backend/app/utils/usage_ledger.py": "c73be24c26145761e93a104566cb1d544021d776e9550bf2b7efe2450818d188"
+      },
+      "started_at_utc": "2026-09-09T14:24:18.889206+00:00",
+      "transmissions": [
+        {
+          "method": "POST",
+          "request": {
+            "max_tokens": 2,
+            "messages": [],
+            "model": "offline-model",
+            "temperature": 0.7
+          },
+          "sequence": 1,
+          "url": "https://offline.invalid/v1/chat/completions"
+        },
+        {
+          "method": "POST",
+          "request": {
+            "max_tokens": 2,
+            "messages": [],
+            "model": "offline-model",
+            "temperature": 0.7
+          },
+          "sequence": 2,
+          "url": "https://offline.invalid/v1/chat/completions"
+        }
+      ],
+      "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-08T01:46:55.093494+00:00",
+  "updated_at": "2026-09-09T14:26:59.714746+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
@@ -181,7 +181,20 @@
                         {
                           "id": "ASTRA-04b5b3b",
                           "title": "Define and implement monetary admission with pinned rates and caps, unknown-price coverage and durable held estimates",
-                          "status": "pending"
+                          "status": "in_progress",
+                          "subtasks": [
+                            {
+                              "id": "ASTRA-04b5b3b1",
+                              "title": "Expose indexed recorded price coverage and reject dollar-enabled API admission with historical price gaps",
+                              "status": "verified_offline",
+                              "evidence": "docs/research/astra-cost-coverage-verification.json"
+                            },
+                            {
+                              "id": "ASTRA-04b5b3b2",
+                              "title": "Pin run-wide rate/cap and coverage policy, then atomically admit and settle joint token and dollar holds",
+                              "status": "pending"
+                            }
+                          ]
                         }
                       ]
                     }
@@ -202,7 +215,7 @@
         "Backend and factory-instrumented nonstreaming CAMEL physical attempts, unresolved recovery and token reservations are verified offline; monetary reservations, CLI physical failures and custom SDK replacement remain incomplete.",
         "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim.",
         "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. An explicit native output policy now reaches actual factory/child requests and is pinned per simulation; held allowance stays separate from recorded usage.",
-        "API operations now retain captured estimated price quotes and positive dollar caps reject unpriced new requests. Run-wide price/cap pinning, historical unpriced coverage and monetary holds remain pending; no invoice accuracy or hard monetary cap claim."
+        "API operations retain captured estimates and currently dollar-enabled durable API requests reject historical price gaps before dispatch. Price-only coverage is run-wide over recorded operations, not complete usage. Run-wide rate/cap pinning and monetary holds remain pending; no invoice accuracy or hard monetary cap claim."
       ]
     },
     {
@@ -320,7 +333,7 @@
   ],
   "next_recommendation": "ASTRA-04",
   "last_completed_slice": [
-    "ASTRA-04b5b3a"
+    "ASTRA-04b5b3b1"
   ],
   "iterations": [
     {
@@ -433,6 +446,15 @@
       "next": "ASTRA-04b5b3b: monetary admission with explicit rate/cap pinning and incomplete-price coverage; graph/report recovery follows.",
       "verified_source_hashes": "docs/research/astra-api-cost-verification.json",
       "implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164"
+    },
+    {
+      "completed_at": "2026-09-09T14:26:59.714746+00:00",
+      "recommendations": [
+        "ASTRA-04b5b3b1"
+      ],
+      "result": "1,363 backend tests passed with one deployment-only skip; all97 new cases independently reviewed. Prior-price-gap SDK sends1\u21920 with exact history preserved. Current10,000-row indexed coverage2.310521ms versus338.115958ms without index; no production speedup claim.",
+      "next": "ASTRA-04b5b3b2 run-wide rate/cap policy and atomic joint token/dollar holds; graph/report recovery follows.",
+      "verified_source_hashes": "docs/research/astra-cost-coverage-verification.json"
     }
   ],
   "last_implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164",
@@ -483,10 +505,20 @@
       "id": "ASTRA-COST-02",
       "priority": "P1",
       "status": "open",
-      "recommendation": "ASTRA-04b5b3b",
-      "description": "Recorded dollar guards do not reserve concurrent planned costs; rates and dollar caps are not run-wide pinned, and prior unpriced/opaque history cannot establish total price coverage.",
-      "evidence": "docs/research/astra-api-cost-verification.json",
-      "resolution": "Next slice must define explicit run-wide price/cap and unknown-coverage contracts before monetary holds. Preserve estimates separately from reported consumption and avoid invoice-bound claims."
+      "recommendation": "ASTRA-04b5b3b2",
+      "description": "Recorded dollar guards do not reserve concurrent planned costs; rates and dollar caps are not run-wide pinned. Two actual-SDK mock calls record1.00USD against0.75USD while recorded price coverage is complete.",
+      "evidence": "docs/research/astra-cost-coverage-verification.json",
+      "resolution": "Define explicit run-wide rate/cap and uncertainty policy, then validate both token and dollar capacity before any hold write. Price-gap admission is now resolved separately; full monetary admission remains open."
+    },
+    {
+      "id": "ASTRA-COST-03",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-04b5b3b1",
+      "description": "Enabling a dollar limit after unpriced or opaque recorded history could admit a newly priced request against an incomplete zero-dollar historical amount.",
+      "evidence": "docs/research/astra-cost-coverage-verification.json",
+      "resolution": "Run-wide price coverage reaches status, and currently dollar-enabled durable API dispatch transactionally rejects recorded price gaps before marker or token hold writes. Captured admission survives tested binding resets.",
+      "resolved_at": "2026-09-09T14:26:59.714746+00:00"
     }
   ]
 }
