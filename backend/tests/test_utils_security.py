@@ -1,5 +1,7 @@
 """Golden tests for the security helpers (EXECPLAN2 I-7-3, guards F-13-1/F-8-1/F-13-2)."""
 
+import socket
+
 import pytest
 
 from app.utils.security import (
@@ -9,6 +11,24 @@ from app.utils.security import (
     sanitize_env_value,
     validate_safe_url,
 )
+
+
+@pytest.fixture
+def resolved_url_hosts(monkeypatch):
+    """Supply deterministic resolver responses without contacting DNS servers."""
+    addresses = {
+        "api.openai.com": "93.184.216.34",
+        "localhost": "127.0.0.1",
+        "169.254.169.254": "169.254.169.254",
+        "10.0.0.5": "10.0.0.5",
+    }
+
+    def fake_getaddrinfo(host, port):
+        assert host in addresses, f"Unexpected URL-validation test host: {host}"
+        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP,
+                 "", (addresses[host], port))]
+
+    monkeypatch.setattr("app.utils.security.socket.getaddrinfo", fake_getaddrinfo)
 
 
 def test_redact_secrets_masks_sensitive_keys():
@@ -43,19 +63,19 @@ def test_quote_env_value():
     assert quote_env_value("a#b") == '"a#b"'
 
 
-def test_validate_safe_url_allows_public_and_loopback():
+def test_validate_safe_url_allows_public_and_loopback(resolved_url_hosts):
     assert validate_safe_url("https://api.openai.com/v1")
     assert validate_safe_url("http://localhost:11434/v1")  # local LLM allowed by default
 
 
-def test_validate_safe_url_blocks_metadata_and_bad_scheme():
+def test_validate_safe_url_blocks_metadata_and_bad_scheme(resolved_url_hosts):
     with pytest.raises(ValueError):
         validate_safe_url("http://169.254.169.254/latest/meta-data")
     with pytest.raises(ValueError):
         validate_safe_url("ftp://example.com")
 
 
-def test_validate_safe_url_block_private_mode():
+def test_validate_safe_url_block_private_mode(resolved_url_hosts):
     with pytest.raises(ValueError):
         validate_safe_url("http://localhost:11434/v1", block_private=True)
     with pytest.raises(ValueError):

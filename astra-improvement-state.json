@@ -1,12 +1,12 @@
 {
   "schema": "astra-improvement-state/v1",
-  "updated_at": "2026-09-09T14:30:14.829537+00:00",
+  "updated_at": "2026-09-09T14:49:34.883666+00:00",
   "status": "active",
   "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
   "branch": "codex/astra-workflow-review-2026-09-07",
   "audit_commit": "6f47f47",
   "current_slice": [
-    "ASTRA-04"
+    "ASTRA-INTEGRATION"
   ],
   "consecutive_blocked_iterations": 0,
   "automation_id": "astra-workflow-improvement-loop",
@@ -332,9 +332,9 @@
       "evidence": []
     }
   ],
-  "next_recommendation": "ASTRA-04",
+  "next_recommendation": "ASTRA-INTEGRATION",
   "last_completed_slice": [
-    "ASTRA-04b5b3b1"
+    "ASTRA-INTEGRATION-01"
   ],
   "iterations": [
     {
@@ -457,6 +457,15 @@
       "next": "ASTRA-04b5b3b2 run-wide rate/cap policy and atomic joint token/dollar holds; graph/report recovery follows.",
       "verified_source_hashes": "docs/research/astra-cost-coverage-verification.json",
       "implementation_commit": "f647bfb5103aed0d3b0d6528523b9085a4058182"
+    },
+    {
+      "completed_at": "2026-09-11T13:33:46.827991+00:00",
+      "recommendations": [
+        "ASTRA-INTEGRATION-01"
+      ],
+      "result": "Shared actor denial verified offline:172 focused passes,18 independent passes, paired71-to-0 denied case/channel observations. Broad3896pass/1known scaffold failure/17skip/16xfail; frontend113pass/build successful. Wider integration remains open.",
+      "next": "ASTRA-INTEGRATION-02 complete sanitation before bounded ontology sampling, then ontology reuse and report context closure.",
+      "verified_source_hashes": "docs/research/astra-integration-verification.json"
     }
   ],
   "last_implementation_commit": "f647bfb5103aed0d3b0d6528523b9085a4058182",
@@ -521,6 +530,103 @@
       "evidence": "docs/research/astra-cost-coverage-verification.json",
       "resolution": "Run-wide price coverage reaches status, and currently dollar-enabled durable API dispatch transactionally rejects recorded price gaps before marker or token hold writes. Captured admission survives tested binding resets.",
       "resolved_at": "2026-09-09T14:26:59.714746+00:00"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-01",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Explicit denied actor knowledge is reinjected by public shared-world selection.",
+      "evidence": "docs/research/astra-integration-verification.json",
+      "resolved_at": "2026-09-11T13:33:46.827991+00:00",
+      "resolution": "Literal-false denial across validated participating packs prevents same normalized claim from entering six shared channels. Independent18-case review and paired71-to-0 exposure comparison preserve actor-local access, modeler audit and seals."
+    },
+    {
+      "id": "ASTRA-INTEGRATION-02",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Ontology sanitization truncates long document tails before sampling.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-03",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Ontology reuse bypasses registered artifact integrity and input-generation binding.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-04",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Alternate report generation and ensemble entry points omit structured research artifacts; broad TypeError constructor retries can drop context after internal failures.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-05",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Report chat constructs research context but omits it from actual chat prompts; bounded report head alone loses relevant evidence.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-06",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Coalition analysis silently slices already-loaded action history at 100,000 records and misses older interactions.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-07",
+      "priority": "P2",
+      "status": "needs_regression",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Twitter loader injects role/world/calendar without the final composed-context attestation used by Reddit.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-08",
+      "priority": "P2",
+      "status": "measured_candidate",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Actor batch construction repeats full dossier/report hashing, contract validation and report section splitting per actor.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-09",
+      "priority": "P2",
+      "status": "measured_candidate",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Run-summary and report-outcome aggregation repeatedly reload the same complete action history.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-10",
+      "priority": "P2",
+      "status": "source_candidate",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Graph chunk preparation sanitizes report and dossier before choosing the configured source, including excluded documents.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-11",
+      "priority": "P3",
+      "status": "documented_preexisting",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Pre-cutover drf2 config pins the original checkout skills path while its test expects the current worktree path; corrected full gate must report this portability failure.",
+      "evidence": "docs/research/astra-integration-verification.md"
     }
-  ]
+  ],
+  "active_user_request": {
+    "id": "ASTRA-INTEGRATION",
+    "status": "in_progress",
+    "handoff": "docs/handoff/astra-integration/handoff.md",
+    "description": "Verify application components and end-to-end context continuity, then fix confirmed gaps."
+  },
+  "next_issue": "ASTRA-INTEGRATION-02"
 }

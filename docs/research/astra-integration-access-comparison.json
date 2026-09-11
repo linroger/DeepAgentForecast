@@ -1,0 +1,194 @@
+{
+  "schema": "astra-actor-access-paired-comparison/v1",
+  "validated_at": "2026-09-11T13:29:16.744596+00:00",
+  "baseline_commit": "ef8c419de0d1bc65e84f4f40fd384ac4255edc6e",
+  "baseline": {
+    "file_sha256": "0fa2e614c6ecc32fa1773c504c635ea413b4ef9719108dde1aae34f80ee0169a",
+    "method_source_sha256": "5900b767e053c5612447c0b6c7b5c2f46966580a31017d33744f815b777597ed",
+    "method_ast_sha256": "21cefbfc5df9597e9e167236efb299d88a6b02c36db6fd554e21094255bf5e4d",
+    "start_line": 1648,
+    "end_line": 1718
+  },
+  "current": {
+    "file_sha256": "504015fae1a8325c9dcb215fd9e8e2f1251ac6d4d31dc623cbe9fe48ac9c1efd",
+    "method_source_sha256": "89661771f1049bffe698c88f4fe269a6b4576dfdc702b9267db18e5cd43e3008",
+    "method_ast_sha256": "46e6f1a2756f826455b2f267328db31518bcc31dd7e3d44d27e3aeec5cc85637",
+    "start_line": 1648,
+    "end_line": 1730
+  },
+  "test_source": "backend/tests/test_actor_shared_access.py",
+  "test_source_sha256": "35458a70802a95e51fc7bef94a4aba0b02b29088b73512a0726dbfa4bb1128fa",
+  "method": "Run the same 16 permanent regressions in two isolated offline pytest processes. Baseline process replaces only _canonical_public_world_rows with the exact baseline method AST, compiled with current module globals; current process leaves runtime unchanged. Observation wrapper preserves every helper return value and serializes only boolean exposure/control/integrity counters. No historical-runtime-wide or provider comparison is implied.",
+  "baseline_summary": {
+    "cases": 16,
+    "passed": 4,
+    "failed": 12,
+    "denied_cases": 12,
+    "positive_cases": 4,
+    "denied_exposure_by_channel": {
+      "world_brief": 12,
+      "config_context": 12,
+      "event_prompt": 12,
+      "seed_posts": 11,
+      "agent_0": 12,
+      "agent_1": 12
+    },
+    "positive_presence_by_channel": {
+      "world_brief": 4,
+      "config_context": 4,
+      "event_prompt": 4,
+      "seed_posts": 4,
+      "agent_0": 4,
+      "agent_1": 4
+    },
+    "public_control_presence_by_channel": {
+      "world_brief": 16,
+      "config_context": 16,
+      "event_prompt": 16,
+      "seed_posts": 15,
+      "agent_0": 16,
+      "agent_1": 16
+    },
+    "unchanged_context_packs": 16,
+    "denied_alpha_known_absence": 12,
+    "denied_alpha_modeler_audit_preserved": 12,
+    "duplicate_beta_actor_knowledge_preserved": 4
+  },
+  "current_summary": {
+    "cases": 16,
+    "passed": 16,
+    "failed": 0,
+    "denied_cases": 12,
+    "positive_cases": 4,
+    "denied_exposure_by_channel": {
+      "world_brief": 0,
+      "config_context": 0,
+      "event_prompt": 0,
+      "seed_posts": 0,
+      "agent_0": 0,
+      "agent_1": 0
+    },
+    "positive_presence_by_channel": {
+      "world_brief": 4,
+      "config_context": 4,
+      "event_prompt": 4,
+      "seed_posts": 4,
+      "agent_0": 4,
+      "agent_1": 4
+    },
+    "public_control_presence_by_channel": {
+      "world_brief": 16,
+      "config_context": 16,
+      "event_prompt": 16,
+      "seed_posts": 16,
+      "agent_0": 16,
+      "agent_1": 16
+    },
+    "unchanged_context_packs": 16,
+    "denied_alpha_known_absence": 12,
+    "denied_alpha_modeler_audit_preserved": 12,
+    "duplicate_beta_actor_knowledge_preserved": 4
+  },
+  "total_denied_case_channel_exposures": {
+    "baseline": 71,
+    "current": 0,
+    "unit": "case/channel presence observations; not unique claims or requests"
+  },
+  "positive_controls": {
+    "public_marker_observations_baseline": 24,
+    "public_marker_observations_current": 24,
+    "separate_public_control_observations_baseline": 95,
+    "separate_public_control_observations_current": 96
+  },
+  "seed_channel_explanation": "Baseline seed posts expose denied text in 11 of 12 negative cases, while the other five channels expose it in 12 of 12. The existing synthesizer emits the first public row per actor (simulation_config_generator.py:2508-2535), so one duplicate-order case emits another row instead; another ordering displaces the separate control. After filtering, denied seed exposures are 0 and the separate public control appears in all 16 cases. Do not claim 72 baseline exposures or claim baseline control was preserved in all channels.",
+  "receipts": [
+    {
+      "phase": "actor-comparison-baseline",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-baseline/command-completed.json",
+      "command_receipt_sha256": "6f3059d27f0fee45693906f128fefca26164a3a6ae8379e8d880690b4c1a4664",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-baseline/results.xml",
+      "junit_sha256": "7a5465c89ce671ee6bbe8f692578324beb4e8807f2446c1cc8597a40b0edcf6c",
+      "tests": 16,
+      "failures": 12,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:26:51.976589+00:00",
+      "exit_code": 1,
+      "network_attempts": [],
+      "changed_sources": []
+    },
+    {
+      "phase": "actor-comparison-current",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-current/command-completed.json",
+      "command_receipt_sha256": "ef355f67f98b48411ffba85eccce24f6c1dd0e45833e0ff2468eb56672905ca0",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-current/results.xml",
+      "junit_sha256": "1c57d67595d84e8088971688b4bd0d5bae7bdc9b36f61e422214ced381046576",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:27:04.604289+00:00",
+      "exit_code": 0,
+      "network_attempts": [],
+      "changed_sources": []
+    },
+    {
+      "phase": "actor-review-final-corrected",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-review-final-corrected/command-completed.json",
+      "command_receipt_sha256": "35c55bcc89e8a66902c216e8d8fbc644b41f264218963c06adedc0d156b8ea82",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-review-final-corrected/results.xml",
+      "junit_sha256": "e310170009f89a814f0db58b23dd78649633bc9cec3115a0835e4182e734c5ee",
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:27:33.121058+00:00",
+      "exit_code": 0,
+      "network_attempts": [],
+      "changed_sources": []
+    },
+    {
+      "phase": "actor-final",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-final/command-completed.json",
+      "command_receipt_sha256": "97c99022c534ec54027428c509c32eae5d797b2183a7628484c95ccd2834fbd5",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-final/results.xml",
+      "junit_sha256": "002c593e99210c08c093d2c80a55feba464f619728361d68477000b97b2642b7",
+      "tests": 172,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:24:22.788635+00:00",
+      "exit_code": 0,
+      "network_attempts": [],
+      "changed_sources": []
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-baseline.json",
+      "sha256": "00ee9aad98d333b358e49dfa1bc11d2cdc67cf8b9fd4c3264244faa29e38a091"
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-current.json",
+      "sha256": "d726e85b63c23aad6f37ffa2797c22bf23254329605605a177c0cb8eaecee030"
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor_comparison_plugin.py",
+      "sha256": "a46e52776dc7008aa3fbdf65f4344253ea72c8604b7f7dee72c7739d15f96290"
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/offline_pytest.py",
+      "sha256": "6c5117f288b624dd204d20bdced04a563ef460c2d2711311a1f2eaf229367d6a"
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/harness/sitecustomize.py",
+      "sha256": "4719244a13e5b4732404034b39f99780394d7f0966cce2f92d20d0055f30e160"
+    }
+  ],
+  "limits": [
+    "Synthetic correctness/integrity comparison only; no production latency, token, cost, or savings result.",
+    "Claim identity is the existing sanitized 520-character casefolded text identity, not semantic equivalence or paraphrase matching.",
+    "Deny filtering conservatively omits conflicting claims from universally shared context while preserving authorized actor-local knowledge and modeler audit.",
+    "Full application context transfer and ontology/report fixes remain outside this slice."
+  ]
+}

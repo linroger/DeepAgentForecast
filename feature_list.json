@@ -15,7 +15,7 @@
       "Fail closed on identity mismatch, tampered hashes, malformed contracts, or missing required evidence; represent sparse evidence explicitly without fabricating detail.",
       "Exercise fresh, reuse, sparse, adversarial, multi-actor, and runtime-tamper scenarios with focused and cross-stage tests, then update documentation and continuity evidence."
     ],
-    "passes": true
+    "passes": false
   },
   {
     "id": "feature_localhost_drf_entry",
