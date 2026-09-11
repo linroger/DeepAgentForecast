@@ -465,10 +465,11 @@
       ],
       "result": "Shared actor denial verified offline:172 focused passes,18 independent passes, paired71-to-0 denied case/channel observations. Broad3896pass/1known scaffold failure/17skip/16xfail; frontend113pass/build successful. Wider integration remains open.",
       "next": "ASTRA-INTEGRATION-02 complete sanitation before bounded ontology sampling, then ontology reuse and report context closure.",
-      "verified_source_hashes": "docs/research/astra-integration-verification.json"
+      "verified_source_hashes": "docs/research/astra-integration-verification.json",
+      "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
     }
   ],
-  "last_implementation_commit": "f647bfb5103aed0d3b0d6528523b9085a4058182",
+  "last_implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
@@ -539,7 +540,8 @@
       "description": "Explicit denied actor knowledge is reinjected by public shared-world selection.",
       "evidence": "docs/research/astra-integration-verification.json",
       "resolved_at": "2026-09-11T13:33:46.827991+00:00",
-      "resolution": "Literal-false denial across validated participating packs prevents same normalized claim from entering six shared channels. Independent18-case review and paired71-to-0 exposure comparison preserve actor-local access, modeler audit and seals."
+      "resolution": "Literal-false denial across validated participating packs prevents same normalized claim from entering six shared channels. Independent18-case review and paired71-to-0 exposure comparison preserve actor-local access, modeler audit and seals.",
+      "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
     },
     {
       "id": "ASTRA-INTEGRATION-02",

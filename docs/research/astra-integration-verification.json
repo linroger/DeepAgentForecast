@@ -134,5 +134,6 @@
     "docs/research/astra-integration-access-review.json": "4ce8a52191f0518fcd9ef7418bd948482605b07bbc8057470688f04ba71b72fc",
     "docs/research/astra-integration-run-evidence.json": "1055236e2bce127779a2dccf6117879513160771e4dcf1bb0f51e0a88e541f1c"
   },
-  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/integration-20260911"
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/integration-20260911",
+  "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
 }
