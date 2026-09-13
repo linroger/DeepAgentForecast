@@ -124,5 +124,6 @@
     "The first independent comparison launcher copied globals and missed service mocks; its12DNS attempts were blocked, and that phase is invalid. Final v3 comparison uses live globals with exact baseline code and zero network events.",
     "Original checkout edits and saved artifacts preserved; no successful provider request, real pipeline launch/resume, restart, deployment or unchanged-auth retry."
   ],
-  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913"
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913",
+  "implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3"
 }

@@ -485,10 +485,11 @@
       ],
       "result": "Cached ontology integrity fence verified offline:73focused/82independent passes; broad3923pass/1known scaffold failure/17skip/11existingxfail. Invalid fixture completions4-to-0 and downstream entries16-to-0. Parent03 remains partial; no production speedup claimed.",
       "next": "03b input binding and strict publication, then03c owned durable downstream invalidation and ensemble closure before automatic regeneration.",
-      "verified_source_hashes": "docs/research/astra-ontology-reuse-verification.json"
+      "verified_source_hashes": "docs/research/astra-ontology-reuse-verification.json",
+      "implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3"
     }
   ],
-  "last_implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58",
+  "last_implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
@@ -586,7 +587,8 @@
           "title": "Validate cached ontology artifact/project integrity and preserve proof on reuse",
           "status": "verified_offline",
           "verified_at": "2026-09-13T13:10:37.091677+00:00",
-          "evidence": "docs/research/astra-ontology-reuse-verification.json"
+          "evidence": "docs/research/astra-ontology-reuse-verification.json",
+          "implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3"
         },
         {
           "id": "ASTRA-INTEGRATION-03b",
