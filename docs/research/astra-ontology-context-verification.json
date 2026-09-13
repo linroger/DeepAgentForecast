@@ -143,5 +143,6 @@
     "docs/research/astra-ontology-context-review.json": "50de63e156d42008f4bee5499f0b921adfecab2ad145a4da153174692546f839",
     "docs/research/astra-ontology-run-evidence.json": "3514a9059c520696590fb421c1bd495e78ddd7b28c74bebed741fdd0f35df5a7"
   },
-  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913"
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913",
+  "implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58"
 }

@@ -475,10 +475,11 @@
       ],
       "result": "Full sanitation transfer verified offline:12 ontology/graph boundary passes,69 independent passes,56 capped/default byte-parity comparisons. Broad3905pass/1known scaffold failure/17skip/11existingxfail. More graph episodes reflect restored evidence; no production speedup claimed.",
       "next": "ASTRA-INTEGRATION-03 ontology artifact/input binding and dependent-stage reuse invalidation.",
-      "verified_source_hashes": "docs/research/astra-ontology-context-verification.json"
+      "verified_source_hashes": "docs/research/astra-ontology-context-verification.json",
+      "implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58"
     }
   ],
-  "last_implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87",
+  "last_implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
@@ -560,7 +561,8 @@
       "description": "Ontology sanitization truncates long document tails before sampling.",
       "evidence": "docs/research/astra-ontology-context-verification.json",
       "resolved_at": "2026-09-13T11:46:52.662469+00:00",
-      "resolution": "Explicit complete sanitation precedes ontology sampling and graph splitting, preserving safe tails under normalization/replacement expansion. Five ontology xfails removed; real primary/fallback and bounded graph scenarios pass. Default/capped sanitizer bytes and source artifacts preserved; restored graph coverage can increase work."
+      "resolution": "Explicit complete sanitation precedes ontology sampling and graph splitting, preserving safe tails under normalization/replacement expansion. Five ontology xfails removed; real primary/fallback and bounded graph scenarios pass. Default/capped sanitizer bytes and source artifacts preserved; restored graph coverage can increase work.",
+      "implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58"
     },
     {
       "id": "ASTRA-INTEGRATION-03",
