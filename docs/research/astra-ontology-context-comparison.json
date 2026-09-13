@@ -1,0 +1,495 @@
+{
+  "baseline": "8cdd953b6b317bef373db0cbac4c24cadab81f0d",
+  "baseline_sha256": {
+    "backend/app/services/actor_role_prompt.py": "ddd46f53df939fb24c86507f86e69f6b74167371f25c4c088a73efc49278e83e",
+    "backend/app/services/ontology_generator.py": "7de5d93e1c79980b9fecc1b7c55464979e9b20616a70b175bc969018479583c3",
+    "backend/app/services/pipeline_orchestrator.py": "aea62e019e67cf620e1765f26daad2433fe37adf44d5244d07fe6808a8f553d0"
+  },
+  "current_sha256": {
+    "backend/app/services/actor_role_prompt.py": "0688e7b89a3e9e2bb119382f59d694017bc764366226250f60e8fd06cee29199",
+    "backend/app/services/ontology_generator.py": "cfb90c59c63c2736588371a333b723713ace07b236dbd8f99de9ef5a082dc0f1",
+    "backend/app/services/pipeline_orchestrator.py": "e45920614e7e558452924d47e1b8f36caac6bafe8951fe5535fc4fe80bc1c17a"
+  },
+  "network_calls": 0,
+  "graph_chunk_size": 600,
+  "graph_chunk_overlap": 60,
+  "comparison_scope": "Exact AST definitions from committed and working source; shared unchanged dependencies; synthetic data only; no provider or saved-run execution",
+  "cases": [
+    {
+      "name": "long_report",
+      "input_sha256": "5817d551eefddcc16705096ac89887b9a7bc36ed9870d1db5afc736d2b5ae552",
+      "input_chars": 162037,
+      "ontology_cap": 120000,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "4db87991a4b2cddd5849676624afc640b8a4f5715fea357db45839bf955be13e",
+          "document_chars": 120002,
+          "prompt_chars": 120647,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "MIDDLE_MARKER": true,
+            "TAIL_MARKER": false
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "MIDDLE_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 300,
+          "graph_total_chars": 245762,
+          "largest_episode_chars": 820,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 1.5539172079998025
+        },
+        "current": {
+          "prompt_sha256": "c848272afc92db2574b468497eef081ef6bbb0318184f9480e228026c10eb61f",
+          "document_chars": 120074,
+          "prompt_chars": 120719,
+          "sample_notice": true,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "MIDDLE_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "MIDDLE_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 300,
+          "graph_total_chars": 245762,
+          "largest_episode_chars": 820,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 1.5561799160000191
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": false,
+      "graph_episode_bytes_equal": true
+    },
+    {
+      "name": "dossier_report",
+      "input_sha256": "3a9584087844b0e5e6a3d1b137385e8511624e5385dabae89e198e7dc1a55950",
+      "input_chars": 8440,
+      "ontology_cap": 1200,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "2e43eaeed9cbfb866221ad1710c9291916362e64453ddb8f206fbee6cb1b8214",
+          "document_chars": 1274,
+          "prompt_chars": 1919,
+          "sample_notice": true,
+          "ontology_markers": {
+            "DOSSIER_MARKER": true,
+            "TAIL_MARKER": false
+          },
+          "graph_markers": {
+            "DOSSIER_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 16,
+          "graph_total_chars": 12785,
+          "largest_episode_chars": 814,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.05558112499966228
+        },
+        "current": {
+          "prompt_sha256": "1a5cfe021c2f8a7964c26f4cd1157276c98dacfbd4d054d491d23d1692ad4347",
+          "document_chars": 1270,
+          "prompt_chars": 1915,
+          "sample_notice": true,
+          "ontology_markers": {
+            "DOSSIER_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "DOSSIER_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 16,
+          "graph_total_chars": 12785,
+          "largest_episode_chars": 814,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.05559712500007663
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": false,
+      "graph_episode_bytes_equal": true
+    },
+    {
+      "name": "nfkc_expansion",
+      "input_sha256": "4fe0edf7a83bd58e238242a11954d99df50079029f4c0308edb8fb0f7f95cedd",
+      "input_chars": 1024,
+      "ontology_cap": 1200,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "57344e516bc7bc91c0bccb5efdbd75035bd0bf36a9c2b2964cdfbadfc132df6d",
+          "document_chars": 1202,
+          "prompt_chars": 1847,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": false
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": false
+          },
+          "graph_episodes": 3,
+          "graph_total_chars": 1977,
+          "largest_episode_chars": 813,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.017977709000206232
+        },
+        "current": {
+          "prompt_sha256": "3ade5e9a25c42bdd4aeed70910ee387413cee6a7e021f7ba1279dd1206d31214",
+          "document_chars": 1272,
+          "prompt_chars": 1917,
+          "sample_notice": true,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 34,
+          "graph_total_chars": 27364,
+          "largest_episode_chars": 817,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.021126708000338112
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": false,
+      "graph_episode_bytes_equal": false
+    },
+    {
+      "name": "cr_unsafe_expansion",
+      "input_sha256": "40ec9d259a11f292fb074ae302c3442128be1d516f32c1581fd62e9400d0ba63",
+      "input_chars": 7024,
+      "ontology_cap": 1200,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "54fbd6e6e2b4c55e3be7b9658b8a7d019d032eb9d40b053b94613a172cb8bafc",
+          "document_chars": 1202,
+          "prompt_chars": 1847,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": false
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": false
+          },
+          "graph_episodes": 14,
+          "graph_total_chars": 11015,
+          "largest_episode_chars": 817,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.06286979200012865
+        },
+        "current": {
+          "prompt_sha256": "c41ef0160eb219170e748e81b7f0fb3f1a53882e5de9383694bc481fb8ff6f3a",
+          "document_chars": 1270,
+          "prompt_chars": 1915,
+          "sample_notice": true,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 87,
+          "graph_total_chars": 71026,
+          "largest_episode_chars": 817,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.06394304200011902
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": false,
+      "graph_episode_bytes_equal": false
+    },
+    {
+      "name": "split_tail_control",
+      "input_sha256": "485d156bb1be37516716b92e1a88a42690b1094f5088d5a4d6379b269f5b645f",
+      "input_chars": 4274,
+      "ontology_cap": 1200,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "eaf2719107141030a2d509c23288bd65a6f25e5b408bca3573e2272e34dc1c1c",
+          "document_chars": 1202,
+          "prompt_chars": 1847,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_FACT_BEFORE.": false,
+            "TAIL_MARKER": false
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_FACT_BEFORE.": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 9,
+          "graph_total_chars": 6724,
+          "largest_episode_chars": 812,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.02751925000029587
+        },
+        "current": {
+          "prompt_sha256": "5bfb002786389d3fabac91dd314d886b40a340d7c4596dba84c3756779f75ea1",
+          "document_chars": 1270,
+          "prompt_chars": 1915,
+          "sample_notice": true,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_FACT_BEFORE.": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_FACT_BEFORE.": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 9,
+          "graph_total_chars": 6724,
+          "largest_episode_chars": 812,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.02739125000016429
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": false,
+      "graph_episode_bytes_equal": true
+    },
+    {
+      "name": "short_report",
+      "input_sha256": "294d8625336c406f427b7a310e067170069ed63849c2fe5dfe0c66624a356376",
+      "input_chars": 53,
+      "ontology_cap": 120000,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "a76ea68f5ed665b5d34c86276496646288f0ae7a6f44fe49a5305d981f75cc67",
+          "document_chars": 53,
+          "prompt_chars": 698,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 1,
+          "graph_total_chars": 266,
+          "largest_episode_chars": 266,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.00010462500040375744
+        },
+        "current": {
+          "prompt_sha256": "a76ea68f5ed665b5d34c86276496646288f0ae7a6f44fe49a5305d981f75cc67",
+          "document_chars": 53,
+          "prompt_chars": 698,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 1,
+          "graph_total_chars": 266,
+          "largest_episode_chars": 266,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.00010233300008621882
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": true,
+      "graph_episode_bytes_equal": true
+    },
+    {
+      "name": "uncertainty_source",
+      "input_sha256": "cd0d67ef96c887fdc6b2ab9c4d5dde1ae723f7ca05db3fd7da35cbebc7aef782",
+      "input_chars": 107,
+      "ontology_cap": 120000,
+      "variants": {
+        "baseline": {
+          "prompt_sha256": "65b1b14926643bd31b5a1dc49ed45b4c60c4264a7a764aed6ed8a27d197e98c6",
+          "document_chars": 107,
+          "prompt_chars": 752,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "[S12]": true,
+            "confidence is low": true,
+            "approval date is unknown": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "[S12]": true,
+            "confidence is low": true,
+            "approval date is unknown": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 1,
+          "graph_total_chars": 320,
+          "largest_episode_chars": 320,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.0002594999996290426
+        },
+        "current": {
+          "prompt_sha256": "65b1b14926643bd31b5a1dc49ed45b4c60c4264a7a764aed6ed8a27d197e98c6",
+          "document_chars": 107,
+          "prompt_chars": 752,
+          "sample_notice": false,
+          "ontology_markers": {
+            "HEAD_MARKER": true,
+            "[S12]": true,
+            "confidence is low": true,
+            "approval date is unknown": true,
+            "TAIL_MARKER": true
+          },
+          "graph_markers": {
+            "HEAD_MARKER": true,
+            "[S12]": true,
+            "confidence is low": true,
+            "approval date is unknown": true,
+            "TAIL_MARKER": true
+          },
+          "graph_episodes": 1,
+          "graph_total_chars": 320,
+          "largest_episode_chars": 320,
+          "ontology_unsafe_present": false,
+          "graph_unsafe_present": false,
+          "local_prompt_median_seconds": 0.0002575000003162131
+        }
+      },
+      "inputs_unchanged": true,
+      "full_prompt_bytes_equal": true,
+      "graph_episode_bytes_equal": true
+    }
+  ],
+  "sanitizer_parity": {
+    "default_and_explicit_cap_pairs": 56,
+    "full_mode_reference_pairs": 8,
+    "caps": [
+      "default",
+      -10,
+      0,
+      1,
+      12,
+      1200,
+      12000
+    ],
+    "none_input_included": true,
+    "all_equal": true
+  },
+  "wire_paths": [
+    {
+      "template": "social_opinion",
+      "variants": {
+        "baseline": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "document_chars": 1202,
+            "tail_preserved": false
+          }
+        ],
+        "current": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "document_chars": 1269,
+            "tail_preserved": true
+          }
+        ]
+      },
+      "validated_output_equal": true
+    },
+    {
+      "template": "general_forecast",
+      "variants": {
+        "baseline": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "document_chars": 1202,
+            "tail_preserved": false
+          },
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "document_chars": 1202,
+            "tail_preserved": false
+          }
+        ],
+        "current": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "document_chars": 1269,
+            "tail_preserved": true
+          },
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "max_tokens": 8192,
+            "temperature": 0.3,
+            "document_chars": 1269,
+            "tail_preserved": true
+          }
+        ]
+      },
+      "validated_output_equal": true
+    }
+  ],
+  "tradeoff": "Full graph evidence coverage increases episode count for previously truncated Unicode and CR-only inputs. Timing is a three-sample local prompt-construction median, not production latency or provider cost evidence.",
+  "source_stable": true
+}

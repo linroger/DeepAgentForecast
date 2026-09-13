@@ -1,0 +1,147 @@
+{
+  "schema": "astra-ontology-context-verification/v1",
+  "verified_at": "2026-09-13T11:45:24.935129+00:00",
+  "issue": "ASTRA-INTEGRATION-02",
+  "scope": "Complete research sanitation before ontology sampling and graph chunking; application audit remains in progress",
+  "baseline_commit": "8cdd953b6b317bef373db0cbac4c24cadab81f0d",
+  "source_sha256": {
+    "backend/app/services/actor_role_prompt.py": "0688e7b89a3e9e2bb119382f59d694017bc764366226250f60e8fd06cee29199",
+    "backend/app/services/ontology_generator.py": "cfb90c59c63c2736588371a333b723713ace07b236dbd8f99de9ef5a082dc0f1",
+    "backend/app/services/pipeline_orchestrator.py": "e45920614e7e558452924d47e1b8f36caac6bafe8951fe5535fc4fe80bc1c17a",
+    "backend/tests/test_ontology_context_transfer.py": "27869990ddeac09d24e632cb98447c5ed912696c16a2476b50e49e277198f8f3",
+    "backend/tests/test_graph_research_boundary.py": "f0eef56ac2c1ed2d9b3ec3bd2694cdbfc3d898f11b1d0701a71a3c288b28cf48"
+  },
+  "red_ontology": {
+    "passed": 1,
+    "failed": 5,
+    "xfail_suppression_disabled": true,
+    "receipt": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/ontology-red/command-completed.json"
+  },
+  "red_graph": {
+    "passed": 0,
+    "failed": 2,
+    "exact_baseline": true,
+    "receipt": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/graph-review-red/command-completed.json"
+  },
+  "final_boundary": {
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "failures": [],
+    "exit_code": 0,
+    "guarded_python_processes": 1,
+    "network_events": 0,
+    "source_drift": [],
+    "started_at": "2026-09-13T11:37:29.822634+00:00",
+    "completed_at": "2026-09-13T11:37:32.802691+00:00",
+    "command": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/offline_pytest.py",
+      "graph-ontology-green",
+      "backend/tests/test_graph_research_boundary.py",
+      "backend/tests/test_ontology_context_transfer.py"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/graph-ontology-green/results.xml",
+    "junit_sha256": "3c79cc7d4882295e732d3f40e3f589a36b242536a91f69a7ceb9875d428f0288",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/graph-ontology-green/command-completed.json",
+    "command_receipt_sha256": "34ee6ced48e8f04ca582c65f16da8991a5006717c4e74826dde3b0de55072ebb"
+  },
+  "full_backend": {
+    "passed": 3905,
+    "failed": 1,
+    "skipped": 17,
+    "xfailed": 11,
+    "failures": [
+      "tests.test_drf2_skills_config.TestConfigYaml::test_skills_path_points_at_drf2_skills"
+    ],
+    "exit_code": 1,
+    "guarded_python_processes": 69,
+    "network_events": 0,
+    "source_drift": [],
+    "started_at": "2026-09-13T11:39:17.541132+00:00",
+    "completed_at": "2026-09-13T11:41:40.582885+00:00",
+    "command": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/offline_pytest.py",
+      "backend-final",
+      "backend/tests"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/backend-final/results.xml",
+    "junit_sha256": "4bf4e0c448147df19aa703275306e3096c7e1ba0b3036896fa64fb68b9b56f05",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/backend-final/command-completed.json",
+    "command_receipt_sha256": "356b719cb7e80475d6fb4b6ddf35dbb2bd0cee9c862e61f701fa70a1195674e3"
+  },
+  "independent_review": {
+    "passed": 69,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "failures": [],
+    "exit_code": 0,
+    "guarded_python_processes": 1,
+    "network_events": 0,
+    "source_drift": [],
+    "started_at": "2026-09-13T11:40:40.237204+00:00",
+    "completed_at": "2026-09-13T11:40:58.958233+00:00",
+    "command": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/offline_pytest.py",
+      "independent-boundary-review",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/graph-review/test_paired_boundary_comparison.py",
+      "backend/tests/test_ontology_context_transfer.py",
+      "backend/tests/test_graph_research_boundary.py",
+      "backend/tests/test_actor_role_prompt.py",
+      "backend/tests/test_ontology_actors_optimizations.py"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/independent-boundary-review/results.xml",
+    "junit_sha256": "ba76940a36cc04b66684769457451b18416c4440b9c5790fa7f12a9a84e89fdb",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/independent-boundary-review/command-completed.json",
+    "command_receipt_sha256": "6d5fc7b9076140c465ed5566f507413e1882b785b32e7057cc94f34604ee9825"
+  },
+  "independent_blocking_findings": 0,
+  "sanitizer_compatibility": {
+    "default_and_explicit_cap_pairs": 56,
+    "full_mode_reference_pairs": 8,
+    "caps": [
+      "default",
+      -10,
+      0,
+      1,
+      12,
+      1200,
+      12000
+    ],
+    "none_input_included": true,
+    "all_equal": true
+  },
+  "comparison_artifact": "docs/research/astra-ontology-context-comparison.json",
+  "preserved": [
+    "Finite ontology document envelope and graph episode limits",
+    "Default/capped sanitizer bytes and short full prompt/episode bytes",
+    "Input source strings, private/modeler distinction and actor/config artifacts",
+    "Existing ontology request count, temperature, output caps and fallback behavior"
+  ],
+  "limits": [
+    "Offline synthetic verification, not a live pipeline or provider run.",
+    "Full backend suite exits1 for the known drf2 scaffold worktree-path mismatch;17skips and11pre-existing xfails remain.",
+    "Full sanitized intermediates can use more memory; restored graph evidence can increase episodes/provider work.",
+    "Three-sample local prompt medians are not production speedup or savings evidence.",
+    "Ontology sampling remains selective; ontology reuse/input freshness and downstream invalidation are issue03.",
+    "Original checkout edits, providers, saved artifacts and credentials preserved; remote publication remains blocked by prior authentication rejection."
+  ],
+  "lint": [],
+  "compiled_sources": [
+    "backend/app/services/actor_role_prompt.py",
+    "backend/app/services/ontology_generator.py",
+    "backend/app/services/pipeline_orchestrator.py",
+    "backend/tests/test_ontology_context_transfer.py",
+    "backend/tests/test_graph_research_boundary.py"
+  ],
+  "artifact_sha256": {
+    "docs/research/astra-ontology-context-comparison.json": "4f98bba59258109b420a997d47a766791f8dd97c26bc69e5c372a249b600aaa4",
+    "docs/research/astra-ontology-context-review.json": "50de63e156d42008f4bee5499f0b921adfecab2ad145a4da153174692546f839",
+    "docs/research/astra-ontology-run-evidence.json": "3514a9059c520696590fb421c1bd495e78ddd7b28c74bebed741fdd0f35df5a7"
+  },
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913"
+}

@@ -1,6 +1,6 @@
 # ASTRA application integration verification
 
-Status: **in progress**. The current implementation slice is ASTRA-INTEGRATION-01, shared actor-knowledge access. The wider application is not certified as fully connected or optimal. This document distinguishes offline evidence from production execution; no live provider or paid pipeline was used.
+Status: **in progress**. Verified slices are ASTRA-INTEGRATION-01 (shared actor access) and ASTRA-INTEGRATION-02 (complete sanitation before ontology sampling and graph splitting). The next slice is ontology reuse/input binding. The wider application is not certified as fully connected or optimal. This document distinguishes offline evidence from production execution; no live provider or paid pipeline was used.
 
 The authoritative workflow remains **RESEARCH → ONTOLOGY → GRAPH → PREPARE → RUN → REPORT**, coordinated by `PipelineOrchestrator` and durable `pipeline_state.json`. DeerFlow is inside research; `drf2` remains pre-cutover scaffolding.
 
@@ -8,13 +8,13 @@ The authoritative workflow remains **RESEARCH → ONTOLOGY → GRAPH → PREPARE
 
 | Boundary | Current contract and source | Verification and remaining work |
 |---|---|---|
-| Research lanes → unified evidence | Parent synthesis binds reports, dossiers, fetched-source receipts and actor lineage before downstream work. [Research orchestration](../../backend/app/services/pipeline_orchestrator.py#L11248). | Source trace and existing offline producer/contract regressions. Saved history cannot prove live provider health or current research quality. |
-| Research → ontology | Dossier/report documents enter an explicitly untrusted, bounded prompt. [Prompt construction](../../backend/app/services/ontology_generator.py#L692). | **Open issue 02:** per-document sanitation truncates before head/middle/tail sampling. Five distinct permanent failure cases are strict xfails; the short-document control passes. |
-| Ontology → graph and reuse | Ontology and research feed graph construction, source-bound actor seeds and graph readback. [Reuse guard](../../backend/app/services/pipeline_orchestrator.py#L9804), [ontology branch](../../backend/app/services/pipeline_orchestrator.py#L12528), [graph chunks](../../backend/app/services/pipeline_orchestrator.py#L1269). | **Open issue 03:** the ontology shortcut bypasses artifact integrity/input freshness and can re-register modified output. A repair must also invalidate dependent reuse when ontology changes. |
+| Research lanes → unified evidence | Parent synthesis binds reports, dossiers, fetched-source receipts and actor lineage before downstream work. [Research orchestration](../../backend/app/services/pipeline_orchestrator.py#L11245). | Source trace and existing offline producer/contract regressions. Saved history cannot prove live provider health or current research quality. |
+| Research → ontology | Dossier/report documents enter an explicitly untrusted, bounded prompt. [Prompt construction](../../backend/app/services/ontology_generator.py#L692). | **Issue 02 resolved offline:** sanitize the complete documents before sampling. Five former xfails and actual primary/fallback prompt cases now pass; [verification](astra-ontology-context-verification.md). |
+| Ontology → graph and reuse | Ontology and research feed graph construction, source-bound actor seeds and graph readback. [Reuse guard](../../backend/app/services/pipeline_orchestrator.py#L9801), [ontology branch](../../backend/app/services/pipeline_orchestrator.py#L12525), [graph chunks](../../backend/app/services/pipeline_orchestrator.py#L1269). | **Open issue 03:** the ontology shortcut bypasses artifact integrity/input freshness and can re-register modified output. A repair must also invalidate dependent reuse when ontology changes. |
 | Graph/research → PREPARE | Stable actors and report provenance feed sealed actor-context packs, roles, profiles and configuration. [Pack producer](../../backend/app/services/actor_context.py#L1426). | Existing focused cast, provenance, context and config-seal checks pass. Repeated batch preprocessing is a measured candidate, not a completed optimization. |
 | PREPARE → agents and shared world | Current-v1 actor role bytes remain authoritative. Public canonical rows supply world/config/event/feed context, then the child injects the world brief. [Shared selector](../../backend/app/services/simulation_config_generator.py#L1649), [injection](../../backend/scripts/run_parallel_simulation.py#L739). | **Issue 01 repair:** deny a globally shared claim when any participating validated pack explicitly denies access to the same normalized claim. Preserve allowed actor-local knowledge and modeler audit. Six shared consumers are exercised with persisted seals. |
 | Prepared child → multi-agent RUN | Parent/child seals, cast and provenance guard execution. Reddit verifies the effective composed prompt before reset. [Final Reddit attestation](../../backend/scripts/run_parallel_simulation.py#L4579). | **Issue 07 needs regression:** Twitter's preparation path lacks equivalent final composed-context attestation. This source gap is not a demonstrated saved-run failure. |
-| RUN/research → REPORT | Simulation signals and structured research feed report generation; synthetic results retain the diagnostic forecast boundary. [Main report inputs](../../backend/app/services/pipeline_orchestrator.py#L13520), [alternate loader](../../backend/app/services/pipeline_orchestrator.py#L6516). | **Open issues 04–06:** alternate/ensemble constructors omit five structured artifacts, broad TypeError retries can discard them, chat omits constructed research background, and coalition analysis slices already-loaded history at 100,000 actions. |
+| RUN/research → REPORT | Simulation signals and structured research feed report generation; synthetic results retain the diagnostic forecast boundary. [Main report inputs](../../backend/app/services/pipeline_orchestrator.py#L13517), [alternate loader](../../backend/app/services/pipeline_orchestrator.py#L6513). | **Open issues 04–06:** alternate/ensemble constructors omit five structured artifacts, broad TypeError retries can discard them, chat omits constructed research background, and coalition analysis slices already-loaded history at 100,000 actions. |
 | REPORT → API/UI | Publication and visualization gates serve completed report artifacts to the frontend. | Frontend unit/build and offline API checks provide bounded local evidence. Rendered current UI acceptance and live end-to-end execution are separate from those checks. |
 
 ## Shared access repair and its tradeoff
@@ -25,7 +25,7 @@ The final selector resolves denied claim identities across every participating v
 
 The conservative tradeoff is that a public copy is omitted from the global broadcast if another participating actor is explicitly denied that same claim. An actor who is authorized to know it retains the local claim. The selector adds a small in-memory set and final filtering pass. No production latency, token savings or forecasting-quality improvement has been measured.
 
-## Verification history and limits
+## September 11 verification history and limits
 
 - Initial permanent actor regression: **8 failed, 4 passed**, with denied markers in six shared channels.
 - First implementation: **168 focused cases passed**. Independent review still found the cross-actor duplicate route.
@@ -58,6 +58,8 @@ The same 16 permanent scenarios ran in isolated offline processes, with only the
 
 The baseline has 71 denied observations, not 72: the seed synthesizer's first-public-row-per-actor policy omits the marker in one ordering. The independent final review also passed all 16 permanent cases plus its two original cross-actor reproductions. This is a synthetic correctness comparison, not saved production behavior or measured savings. [Fresh saved-run evidence](astra-integration-run-evidence.json) records the historical limits separately.
 
-## Next acceptance boundary
+## Latest gate and next acceptance boundary
 
-Repair issue 02 by sanitizing the complete document before bounded ontology sampling, including Unicode normalization and replacement expansion. Remove its strict-xfail markers only after the original five scenarios pass. Next repair ontology input binding and dependent reuse, then report entry-point context closure. Keep the full actor feature false and the application audit in progress until the corresponding acceptance boundaries are complete.
+On September 13, issue02 completed with 3,905 backend passes, one known drf2 scaffold path failure, 17 skips and 11 pre-existing xfails. All five ontology xfails have been removed after passing the original scenarios. Independent review passed 69 cases. The [ontology/graph verification](astra-ontology-context-verification.md) records exact comparison, current source hashes and restored-evidence costs.
+
+Next repair issue03: ontology input binding, artifact integrity and dependent-stage reuse. Then close report entry-point/context gaps. Keep the full actor feature false and the application audit in progress until the corresponding acceptance boundaries are complete.

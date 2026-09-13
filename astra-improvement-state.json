@@ -334,7 +334,7 @@
   ],
   "next_recommendation": "ASTRA-INTEGRATION",
   "last_completed_slice": [
-    "ASTRA-INTEGRATION-01"
+    "ASTRA-INTEGRATION-02"
   ],
   "iterations": [
     {
@@ -467,6 +467,15 @@
       "next": "ASTRA-INTEGRATION-02 complete sanitation before bounded ontology sampling, then ontology reuse and report context closure.",
       "verified_source_hashes": "docs/research/astra-integration-verification.json",
       "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
+    },
+    {
+      "completed_at": "2026-09-13T11:46:52.662469+00:00",
+      "recommendations": [
+        "ASTRA-INTEGRATION-02"
+      ],
+      "result": "Full sanitation transfer verified offline:12 ontology/graph boundary passes,69 independent passes,56 capped/default byte-parity comparisons. Broad3905pass/1known scaffold failure/17skip/11existingxfail. More graph episodes reflect restored evidence; no production speedup claimed.",
+      "next": "ASTRA-INTEGRATION-03 ontology artifact/input binding and dependent-stage reuse invalidation.",
+      "verified_source_hashes": "docs/research/astra-ontology-context-verification.json"
     }
   ],
   "last_implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87",
@@ -546,10 +555,12 @@
     {
       "id": "ASTRA-INTEGRATION-02",
       "priority": "P1",
-      "status": "open",
+      "status": "resolved_offline",
       "recommendation": "ASTRA-INTEGRATION",
       "description": "Ontology sanitization truncates long document tails before sampling.",
-      "evidence": "docs/handoff/astra-integration/handoff.md"
+      "evidence": "docs/research/astra-ontology-context-verification.json",
+      "resolved_at": "2026-09-13T11:46:52.662469+00:00",
+      "resolution": "Explicit complete sanitation precedes ontology sampling and graph splitting, preserving safe tails under normalization/replacement expansion. Five ontology xfails removed; real primary/fallback and bounded graph scenarios pass. Default/capped sanitizer bytes and source artifacts preserved; restored graph coverage can increase work."
     },
     {
       "id": "ASTRA-INTEGRATION-03",
@@ -630,5 +641,5 @@
     "handoff": "docs/handoff/astra-integration/handoff.md",
     "description": "Verify application components and end-to-end context continuity, then fix confirmed gaps."
   },
-  "next_issue": "ASTRA-INTEGRATION-02"
+  "next_issue": "ASTRA-INTEGRATION-03"
 }

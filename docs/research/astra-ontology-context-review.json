@@ -1,0 +1,37 @@
+{
+  "status": "approved_scoped_change",
+  "baseline": "8cdd953b6b317bef373db0cbac4c24cadab81f0d",
+  "reviewed_current_source_sha256": {
+    "backend/app/services/actor_role_prompt.py": "0688e7b89a3e9e2bb119382f59d694017bc764366226250f60e8fd06cee29199",
+    "backend/app/services/ontology_generator.py": "cfb90c59c63c2736588371a333b723713ace07b236dbd8f99de9ef5a082dc0f1",
+    "backend/app/services/pipeline_orchestrator.py": "e45920614e7e558452924d47e1b8f36caac6bafe8951fe5535fc4fe80bc1c17a"
+  },
+  "blocking_findings": [],
+  "tests": {
+    "passed": 69,
+    "failed": 0,
+    "skipped": 0,
+    "xfail": 0,
+    "pytest_seconds": 18.48,
+    "network_events": 0,
+    "source_drift": []
+  },
+  "comparison": "graph-review/paired-boundary-comparison.json",
+  "verified_invariants": [
+    "Default and capped sanitizer output bytes are unchanged across 56 pairs including zero, negative caps and None input.",
+    "Explicit full mode matches generously bounded legacy safe corpus across eight input cases.",
+    "All safe ontology markers survive in seven synthetic scenario cases and final evidence blocks remain bounded.",
+    "Primary and real fallback request counts, roles, output token caps, temperatures and validated results are unchanged.",
+    "Short full prompts and graph episode bytes remain unchanged for safe and uncertainty/source-provenance cases.",
+    "Cross-line controls are removed before sampling/chunking and the individual graph episode wrappers remain closed.",
+    "Input documents and reviewed runtime source hashes remain unchanged."
+  ],
+  "tradeoffs": [
+    "Two previously truncated graph expansion scenarios gain episodes to restore evidence. This is correctness coverage, not a provider cost reduction.",
+    "Three-sample local prompt-construction timings are noisy and exclude provider work; no production speedup is claimed."
+  ],
+  "scope_limits": [
+    "This review covers sanitation-before-selection issue02 only. Ontology reuse integrity issue03 and remaining research-to-report repairs remain open.",
+    "No live provider or production pipeline was executed."
+  ]
+}

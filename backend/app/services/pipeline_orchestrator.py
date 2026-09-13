@@ -1277,19 +1277,16 @@ def _graph_research_chunks(text: Any, label: str) -> list[str]:
     split only the safe text, and wrap *every* resulting episode in its own
     explicit non-executable data boundary.
 
-    The cap is derived from the input length rather than a presentation budget:
-    graph ingestion must retain the full safe evidence corpus.  Normal graph
-    chunk size/overlap still provide the actual per-episode bound.
+    Graph ingestion must retain the full safe evidence corpus, including growth
+    from Unicode normalization and unsafe-line replacement. Normal graph chunk
+    size/overlap still provide the actual per-episode bound.
     """
     raw = _strip_data_uri_images(str(text or ""))
     if not raw.strip():
         return []
     safe_document = sanitize_untrusted_research_text(
         raw,
-        # An unsafe one-word line expands to a stable omission marker. Reserve
-        # that worst-case per-line growth so security replacement never
-        # truncates neighbouring evidence before the normal chunker runs.
-        max_chars=max(1, len(raw) + (raw.count("\n") + 1) * 64),
+        max_chars=None,
     )
     raw_chunks = TextProcessor.split_text(
         safe_document,

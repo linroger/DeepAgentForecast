@@ -1,0 +1,71 @@
+{
+  "schema": "astra-saved-evidence-refresh-reference/v1",
+  "verified_at": "2026-09-13T11:35:01.820494+00:00",
+  "prior_repository_receipt": "docs/research/astra-integration-run-evidence.json",
+  "prior_receipt_sha256": "1055236e2bce127779a2dccf6117879513160771e4dcf1bb0f51e0a88e541f1c",
+  "summary": {
+    "saved_artifacts_checked": 77,
+    "saved_artifacts_unchanged": 77,
+    "saved_artifacts_changed": [],
+    "saved_artifacts_missing": [],
+    "pipeline_states": 32,
+    "pipeline_state_hashes_unchanged": 32,
+    "status_counts": {
+      "completed": 26,
+      "failed": 3,
+      "cancelled": 3
+    },
+    "earliest_created_at": "2026-06-08T18:23:22.499025+00:00",
+    "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "new_pipeline_ids": [],
+    "removed_pipeline_ids": [],
+    "bounded_logs_checked": 12,
+    "bounded_logs_unchanged": 12,
+    "bounded_logs_changed": [],
+    "bounded_logs_missing": [],
+    "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+    "new_dated_logs": [],
+    "new_or_changed_logs_parsed": 0,
+    "latest_selected_log_event_naive_time": "2026-08-18 18:28:39",
+    "progress_logs_reused_after_hash_match": 7
+  },
+  "comparison": {
+    "saved_artifact_receipts": {
+      "common_paths": 77,
+      "same_hashes": 77,
+      "changed_paths": [],
+      "new_paths": [],
+      "removed_paths": []
+    },
+    "pipeline_state_receipts": {
+      "common_paths": 32,
+      "same_hashes": 32,
+      "changed_paths": [],
+      "new_paths": [],
+      "removed_paths": []
+    },
+    "bounded_application_logs": {
+      "common_paths": 12,
+      "same_hashes": 12,
+      "changed_paths": [],
+      "new_paths": [],
+      "removed_paths": []
+    }
+  },
+  "temporal_and_accounting_limits": [
+    "Unchanged saved artifacts are historical observations and do not validate September code performance or correctness.",
+    "Pipeline creation spans and file mtimes differ; latest file activity is not proof of a new pipeline run.",
+    "Graph stage endpoint spans can include downtime or restamping; they are not exclusive provider time, current throughput, or recoverable waste.",
+    "Repeated tool calls and retry/checkpoint log markers overlap and do not establish distinct requests, historical cache misses, or avoidable cost.",
+    "The log discovery boundary includes all prior 12 bounded files and only dated filenames newer than the prior maximum; older unselected files are outside scope.",
+    "Only previously selected aggregate marker definitions are refreshed. Actor access-denial, ontology-tail-loss and reuse-integrity events were not explicit historical instrumentation targets; absent or unsearched markers cannot establish absence of those defects.",
+    "Current source and offline boundary regressions must establish actor/context repairs. These saved files provide no post-change production comparison.",
+    "No provider calls, live probes, saved-run mutations, credentials, raw prompts, reports or provider payloads are part of this receipt."
+  ],
+  "current_full_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/saved-refresh.json",
+  "current_full_receipt_sha256": "a818f5683fbadcf19fe95b4ff64972b1fdac43b6e9009e2fec92161dda023b3f",
+  "script_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/refresh_saved.py",
+  "script_sha256": "9b584cc83811eac86a8f42a50d4e2155f706910d5ecdeea99ed2b363266eacb2",
+  "command_path": "/Users/rogerlin/.codex/astra-evidence/ontology-20260913/saved-refresh-command.json",
+  "command_sha256": "8024862f01244a0a05a2e6d4be09d905d1f6886759ba915690c0edd77eb4e9a8"
+}

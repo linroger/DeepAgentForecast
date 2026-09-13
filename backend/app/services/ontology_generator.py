@@ -703,11 +703,13 @@ class OntologyGenerator:
         # Every report/document string is research evidence, never prompt
         # control. Sanitize each document independently so one malicious line
         # does not erase safe neighbouring reports, then delimit the combined
-        # evidence block before it reaches the model.
+        # evidence block before it reaches the model. Keep the full sanitized
+        # corpus until sampling; a per-document presentation cap here would
+        # discard tail evidence before the head/middle/tail selector sees it.
         combined_text = "\n\n---\n\n".join(
             sanitize_untrusted_research_text(
                 text,
-                max_chars=self.MAX_TEXT_LENGTH_FOR_LLM,
+                max_chars=None,
             )
             for text in document_texts
         )

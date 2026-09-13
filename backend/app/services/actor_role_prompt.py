@@ -133,7 +133,7 @@ def sanitize_untrusted_dossier_text(value: Any, max_chars: int = 12000) -> str:
 def sanitize_untrusted_research_text(
     value: Any,
     *,
-    max_chars: int = 12000,
+    max_chars: Optional[int] = 12000,
 ) -> str:
     """Sanitize multiline research evidence while preserving safe evidence.
 
@@ -142,14 +142,17 @@ def sanitize_untrusted_research_text(
     disappear, so this boundary normalizes and evaluates complete lines (and
     sentence-like fragments within a line) independently. Unsafe fragments are
     replaced with a stable marker; safe paragraphs retain their order. The
-    final string is bounded only after sanitization.
+    final string is bounded only after sanitization. ``max_chars=None`` retains
+    the complete sanitized corpus for callers that subsequently sample or split
+    it into bounded prompts. This avoids truncating normalization/replacement
+    expansion before those callers can select evidence from the full document.
 
     This function is intentionally public so every generative boundary can use
     exactly the same policy. It returns plain sanitized text; callers that put
     the text in an LLM message should normally use
     :func:`delimit_untrusted_research_text` instead.
     """
-    cap = max(1, int(max_chars))
+    cap = None if max_chars is None else max(1, int(max_chars))
     if value is None:
         return ""
     raw = unicodedata.normalize("NFKC", str(value))
@@ -251,7 +254,7 @@ def sanitize_untrusted_research_text(
     while rendered_lines and rendered_lines[-1] == "":
         rendered_lines.pop()
     clean = "\n".join(rendered_lines).strip()
-    if len(clean) <= cap:
+    if cap is None or len(clean) <= cap:
         return clean
     return clean[: max(0, cap - 1)].rstrip() + "…"
 
