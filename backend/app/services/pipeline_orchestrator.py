@@ -9043,10 +9043,14 @@ class PipelineOrchestrator:
         state.global_progress = self._global_from_stage(
             state.mode, stage, 100, state.options.get("dynamic_bands")
         )
-        try:
-            self._record_stage_artifacts(state, stage)  # T6.3
-        except Exception:
-            pass
+        # A reused ontology was checked against its original registration.
+        # Re-reading the path here could bless a replacement made after that
+        # check, and would overwrite the original generation's provenance.
+        if not (reused and stage == STAGE_ONTOLOGY):
+            try:
+                self._record_stage_artifacts(state, stage)  # T6.3
+            except Exception:
+                pass
         PipelineManager.save(state)
         # W9-3：阶段转换必落一版遥测账（重启只丢「上一次阶段边界之后」的增量）。
         self._flush_run_telemetry(state)
@@ -9797,6 +9801,113 @@ class PipelineOrchestrator:
                 pass
 
     # -- 内部：产物完整性校验（复用前守卫） (I-4-3) ------------------------
+
+    def _require_ontology_reuse(self, state: PipelineState, ontology: Any) -> None:
+        """Require cached project/file consistency without creating new proof.
+
+        Validate and parse the same ontology bytes. Missing legacy files and
+        an explicit validation opt-out retain their existing reuse behavior;
+        neither those cases nor a valid artifact prove research-input freshness.
+        Invalid reuse stops before regeneration, which needs a separate durable
+        downstream invalidation/ownership boundary.
+        """
+        hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+        path = os.path.join(hd, "ontology.json")
+        validation: dict[str, Any] = {
+            "scope": "artifact_consistency_only",
+            "input_freshness": "unverified",
+        }
+        state.options["ontology_reuse_validation"] = validation
+
+        def reject(reason: str) -> None:
+            validation.update(status="rejected", reason=reason)
+            state.current_stage = STAGE_ONTOLOGY
+            raise RuntimeError(
+                f"Ontology reuse rejected: {reason}. Reconcile the saved project "
+                "and handoff before resuming; existing artifacts are preserved."
+            )
+
+        if not bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
+            validation["status"] = "disabled"
+            if os.path.isfile(path):
+                state.artifacts["ontology"] = path
+            return
+
+        # Read strictly here: the general loader intentionally degrades corrupt
+        # manifests to {}, which would erase registered proof on the next write.
+        # Scenario forks can share their base's handoff while keeping a local
+        # manifest. Every available registration must agree with the same file;
+        # an empty or newer child manifest cannot override the owner's proof.
+        manifest_paths = dict.fromkeys(os.path.realpath(candidate) for candidate in (
+            PipelineManager.artifact_manifest_path(state.pipeline_id),
+            os.path.join(hd, "manifest.json"),
+        ))
+        entries: list[dict[str, Any]] = []
+        for manifest_path in manifest_paths:
+            try:
+                with open(manifest_path, encoding="utf-8") as stream:
+                    manifest = json.load(stream)
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError):
+                reject("artifact_manifest_unreadable")
+            if not isinstance(manifest, dict):
+                reject("artifact_manifest_invalid")
+            if "ontology" not in manifest:
+                continue
+            entry = manifest["ontology"]
+            if not isinstance(entry, dict):
+                reject("ontology_registration_invalid")
+            declared = entry.get("path")
+            if declared not in (None, "") and (
+                not isinstance(declared, str)
+                or os.path.realpath(declared) != os.path.realpath(path)
+            ):
+                reject("ontology_registration_path_mismatch")
+            entries.append(entry)
+        try:
+            with open(path, "rb") as stream:
+                raw = stream.read()
+        except FileNotFoundError:
+            if entries:
+                reject("registered_ontology_missing")
+            validation["status"] = "legacy_project_only"
+            return
+        except OSError:
+            reject("ontology_unreadable")
+
+        validation.update(
+            registrations_checked=len(entries), sha256_checked=False, size_checked=False,
+        )
+        for entry in entries:
+            expected_size, expected_sha = entry.get("bytes"), entry.get("sha256")
+            if expected_size is not None and (
+                type(expected_size) is not int or expected_size != len(raw)
+            ):
+                reject("ontology_size_mismatch")
+            if expected_sha not in (None, "") and (
+                not isinstance(expected_sha, str)
+                or hashlib.sha256(raw).hexdigest() != expected_sha
+            ):
+                reject("ontology_hash_mismatch")
+            validation["sha256_checked"] |= bool(expected_sha)
+            validation["size_checked"] |= expected_size is not None
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            if (not isinstance(payload, dict)
+                    or not isinstance(payload.get("entity_types"), list)
+                    or not payload["entity_types"]
+                    or ("edge_types" in payload and not isinstance(payload["edge_types"], list))):
+                reject("ontology_schema_invalid")
+            canonical = {"sort_keys": True, "ensure_ascii": False, "allow_nan": False}
+            matches_project = json.dumps(payload, **canonical) == json.dumps(ontology, **canonical)
+        except (ValueError, TypeError, UnicodeError):
+            reject("ontology_json_invalid")
+        if not matches_project:
+            reject("project_ontology_mismatch")
+        validation["status"] = "registered" if entries else "legacy_file_match"
+        state.artifacts["ontology"] = path
+        state.artifacts.pop("ontology_partial", None)
 
     def _validate_reuse(self, state: PipelineState, stage: str) -> bool:
         """I-4-3: 复用一个标记 completed 的阶段前，按产物清单核验其产物未被半写/截断/篡改。
@@ -12118,6 +12229,13 @@ class PipelineOrchestrator:
             # A fresh process must reconcile another attempt's unfinished API
             # work before starting a stage, including paths that reuse artifacts.
             LLMMeter.assert_accounting_available(state.pipeline_id)
+            # Check cached ontology before RESEARCH completion can update the
+            # shared artifact manifest. A corrupt manifest must not degrade to
+            # {} and lose its old ontology proof during unrelated bookkeeping.
+            if state.mode != "research_only" and state.project_id:
+                cached_project = ProjectManager.get_project(state.project_id)
+                if cached_project is not None and cached_project.ontology:
+                    self._require_ontology_reuse(state, cached_project.ontology)
             # ---- Stage 0: RESEARCH ----
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
             handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
@@ -12523,6 +12641,7 @@ class PipelineOrchestrator:
             project_name = state.options.get("project_name") or f"研究预测 {state.pipeline_id}"
             project = ProjectManager.get_project(state.project_id) if state.project_id else None
             if project is not None and project.ontology:
+                self._require_ontology_reuse(state, project.ontology)
                 upd(100, "复用已有本体…")
                 self._complete_stage(state, STAGE_ONTOLOGY, "本体已恢复", reused=True)
             else:

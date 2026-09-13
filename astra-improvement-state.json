@@ -334,7 +334,7 @@
   ],
   "next_recommendation": "ASTRA-INTEGRATION",
   "last_completed_slice": [
-    "ASTRA-INTEGRATION-02"
+    "ASTRA-INTEGRATION-03a"
   ],
   "iterations": [
     {
@@ -477,6 +477,15 @@
       "next": "ASTRA-INTEGRATION-03 ontology artifact/input binding and dependent-stage reuse invalidation.",
       "verified_source_hashes": "docs/research/astra-ontology-context-verification.json",
       "implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58"
+    },
+    {
+      "completed_at": "2026-09-13T13:10:37.091677+00:00",
+      "recommendations": [
+        "ASTRA-INTEGRATION-03a"
+      ],
+      "result": "Cached ontology integrity fence verified offline:73focused/82independent passes; broad3923pass/1known scaffold failure/17skip/11existingxfail. Invalid fixture completions4-to-0 and downstream entries16-to-0. Parent03 remains partial; no production speedup claimed.",
+      "next": "03b input binding and strict publication, then03c owned durable downstream invalidation and ensemble closure before automatic regeneration.",
+      "verified_source_hashes": "docs/research/astra-ontology-reuse-verification.json"
     }
   ],
   "last_implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58",
@@ -567,10 +576,30 @@
     {
       "id": "ASTRA-INTEGRATION-03",
       "priority": "P1",
-      "status": "open",
+      "status": "in_progress",
       "recommendation": "ASTRA-INTEGRATION",
       "description": "Ontology reuse bypasses registered artifact integrity and input-generation binding.",
-      "evidence": "docs/handoff/astra-integration/handoff.md"
+      "evidence": "docs/research/astra-ontology-reuse-verification.json",
+      "subtasks": [
+        {
+          "id": "ASTRA-INTEGRATION-03a",
+          "title": "Validate cached ontology artifact/project integrity and preserve proof on reuse",
+          "status": "verified_offline",
+          "verified_at": "2026-09-13T13:10:37.091677+00:00",
+          "evidence": "docs/research/astra-ontology-reuse-verification.json"
+        },
+        {
+          "id": "ASTRA-INTEGRATION-03b",
+          "title": "Bind ontology to effective research inputs and generation policy",
+          "status": "pending"
+        },
+        {
+          "id": "ASTRA-INTEGRATION-03c",
+          "title": "Durably invalidate and preserve dependent outputs with fork ownership and ensemble closure",
+          "status": "pending"
+        }
+      ],
+      "resolution_progress": "Artifact/project consistency and original registration preservation are verified under03a; input freshness and automatic dependency-safe regeneration remain unimplemented03b/03c."
     },
     {
       "id": "ASTRA-INTEGRATION-04",
@@ -643,5 +672,5 @@
     "handoff": "docs/handoff/astra-integration/handoff.md",
     "description": "Verify application components and end-to-end context continuity, then fix confirmed gaps."
   },
-  "next_issue": "ASTRA-INTEGRATION-03"
+  "next_issue": "ASTRA-INTEGRATION-03b"
 }

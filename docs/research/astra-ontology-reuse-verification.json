@@ -1,0 +1,128 @@
+{
+  "schema": "astra-ontology-reuse-integrity-verification/v1",
+  "verified_at": "2026-09-13T13:06:58.440509+00:00",
+  "issue": "ASTRA-INTEGRATION-03a",
+  "parent_issue_status": "ASTRA-INTEGRATION-03 remains in_progress",
+  "baseline_commit": "5d7b1479b824e53d9bc2bb605bf2521df742df3e",
+  "source_sha256": {
+    "backend/app/services/pipeline_orchestrator.py": "e11267fba3d7896026d65764ffa43060e2dd1d789cac001a9fc33473a9a52f89",
+    "backend/tests/test_ontology_reuse_integrity.py": "3013903097580842c83874860eea0b5fa1245061a9891ca1261a541163550ca7",
+    "backend/tests/test_orchestrator_research_wiring.py": "0179c8c78d62c921338f64c156ccd849f4923e0530a5ca7b60dbc9923da5f4f4"
+  },
+  "full_backend": {
+    "passed": 3923,
+    "failed": 1,
+    "skipped": 17,
+    "xfailed": 11,
+    "failures": [
+      "tests.test_drf2_skills_config.TestConfigYaml::test_skills_path_points_at_drf2_skills"
+    ],
+    "exit_code": 1,
+    "started_at": "2026-09-13T13:01:46.871841+00:00",
+    "completed_at": "2026-09-13T13:04:15.625180+00:00",
+    "network_events": 0,
+    "guarded_python_processes": 69,
+    "source_drift": [],
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/offline_pytest.py",
+      "backend-owner-final",
+      "backend/tests"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/backend-owner-final/results.xml",
+    "junit_sha256": "f3f37f870c9578a68714839ee0ac3ea947968e16547bebe7a798ab37627994d8",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/backend-owner-final/command-completed.json",
+    "command_receipt_sha256": "cce0b3176813dbc7147e324c975f090b44a0775b4d0aa4da13c518c058d4226f"
+  },
+  "focused": {
+    "passed": 73,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "failures": [],
+    "exit_code": 0,
+    "started_at": "2026-09-13T12:59:50.297327+00:00",
+    "completed_at": "2026-09-13T12:59:57.610142+00:00",
+    "network_events": 0,
+    "guarded_python_processes": 1,
+    "source_drift": [],
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/offline_pytest.py",
+      "integrity-owner-green",
+      "backend/tests/test_ontology_reuse_integrity.py",
+      "backend/tests/test_orchestrator_research_wiring.py"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/integrity-owner-green/results.xml",
+    "junit_sha256": "03a3093ac362e3df5ebbdd813e804a8f698bd4e3b74491e30699116fdb6ab006",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/integrity-owner-green/command-completed.json",
+    "command_receipt_sha256": "1bf3882b90608426731dab8346029dfb63530a80329fafd8d927aa3c364573c9"
+  },
+  "independent": {
+    "passed": 82,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "failures": [],
+    "exit_code": 0,
+    "started_at": "2026-09-13T13:00:39.804105+00:00",
+    "completed_at": "2026-09-13T13:00:47.570464+00:00",
+    "network_events": 0,
+    "guarded_python_processes": 1,
+    "source_drift": [],
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/offline_pytest.py",
+      "independent-integrity-review-v3",
+      "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/independent-review/test_integrity_comparison.py",
+      "backend/tests/test_ontology_reuse_integrity.py",
+      "backend/tests/test_orchestrator_research_wiring.py"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/independent-integrity-review-v3/results.xml",
+    "junit_sha256": "cf655b1f2e44bcbf2ae4d1799e2c51da075b7316100984e2e3156c97b63a985e",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913/independent-integrity-review-v3/command-completed.json",
+    "command_receipt_sha256": "ccafccacbc32e8f0d2044893c919ed7b56910a4bc0bc4af5404e08e910b506d8"
+  },
+  "permanent_new_cases": 18,
+  "independent_blocking_findings": [],
+  "comparison": {
+    "invalid_cached_cases_completed_before": 4,
+    "invalid_cached_cases_completed_after": 0,
+    "invalid_downstream_stage_entries_before": 16,
+    "invalid_downstream_stage_entries_after": 0,
+    "healthy_registration_preserved_before": false,
+    "healthy_registration_preserved_after": true,
+    "late_file_replacement_reregistered_before": true,
+    "late_file_replacement_reregistered_after": false,
+    "artifact": "docs/research/astra-ontology-reuse-comparison.json"
+  },
+  "healthy_guard_overhead": {
+    "repetitions": 21,
+    "median_seconds": 0.0002047079997282708,
+    "min_seconds": 0.00018941700000141282,
+    "max_seconds": 0.0002528340000935714,
+    "ontology_bytes": 82,
+    "note": "Local same-fixture guard overhead only. Healthy real_run invokes it twice; excludes paid calls. No production speedup claim."
+  },
+  "lint": [],
+  "compiled_sources": [
+    "backend/app/services/pipeline_orchestrator.py",
+    "backend/tests/test_ontology_reuse_integrity.py",
+    "backend/tests/test_orchestrator_research_wiring.py"
+  ],
+  "artifact_sha256": {
+    "docs/research/astra-ontology-reuse-comparison.json": "87413a2328216399c4b96f095e1563fba6463ed53a4d6f77eecc095015143a83",
+    "docs/research/astra-ontology-reuse-review.json": "b4e308acb6aabf91c172e9cbb4e0269a6e2a8063d3c682d6b58c22b6d951d5b2",
+    "docs/research/astra-ontology-reuse-historical-metadata.json": "c9bbf471a8a907a00e3dfbab2d39dbd640ed20cb43bfe1172b0002543bdedf96",
+    "docs/research/astra-ontology-reuse-run-evidence.json": "2ea31cc248ae8ac2e4cdbce55cc8a3a2e7f3e00f88168004830a84c9adc4e626"
+  },
+  "scope_limits": [
+    "Only cached ontology artifact/project consistency and registration preservation are verified; research input freshness and safe automatic regeneration remain03b/03c.",
+    "Explicit validation opt-out, project-only legacy absence and hashless legacy metadata retain documented behavior and do not prove input freshness.",
+    "Full backend suite exits1 for the known drf2 scaffold checkout-path mismatch;17skips and11existingxfails remain.",
+    "Local guard microbenchmark uses an82-byte synthetic ontology and warm storage; no production speedup or savings is claimed.",
+    "The first independent comparison launcher copied globals and missed service mocks; its12DNS attempts were blocked, and that phase is invalid. Final v3 comparison uses live globals with exact baseline code and zero network events.",
+    "Original checkout edits and saved artifacts preserved; no successful provider request, real pipeline launch/resume, restart, deployment or unchanged-auth retry."
+  ],
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/ontology-reuse-20260913"
+}

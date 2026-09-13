@@ -1,0 +1,344 @@
+{
+  "baseline": "5d7b1479b824e53d9bc2bb605bf2521df742df3e",
+  "baseline_source_sha256": "e45920614e7e558452924d47e1b8f36caac6bafe8951fe5535fc4fe80bc1c17a",
+  "current_source_sha256": "e11267fba3d7896026d65764ffa43060e2dd1d789cac001a9fc33473a9a52f89",
+  "source_path": "backend/app/services/pipeline_orchestrator.py",
+  "cases": [
+    {
+      "case": "healthy",
+      "variants": {
+        "baseline": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": false,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.01709725000000617
+        },
+        "current": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": true,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.014878124999995634
+        }
+      }
+    },
+    {
+      "case": "tampered",
+      "variants": {
+        "baseline": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": false,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.014775958000427636
+        },
+        "current": {
+          "pipeline_status": "failed",
+          "current_stage": "ontology",
+          "ontology_status": "failed",
+          "entered_stages": [],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 0
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": true,
+          "manifest_bytes_preserved": true,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.006941958999959752
+        }
+      }
+    },
+    {
+      "case": "project_mismatch",
+      "variants": {
+        "baseline": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": false,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.0167596669998602
+        },
+        "current": {
+          "pipeline_status": "failed",
+          "current_stage": "ontology",
+          "ontology_status": "failed",
+          "entered_stages": [],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 0
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": true,
+          "manifest_bytes_preserved": true,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.004423332999976992
+        }
+      }
+    },
+    {
+      "case": "missing_file",
+      "variants": {
+        "baseline": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": true,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.01644183400003385
+        },
+        "current": {
+          "pipeline_status": "failed",
+          "current_stage": "ontology",
+          "ontology_status": "failed",
+          "entered_stages": [],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 0
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": true,
+          "manifest_bytes_preserved": true,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.004560125000352855
+        }
+      }
+    },
+    {
+      "case": "malformed_manifest",
+      "variants": {
+        "baseline": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": false,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.014103999999861117
+        },
+        "current": {
+          "pipeline_status": "failed",
+          "current_stage": "ontology",
+          "ontology_status": "failed",
+          "entered_stages": [],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 0
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": false,
+          "manifest_bytes_preserved": true,
+          "ontology_bytes_unchanged": true,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.00518170800023654
+        }
+      }
+    },
+    {
+      "case": "late_replacement",
+      "variants": {
+        "baseline": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": false,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": false,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.01489520899940544
+        },
+        "current": {
+          "pipeline_status": "completed",
+          "current_stage": "report",
+          "ontology_status": "completed",
+          "entered_stages": [
+            "research",
+            "ontology",
+            "graph",
+            "prepare",
+            "run",
+            "report"
+          ],
+          "generator_calls": 0,
+          "prepare_calls": {
+            "create": 0,
+            "prepare": 0,
+            "reseal": 0,
+            "validate": 1
+          },
+          "simulation_start_count": 0,
+          "summary_write_count": 0,
+          "ontology_registration_preserved": true,
+          "manifest_bytes_preserved": false,
+          "ontology_bytes_unchanged": false,
+          "project_unchanged": true,
+          "local_fixture_and_run_seconds": 0.015164624999670195
+        }
+      }
+    }
+  ],
+  "scope": "Exact baseline _run and _complete_stage methods; current unchanged dependencies and offline shared real-orchestrator fixture. All private/provider I/O is faked.",
+  "healthy_guard_cost": {
+    "repetitions": 21,
+    "median_seconds": 0.0002047079997282708,
+    "min_seconds": 0.00018941700000141282,
+    "max_seconds": 0.0002528340000935714,
+    "ontology_bytes": 82,
+    "note": "Local same-fixture guard overhead only. Healthy real_run invokes it twice; excludes paid calls. No production speedup claim."
+  },
+  "source_stable": true
+}

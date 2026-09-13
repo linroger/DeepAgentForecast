@@ -1,0 +1,59 @@
+{
+  "status": "approved_ASTRA_INTEGRATION_03a",
+  "baseline": "5d7b1479b824e53d9bc2bb605bf2521df742df3e",
+  "scope": "Cached ontology artifact consistency fence only; input freshness and automatic downstream invalidation remain pending.",
+  "blocking_findings": [],
+  "source_sha256": {
+    "backend/app/services/pipeline_orchestrator.py": "e11267fba3d7896026d65764ffa43060e2dd1d789cac001a9fc33473a9a52f89",
+    "backend/tests/test_ontology_reuse_integrity.py": "3013903097580842c83874860eea0b5fa1245061a9891ca1261a541163550ca7",
+    "backend/tests/test_orchestrator_research_wiring.py": "0179c8c78d62c921338f64c156ccd849f4923e0530a5ca7b60dbc9923da5f4f4"
+  },
+  "tests": {
+    "passed": 82,
+    "failed": 0,
+    "skipped": 0,
+    "xfail": 0,
+    "pytest_seconds": 7.5,
+    "network_events": 0,
+    "changed_sources": []
+  },
+  "comparison": "independent-review/paired-real-run-comparison-v3.json",
+  "paired_invalid_runs_completed": {
+    "baseline": 4,
+    "current": 0
+  },
+  "paired_invalid_downstream_stage_entries": {
+    "baseline": 16,
+    "current": 0
+  },
+  "verified_invariants": [
+    "The exact old _run and _complete_stage methods are both included in baseline comparison; current unchanged services are mocked identically.",
+    "Tampered ontology, project mismatch, missing registered ontology, and malformed manifest stop in ONTOLOGY before any stage updater entry or downstream work.",
+    "Rejected cases preserve project state, ontology bytes or absence, and original manifest bytes, including malformed manifests.",
+    "Healthy reuse and late file replacement preserve the original ontology registration instead of restamping it.",
+    "Current and shared-owner manifest registrations are checked together against one ontology byte snapshot; an empty child cannot override owner proof.",
+    "Conflicting or malformed inherited/current proof is rejected without changing base/child handoff or manifest files.",
+    "Invalid registration shape, boolean byte count, nonstring digest, and empty entity_types are rejected.",
+    "Legacy project-only absence and explicit validation opt-out remain explicitly unverified compatibility modes."
+  ],
+  "healthy_guard_cost": {
+    "repetitions": 21,
+    "median_seconds": 0.0002047079997282708,
+    "min_seconds": 0.00018941700000141282,
+    "max_seconds": 0.0002528340000935714,
+    "ontology_bytes": 82,
+    "note": "Local same-fixture guard overhead only. Healthy real_run invokes it twice; excludes paid calls. No production speedup claim."
+  },
+  "limits": [
+    "This is not input freshness or automatic regeneration/invalidation proof.",
+    "Healthy local guard timing uses an 82-byte synthetic ontology and warm local storage; it does not establish production latency.",
+    "No saved run, production pipeline, provider request, or repository source mutation was executed by the successful review."
+  ],
+  "invalid_initial_launcher": {
+    "phase": "independent-integrity-review",
+    "reason": "Copied baseline function globals did not inherit fixture module-name service replacements, causing real-client construction during the baseline path.",
+    "outcome": "Twelve DNS attempts were blocked by the offline guard. The reviewer interrupted only the owned launcher PID; the launcher and observed child have exited. No outbound request succeeded.",
+    "correction": "Rebind exact compiled baseline code to live module globals so fixture service substitutions apply identically; final v3 has zero network events.",
+    "notes": "independent-review/comparison-launcher-correction.md"
+  }
+}
