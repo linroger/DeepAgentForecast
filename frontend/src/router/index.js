@@ -13,11 +13,10 @@ const routes = [
     redirect: '/'
   },
   {
-    // Legacy marketing page. Keeps the route name 'Home' because
-    // ResearchView.goHome() navigates via { name: 'Home' }.
+    // Preserve old bookmarks while keeping research as the product entry.
     path: '/legacy',
     name: 'Home',
-    component: () => import('../views/Home.vue')
+    redirect: '/'
   },
   {
     path: '/process/:projectId',

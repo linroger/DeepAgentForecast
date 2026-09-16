@@ -1,11 +1,11 @@
 <template>
   <div class="research-container">
     <!-- 顶部导航 -->
-    <nav class="navbar">
-      <div class="nav-brand" @click="goHome" style="cursor:pointer">DeepResearch<span class="brand-accent">Forecast</span></div>
+    <nav class="navbar" :inert="showHistory" :aria-label="L('主导航', 'Main navigation')">
+      <button ref="brandButton" type="button" class="nav-brand" @click="goHome" :disabled="starting || restoringLaunch" :aria-label="L('DeepResearchForecast · 新建研究', 'DeepResearchForecast · New research')">DeepResearch<span class="brand-accent">Forecast</span></button>
       <div class="nav-links">
-        <span class="nav-tag">{{ L('STEP 0 · 深度研究 → 模拟 → 预测', 'STEP 0 · Research → Simulate → Forecast') }}</span>
-        <button class="nav-icon-btn" :title="L('界面语言','Language')" @click="toggleLocale">{{ locale === 'en' ? '中' : 'EN' }}</button>
+        <span class="nav-tag">{{ L('研究工作台', 'Research workspace') }}</span>
+        <button class="nav-icon-btn" :title="L('界面语言','Language')" :aria-label="L('切换为英文', 'Switch to Chinese')" @click="toggleLocale">{{ locale === 'en' ? '中' : 'EN' }}</button>
         <button class="nav-icon-btn" :title="L('设置','Settings')" :aria-label="L('设置','Settings')" @click="showSettings = true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />
@@ -22,11 +22,11 @@
     </nav>
 
     <!-- 历史抽屉 -->
-    <transition name="drawer">
-      <div v-if="showHistory" class="history-drawer">
+    <transition name="drawer" @before-enter="element => { element.inert = false }">
+      <div v-if="showHistory" ref="historyDialog" class="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-title" tabindex="-1" @keydown="onHistoryKeydown">
         <div class="drawer-head">
-          <span>{{ L('历史推演','Run history') }}</span>
-          <button class="drawer-close" :aria-label="L('关闭','Close')" @click="showHistory = false">
+          <h2 id="history-title">{{ L('历史推演','Run history') }}</h2>
+          <button ref="historyClose" type="button" class="drawer-close" :aria-label="L('关闭','Close')" @click="showHistory = false">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -45,87 +45,85 @@
     <!-- 危险操作确认弹窗（替代 window.confirm） -->
     <ConfirmDialog ref="confirmDlg" />
 
-    <div class="main-content">
+    <main class="main-content" :inert="showHistory">
       <!-- ====== 输入阶段 ====== -->
       <section v-if="!pipelineId" class="setup-section">
-        <div class="tag-row">
-          <span class="orange-tag">{{ L('一句话 · 从调研到推演', 'One prompt · research to forecast') }}</span>
-          <span class="version-text">/ DeerFlow × OASIS</span>
-        </div>
-        <h1 class="main-title">
-          {{ L('输入一个问题', 'Ask one question') }}<br>
-          <span class="gradient-text">{{ L('自动调研、构建世界、推演未来', 'auto-research, build a world, simulate the future') }}</span>
-        </h1>
-        <p class="lead">
-          {{ L('深度研究 Agent（DeerFlow）联网搜集资料、提取关键参与者并生成研究档案；据此构建知识图谱、生成数字人设、运行多智能体群体模拟（OASIS 双平台），最终由报告 Agent 产出可交互的预测报告。',
-               'A deep-research agent (DeerFlow) searches the web, extracts the key actors and builds a research dossier; the system then constructs a knowledge graph, generates digital personas, runs a multi-agent population simulation (OASIS, dual-platform), and a report agent synthesizes an interactive forecast.') }}
-        </p>
+        <header class="setup-heading">
+          <p class="eyebrow">{{ L('从证据出发', 'Start with evidence') }}</p>
+          <h1 class="main-title">{{ L('研究当下，探索未来。', 'Research today. Explore what comes next.') }}</h1>
+          <p class="lead">{{ L('提出一个问题，将来源、关键参与者和情景推演连接成一份可追溯的预测报告。', 'Connect sources, key actors and simulated scenarios in a forecast you can trace back to the research.') }}</p>
+        </header>
 
+        <div class="setup-grid">
         <div class="console-box">
           <div class="console-section">
-            <div class="console-header"><span class="console-label">&gt;_ {{ L('研究 / 预测问题', 'Research / forecast question') }}</span></div>
+            <div class="console-header"><label for="research-question">{{ L('您想研究什么？', 'What would you like to understand?') }}</label></div>
+            <p id="question-hint" class="field-hint">{{ L('描述主题、时间范围，以及您希望判断的结果。', 'Include the topic, time horizon and the outcome you want to assess.') }}</p>
             <div class="input-wrapper">
-              <textarea v-model="prompt" class="code-input" rows="6" :disabled="launchFormLocked"
-                :placeholder="L('// 例：预判2035年前全球电动汽车市场的发展趋势', '// e.g. Forecast global EV market trends through 2035')"></textarea>
+              <textarea id="research-question" v-model="prompt" class="code-input" rows="5" aria-describedby="question-hint" :disabled="launchFormLocked"
+                :placeholder="L('例如：到2035年，全球电动汽车市场将如何变化？哪些因素可能改变其发展轨迹？', 'How could the global EV market evolve by 2035, and what might change its trajectory?')"></textarea>
             </div>
             <div class="examples">
               <span class="ex-label">{{ L('示例：','Examples:') }}</span>
-              <button v-for="(ex, i) in exampleList" :key="i" class="ex-chip" @click="prompt = ex" :disabled="launchFormLocked">{{ exShort(ex) }}</button>
+              <button v-for="ex in exampleList" :key="ex.question" type="button" class="ex-chip" :title="ex.question" @click="prompt = ex.question" :disabled="launchFormLocked">{{ ex.label }}</button>
             </div>
           </div>
 
-          <div class="console-divider"><span>{{ L('参数','Parameters') }}</span></div>
+          <div class="console-divider"><span>{{ L('研究设置','Research settings') }}</span></div>
 
           <div class="console-section params-row">
             <div class="param">
-              <label>{{ L('模式','Mode') }}</label>
-              <div class="seg">
-                <button :class="{active: mode==='full'}" @click="mode='full'" :disabled="launchFormLocked">{{ L('完整管线','Full pipeline') }}</button>
-                <button :class="{active: mode==='research_only'}" @click="mode='research_only'" :disabled="launchFormLocked">{{ L('仅研究','Research only') }}</button>
+              <span id="mode-label" class="param-label">{{ L('模式','Mode') }}</span>
+              <div class="seg" role="group" aria-labelledby="mode-label">
+                <button :class="{active: mode==='full'}" :aria-pressed="mode==='full'" @click="mode='full'" :disabled="launchFormLocked">{{ L('完整管线','Full pipeline') }}</button>
+                <button :class="{active: mode==='research_only'}" :aria-pressed="mode==='research_only'" @click="mode='research_only'" :disabled="launchFormLocked">{{ L('仅研究','Research only') }}</button>
               </div>
             </div>
             <div class="param">
-              <label>{{ L('研究深度','Research depth') }}</label>
-              <div class="seg">
-                <button v-for="d in depths" :key="d" :class="{active: depth===d}" @click="depth=d" :disabled="launchFormLocked">{{ depthLabel(d) }}</button>
+              <span id="depth-label" class="param-label">{{ L('研究深度','Research depth') }}</span>
+              <div class="seg" role="group" aria-labelledby="depth-label">
+                <button v-for="d in depths" :key="d" :class="{active: depth===d}" :aria-pressed="depth===d" @click="depth=d" :disabled="launchFormLocked">{{ depthLabel(d) }}</button>
               </div>
             </div>
-            <div class="param" v-if="mode==='full'">
-              <label>{{ L('回合上限（日历模式下将粗化时间粒度，不截断预测期）','Round cap (calendar mode coarsens time granularity, never truncates the horizon)') }}</label>
-              <input v-model.number="maxRounds" type="number" min="1" :placeholder="L('留空=按时长自动','blank = auto')" class="num-input" :disabled="launchFormLocked"/>
+            <div class="param rounds-param" v-if="mode==='full'">
+              <label for="max-rounds">{{ L('模拟回合上限','Simulation round cap') }}</label>
+              <input id="max-rounds" aria-describedby="rounds-hint" v-model.number="maxRounds" type="number" min="1" :placeholder="L('留空=按时长自动','blank = auto')" class="num-input" :disabled="launchFormLocked"/>
+              <p id="rounds-hint" class="field-hint">{{ L('留空则自动设置。日历模式调整时间粒度，保留完整预测期。', 'Automatic when blank. Calendar mode adjusts granularity while keeping the full horizon.') }}</p>
             </div>
           </div>
 
           <!-- T5.5: 高级（研究语言 + 研究模型，每次运行覆盖） -->
-          <div class="adv-toggle" @click="showAdvanced = !showAdvanced">
+          <button type="button" class="adv-toggle" :aria-expanded="showAdvanced" aria-controls="advanced-settings" @click="showAdvanced = !showAdvanced">
             <span class="adv-caret">{{ showAdvanced ? '▾' : '▸' }}</span>
-            {{ L('高级','Advanced') }}
-          </div>
-          <div v-show="showAdvanced" class="console-section params-row adv-row">
+            {{ L('高级设置','Advanced settings') }}
+          </button>
+          <div id="advanced-settings" v-show="showAdvanced" class="console-section params-row adv-row">
             <div class="param">
-              <label>{{ L('研究语言','Research language') }}</label>
-              <select v-model="researchLanguage" class="adv-select" :disabled="launchFormLocked">
+              <label for="research-language">{{ L('研究语言','Research language') }}</label>
+              <select id="research-language" v-model="researchLanguage" class="adv-select" :disabled="launchFormLocked">
                 <option v-for="o in LANGUAGE_OPTIONS" :key="o.v" :value="o.v">{{ locale==='en' ? o.en : o.zh }}</option>
               </select>
             </div>
             <div class="param">
-              <label>{{ L('研究模型','Research model') }}</label>
-              <select v-model="researchModel" class="adv-select" :disabled="launchFormLocked">
+              <label for="research-model">{{ L('研究模型','Research model') }}</label>
+              <select id="research-model" v-model="researchModel" class="adv-select" :disabled="launchFormLocked">
                 <option value="">{{ L('默认','Default') }}</option>
                 <option v-for="m in DEERFLOW_MODELS" :key="m" :value="m">{{ m }}</option>
               </select>
             </div>
           </div>
 
-          <!-- T5.6: 就绪检查横幅 -->
-          <div v-if="preflightChecked && !preflightReady" class="preflight-banner err-banner">
-            <div class="pf-title">⚠ {{ L('启动前检查未通过','Not ready to launch') }}</div>
-            <ul class="pf-list">
-              <li v-for="(e, i) in preflightErrors" :key="i">{{ e }}</li>
-            </ul>
-          </div>
-          <div v-else-if="preflightChecked && preflightReady" class="preflight-banner ok-banner">
-            ✓ {{ L('配置就绪，可以启动','Configuration ready') }}
+          <div class="preflight-banner" :class="`preflight-${preflight.status}`" role="status" aria-live="polite" :aria-busy="preflight.status === 'checking'">
+            <span class="readiness-mark" aria-hidden="true">{{ preflight.status === 'ready' ? '✓' : preflight.status === 'checking' ? '◌' : '!' }}</span>
+            <div class="preflight-copy">
+              <p class="pf-title">{{ preflightTitle }}</p>
+              <p v-if="preflight.status === 'unavailable'" class="pf-detail">{{ L('暂时无法确认配置。请检查连接后重试。', 'Configuration could not be verified. Check your connection and try again.') }}</p>
+              <p v-else-if="preflight.status === 'blocked' && !preflight.errors.length" class="pf-detail">{{ L('请检查设置，然后重试。', 'Review your settings, then try again.') }}</p>
+              <ul v-if="preflight.errors.length" class="pf-list">
+                <li v-for="(e, i) in preflight.errors" :key="i">{{ e }}</li>
+              </ul>
+            </div>
+            <button v-if="preflight.status === 'unavailable' || preflight.status === 'blocked'" type="button" class="preflight-retry" @click="checkPreflight">{{ L('重试', 'Retry') }}</button>
           </div>
 
           <div class="console-section btn-section">
@@ -143,12 +141,28 @@
               </div>
             </div>
             <button v-else class="start-engine-btn" @click="start" :disabled="!canStart || starting || restoringLaunch">
-              <span v-if="!starting">{{ mode==='full' ? L('启动 研究 + 模拟 + 预测','Run research + simulate + forecast') : L('启动深度研究','Run deep research') }}</span>
+              <span v-if="!starting">{{ mode==='full' ? L('开始研究与预测','Start research & forecast') : L('启动深度研究','Run deep research') }}</span>
               <span v-else>{{ L('初始化中…','Initializing…') }}</span>
-              <span class="btn-arrow">→</span>
+              <span class="btn-arrow" aria-hidden="true">→</span>
             </button>
             <p v-if="error" class="err">{{ error }}</p>
           </div>
+        </div>
+
+        <aside class="journey-card" aria-labelledby="journey-title">
+          <p class="eyebrow">{{ L('从问题到报告', 'From question to insight') }}</p>
+          <h2 id="journey-title">{{ L('一条连贯的研究路径', 'A connected research workflow') }}</h2>
+          <ol class="journey-list">
+            <li v-for="(step, i) in journeySteps" :key="step.key" :class="{ 'journey-optional': mode === 'research_only' && i > 0 }">
+              <span class="journey-number" aria-hidden="true">{{ i + 1 }}</span>
+              <div><h3>{{ step.label }}</h3><p>{{ step.description }}</p></div>
+            </li>
+          </ol>
+          <div class="journey-note">
+            <strong>{{ mode === 'research_only' ? L('先完成研究', 'Start with research') : L('保留证据与推演的区别', 'Evidence and scenarios, clearly separated') }}</strong>
+            <p>{{ mode === 'research_only' ? L('在研究档案完成后审阅结果，再决定是否继续模拟与报告。', 'Review the completed dossier before choosing whether to continue into simulation and reporting.') : L('模拟用于探索可能的情景。结合来源、假设和不确定性，审阅最终结论。', 'Simulation explores possible scenarios. Review the sources, assumptions and uncertainty alongside the conclusions.') }}</p>
+          </div>
+        </aside>
         </div>
       </section>
 
@@ -235,15 +249,16 @@
 
         <p v-if="error" class="err run-err">{{ error }}</p>
       </section>
-    </div>
+    </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { runPipeline, getLaunchIntent, abandonLaunchIntent, cancelPipeline, resumePipeline, getPipelineStatus, getProgressLog, getDossier, continuePipeline, getPreflight } from '../api/research'
 import { createLaunchIntentController } from '../utils/launchIntent'
+import { createPreflightController } from '../utils/preflightState'
 import { getGraphData } from '../api/graph'
 import { locale, setLocale, L } from '../i18n'
 import {
@@ -318,22 +333,18 @@ const launchController = createLaunchIntentController({
 })
 
 // —— T5.6: 启动前就绪检查 ——
-const preflightReady = ref(true)
-const preflightErrors = ref([])
-const preflightChecked = ref(false)
-async function checkPreflight() {
-  try {
-    const res = await getPreflight(mode.value)
-    preflightReady.value = !!(res && res.data && res.data.ready)
-    preflightErrors.value = (res && res.data && res.data.errors) || []
-  } catch (e) {
-    // 检查接口本身失败：不阻塞用户，按就绪处理（真正的错误会在 /run 时拦截）
-    preflightReady.value = true
-    preflightErrors.value = []
-  } finally {
-    preflightChecked.value = true
-  }
-}
+const preflight = ref({ status: 'checking', errors: [], mode: mode.value })
+const preflightController = createPreflightController({
+  request: getPreflight,
+  onChange: value => { preflight.value = value }
+})
+function checkPreflight() { return preflightController.check(mode.value) }
+const preflightTitle = computed(() => ({
+  checking: L('正在检查配置…', 'Checking configuration…'),
+  ready: L('配置就绪', 'Configuration ready'),
+  blocked: L('启动前需要完善配置', 'Configuration needs attention'),
+  unavailable: L('就绪检查暂不可用', 'Readiness check unavailable')
+})[preflight.value.status])
 
 // —— T6.2: research_only → 继续完整管线 ——
 const continuing = ref(false)
@@ -363,12 +374,22 @@ async function continueToFull() {
 }
 
 const EXAMPLES = [
-  ['预判2035年前全球电动汽车市场的发展趋势', 'Forecast global EV market trends through 2035'],
-  ['俄乌战争最可能在何时、以何种方式收场？', 'How and when will the Russia–Ukraine war end?'],
-  ['特朗普第二任期下美欧关系将如何演变？', 'How will US–EU relations evolve under Trump II?']
+  { label: ['电动汽车市场', 'EV market'], question: ['预判2035年前全球电动汽车市场的发展趋势', 'Forecast global EV market trends through 2035'] },
+  { label: ['冲突与外交', 'Conflict & diplomacy'], question: ['俄乌战争最可能在何时、以何种方式收场？', 'How and when will the Russia–Ukraine war end?'] },
+  { label: ['跨大西洋关系', 'Transatlantic relations'], question: ['特朗普第二任期下美欧关系将如何演变？', 'How will US–EU relations evolve under Trump II?'] }
 ]
-const exampleList = computed(() => EXAMPLES.map(e => (locale.value === 'en' ? e[1] : e[0])))
-function exShort(ex) { return ex.length > 24 ? ex.slice(0, 24) + '…' : ex }
+const exampleList = computed(() => EXAMPLES.map(example => ({
+  label: example.label[locale.value === 'en' ? 1 : 0],
+  question: example.question[locale.value === 'en' ? 1 : 0]
+})))
+const journeySteps = computed(() => [
+  { key: 'research', label: L('深度研究', 'Research'), description: L('搜集来源，建立研究档案。', 'Gather sources and build the dossier.') },
+  { key: 'ontology', label: L('本体结构', 'Ontology'), description: L('定义参与者、概念与关系。', 'Define actors, concepts and relationships.') },
+  { key: 'graph', label: L('知识图谱', 'Knowledge graph'), description: L('连接证据，映射关键联系。', 'Connect evidence and map key relationships.') },
+  { key: 'prepare', label: L('模拟准备', 'Prepare'), description: L('建立参与者画像与情景。', 'Build actor profiles and the scenario.') },
+  { key: 'run', label: L('多智能体模拟', 'Simulate'), description: L('探索互动与可能的发展。', 'Explore interactions and possible developments.') },
+  { key: 'report', label: L('预测报告', 'Report'), description: L('整合发现、来源与不确定性。', 'Synthesize findings, sources and uncertainty.') }
+])
 
 // —— 运行态 ——
 const pipelineId = ref('')
@@ -390,6 +411,60 @@ const logHistoryLoading = ref(false)
 const logHistoryError = ref('')
 const dossier = ref(null)
 const showHistory = ref(false)
+const historyDialog = ref(null)
+const historyClose = ref(null)
+const brandButton = ref(null)
+let historyOpener = null
+let previousBodyOverflow = null
+
+function onHistoryKeydown(event) {
+  const dialog = historyDialog.value
+  if (!dialog) return
+  // A history action may open its own confirmation. Keep that inner dialog's
+  // keyboard scope and let it handle Escape without also closing history.
+  const nestedDialog = dialog.querySelector('[role="alertdialog"]')
+  if (event.key === 'Escape') {
+    if (nestedDialog) return
+    event.preventDefault()
+    event.stopPropagation()
+    showHistory.value = false
+  } else if (event.key === 'Tab') {
+    const scope = nestedDialog || dialog
+    const focusable = [...scope.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+      .filter(element => element.getClientRects().length && !element.closest('[inert]'))
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    if (!first) {
+      event.preventDefault()
+      dialog.focus()
+    } else if (event.shiftKey && (document.activeElement === first || !focusable.includes(document.activeElement))) {
+      event.preventDefault()
+      last.focus()
+    } else if (!event.shiftKey && (document.activeElement === last || !focusable.includes(document.activeElement))) {
+      event.preventDefault()
+      first.focus()
+    }
+  }
+}
+watch(showHistory, async open => {
+  if (open) {
+    historyOpener = document.activeElement
+    previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    await nextTick()
+    if (showHistory.value) historyClose.value?.focus()
+  } else {
+    // The leaving transition remains in the DOM briefly; remove it from focus.
+    if (historyDialog.value) historyDialog.value.inert = true
+    if (previousBodyOverflow !== null) document.body.style.overflow = previousBodyOverflow
+    previousBodyOverflow = null
+    await nextTick()
+    if (!showHistory.value) {
+      const target = historyOpener?.isConnected ? historyOpener : brandButton.value
+      target?.focus()
+    }
+  }
+})
 
 // OBS-1/I-7: computed `live` block from the same status poll (may be absent —
 // older servers, helper failure — and every field is individually nullable).
@@ -454,9 +529,9 @@ function stageLabel(name) {
   }[name] || name
 }
 
-// T5.6: 就绪检查未通过时禁用启动（preflightChecked 前不阻塞，避免初次加载抖动）
+// Readiness is advisory; backend admission still validates every saved launch.
 const canStart = computed(() =>
-  prompt.value.trim().length > 0 && (!preflightChecked.value || preflightReady.value)
+  prompt.value.trim().length > 0 && preflight.value.status === 'ready' && preflight.value.mode === mode.value
 )
 const statusTitle = computed(() => {
   if (status.value === 'completed') return mode.value === 'research_only' ? L('研究完成', 'Research complete') : L('推演完成 · 预测就绪', 'Done · forecast ready')
@@ -478,7 +553,7 @@ const tabs = computed(() => {
 })
 
 function toggleLocale() { setLocale(locale.value === 'en' ? 'zh' : 'en') }
-function onProviderChanged() { /* provider applies to new runs; nothing to refresh here */ }
+function onProviderChanged() { checkPreflight() }
 
 function pickTab(key) {
   const t = tabs.value.find(x => x.key === key)
@@ -858,7 +933,10 @@ function selectPipeline(id) {
   beginPipeline(id)
 }
 
-function goHome() { router.push({ name: 'Home' }) }
+async function goHome() {
+  await reset()
+  if (!pipelineId.value) router.push({ name: 'Research' })
+}
 
 // —— 管线 ID：截断显示 + 点击复制完整 ID ——
 const pidCopied = ref(false)
@@ -982,9 +1060,11 @@ onMounted(async () => {
   }
 })
 // T5.6: 切换模式时重新检查（research_only 跳过图谱/报告 LLM 检查）
-watch(mode, () => { if (!pipelineId.value) checkPreflight() })
+watch(mode, () => { if (!pipelineId.value) checkPreflight() }, { flush: 'sync' })
 onUnmounted(() => {
   launchViewActive = false
+  preflightController.invalidate()
+  if (previousBodyOverflow !== null) document.body.style.overflow = previousBodyOverflow
   stopPolling()
   if (pidCopiedTimer) { clearTimeout(pidCopiedTimer); pidCopiedTimer = null }
 })
@@ -992,155 +1072,198 @@ onUnmounted(() => {
 
 <style scoped>
 .research-container {
-  min-height: 100vh; background: #fff;
-  font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif;
-  color: #000; --orange: #FF4500; --mono: 'JetBrains Mono', monospace; --border: #E5E5E5;
+  --orange: #a83f20; --border: #dce0e4; --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-sans: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+  --color-ink: #18222f; --color-muted: #596575; --color-accent: #a83f20;
+  --color-accent-soft: #fff3ec; --radius: 8px; --radius-md: 12px;
+  min-height: 100vh; background: #f5f5f2; color: var(--color-ink); font-family: var(--font-sans);
 }
-.navbar { min-height: 60px; background:#000; color:#fff; display:flex; justify-content:space-between; align-items:center; gap:18px; padding:0 40px; position:sticky; top:0; z-index:20; }
-.nav-brand { font-family: var(--mono); font-weight:800; letter-spacing:0; font-size:1.05rem; flex:0 1 auto; min-width:0; white-space:nowrap; }
+button, input, select, textarea { font: inherit; }
+button { touch-action: manipulation; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+  outline: 3px solid #a83f20; outline-offset: 3px;
+}
+button:disabled { cursor: not-allowed; }
+.navbar { min-height: 72px; background: #fff; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 12px 32px; position: sticky; top: 0; z-index: 20; }
+.nav-brand { font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif; font-weight: 700; font-size: 1.12rem; letter-spacing: -.04em; color: var(--color-ink); background: none; border: 0; padding: 8px 0; cursor: pointer; white-space: nowrap; }
 .brand-accent { color: var(--orange); }
-.nav-links { display:flex; align-items:center; justify-content:flex-end; gap:10px; min-width:0; flex:1 1 auto; }
-.nav-tag { font-family: var(--mono); font-size:.74rem; color:#bbb; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.nav-icon-btn { background:transparent; border:1px solid #444; border-radius:var(--radius, 2px); color:#ddd; font-family:var(--mono); font-size:.74rem; min-width:30px; width:30px; height:30px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease), background var(--dur-1, 120ms) var(--ease, ease); }
-.nav-icon-btn:hover { border-color:var(--orange); color:#fff; background:rgba(255,69,0,.12); }
-.nav-hist-btn { background:transparent; border:1px solid #444; border-radius:var(--radius, 2px); color:#ddd; font-family:var(--mono); font-size:.74rem; padding:6px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:7px; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease), background var(--dur-1, 120ms) var(--ease, ease); }
-.nav-hist-btn:hover { border-color:var(--orange); color:#fff; background:rgba(255,69,0,.12); }
-
-.main-content { max-width:1480px; margin:0 auto; padding:40px; }
-
-.history-drawer { position:fixed; top:0; right:0; width:380px; max-width:90vw; height:100vh; background:#fff; border-left:1px solid var(--border); z-index:40; box-shadow:var(--shadow-lg, -8px 0 32px rgba(0,0,0,.12)); display:flex; flex-direction:column; }
-.drawer-head { display:flex; justify-content:space-between; align-items:center; padding:18px 20px; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:.85rem; height:60px; }
-.drawer-close { background:none; border:none; font-size:1.1rem; cursor:pointer; color:var(--color-muted, #666); transition:color var(--dur-1, 120ms) var(--ease, ease); }
-.drawer-close:hover { color:var(--color-ink, #000); }
-.drawer-scrim { position:fixed; inset:0; background:rgba(0,0,0,.25); z-index:30; }
-.drawer-enter-active,.drawer-leave-active { transition: transform var(--dur-3, 250ms) var(--ease, ease); }
-.drawer-enter-from,.drawer-leave-to { transform: translateX(100%); }
-.fade-enter-active,.fade-leave-active { transition: opacity var(--dur-3, 250ms) var(--ease, ease); }
-.fade-enter-from,.fade-leave-to { opacity: 0; }
-
-.tag-row { display:flex; gap:15px; align-items:center; margin-bottom:20px; font-family:var(--mono); font-size:.8rem; }
-.orange-tag { background:var(--orange); color:#fff; padding:4px 10px; font-weight:700; letter-spacing:1px; font-size:.75rem; }
-.version-text { color:#999; }
-.main-title { font-size:clamp(2rem, 4.5vw, 3.25rem); line-height:1.2; font-weight:500; letter-spacing:0; margin:0 0 22px; }
-.gradient-text { background:linear-gradient(90deg,#000,#FF4500); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
-.lead { color:#666; line-height:1.85; max-width:820px; margin-bottom:34px; }
-.console-box { border:1px solid var(--color-border, #E5E5E5); border-radius:var(--radius, 2px); padding:8px; box-shadow:var(--shadow-sm, 0 1px 3px rgba(10,10,10,.06)); background:#fff; }
-.console-section { padding:20px; }
-.console-section.btn-section { padding-top:0; }
-.launch-recovery { border:1px solid #DDD; background:#FAFAFA; padding:16px; margin-bottom:12px; }
-.launch-recovery p { margin:0 0 12px; line-height:1.6; }
-.launch-recovery-actions { display:flex; flex-wrap:wrap; gap:10px; }
-.console-header { display:flex; justify-content:space-between; margin-bottom:12px; font-family:var(--mono); font-size:.75rem; color:#666; }
-.input-wrapper { border:1px solid #DDD; background:#FAFAFA; border-radius:var(--radius, 2px); transition:border-color var(--dur-2, 180ms) var(--ease, ease), background var(--dur-2, 180ms) var(--ease, ease); }
-.input-wrapper:focus-within { border-color:var(--orange); background:#fff; }
-.code-input { width:100%; border:none; background:transparent; padding:18px; font-family:var(--mono); font-size:.9rem; line-height:1.6; resize:vertical; outline:none; min-height:130px; }
-.examples { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; }
-.ex-label { font-family:var(--mono); font-size:.72rem; color:#999; }
-.ex-chip { border:1px solid var(--border); border-radius:var(--radius-pill, 999px); background:#fff; font-size:.74rem; padding:5px 12px; cursor:pointer; color:#444; font-family:'Noto Sans SC',sans-serif; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease), background var(--dur-1, 120ms) var(--ease, ease); }
-.ex-chip:hover:not(:disabled) { border-color:var(--orange); color:var(--orange); background:var(--color-accent-soft, #FFF6F2); }
-.ex-chip:disabled { color:#bbb; cursor:not-allowed; }
-.console-divider { display:flex; align-items:center; margin:6px 0; }
-.console-divider::before,.console-divider::after { content:''; flex:1; height:1px; background:#EEE; }
-.console-divider span { padding:0 15px; font-family:var(--mono); font-size:.7rem; color:#BBB; letter-spacing:1px; }
-.params-row { display:flex; gap:32px; flex-wrap:wrap; }
-.param label { display:block; font-family:var(--mono); font-size:.72rem; color:#888; margin-bottom:8px; }
-.seg { display:flex; border:1px solid #DDD; border-radius:var(--radius, 2px); overflow:hidden; }
-.seg button { background:#fff; border:none; border-right:1px solid #eee; padding:8px 14px; font-family:var(--mono); font-size:.8rem; cursor:pointer; color:#555; transition:background var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease); }
-.seg button:last-child { border-right:none; }
-.seg button:hover:not(.active):not(:disabled) { background:var(--color-soft, #FAFAFA); color:#000; }
-.seg button.active { background:#000; color:#fff; }
-.num-input { border:1px solid #DDD; border-radius:var(--radius, 2px); padding:8px 10px; font-family:var(--mono); font-size:.85rem; width:200px; outline:none; transition:border-color var(--dur-2, 180ms) var(--ease, ease); }
-.num-input:focus { border-color:var(--orange); }
-/* T5.5 高级 */
-.adv-toggle { font-family:var(--mono); font-size:.78rem; color:#666; cursor:pointer; padding:10px 0 4px; user-select:none; }
-.adv-toggle:hover { color:var(--orange); }
-.adv-caret { color:var(--orange); margin-right:6px; }
-.adv-row { margin-top:6px; }
-.adv-select { border:1px solid #DDD; border-radius:var(--radius, 2px); padding:8px 10px; font-family:var(--mono); font-size:.85rem; width:200px; outline:none; background:#fff; cursor:pointer; transition:border-color var(--dur-2, 180ms) var(--ease, ease); }
-.adv-select:focus { border-color:var(--orange); }
-/* T5.6 就绪横幅 */
-.preflight-banner { margin-top:14px; padding:10px 14px; font-family:var(--mono); font-size:.8rem; border-radius:var(--radius, 2px); }
-.preflight-banner.ok-banner { color:var(--color-ok, #16A34A); background:var(--color-ok-soft, #F0FDF4); border:1px solid #b7ebc6; }
-.preflight-banner.err-banner { color:var(--color-err, #B91C1C); background:var(--color-err-soft, #FEF2F2); border:1px solid #f0bcbc; }
-.pf-title { font-weight:700; margin-bottom:6px; }
-.pf-list { margin:0; padding-left:18px; }
-.pf-list li { margin:3px 0; line-height:1.5; }
-.start-engine-btn { width:100%; background:#000; color:#fff; border:none; border-radius:var(--radius, 2px); padding:18px; font-family:var(--mono); font-weight:700; font-size:1.05rem; display:flex; justify-content:space-between; align-items:center; cursor:pointer; transition:background var(--dur-2, 180ms) var(--ease, ease), transform var(--dur-2, 180ms) var(--ease, ease), box-shadow var(--dur-2, 180ms) var(--ease, ease); letter-spacing:1px; }
-.start-engine-btn:hover:not(:disabled) { background:var(--orange); transform:translateY(-2px); box-shadow:var(--shadow-md, 0 2px 10px rgba(10,10,10,.08)); }
-.start-engine-btn:active:not(:disabled) { transform:translateY(0); box-shadow:none; }
-.start-engine-btn:disabled { background:#E5E5E5; color:#999; cursor:not-allowed; }
-.err { color:var(--orange); font-family:var(--mono); font-size:.8rem; margin-top:12px; }
-.run-err { margin-top:18px; }
-
-.run-header { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:20px; }
-.console-label { font-family:var(--mono); font-size:.72rem; color:#999; }
-.pid-chip { background:none; border:1px dashed #ccc; border-radius:var(--radius, 2px); color:#777; font-family:var(--mono); font-size:.72rem; padding:1px 7px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease); }
-.pid-chip:hover { border-color:var(--orange); color:#000; }
-.pid-copied { color:var(--color-ok, #16A34A); font-weight:700; }
-.run-title { font-size:1.7rem; font-weight:500; margin:6px 0 0; letter-spacing:-0.01em; }
-.run-actions { display:flex; gap:12px; }
-.primary-btn { background:var(--orange); color:#fff; border:none; border-radius:var(--radius, 2px); padding:12px 18px; font-family:var(--mono); font-weight:700; cursor:pointer; transition:opacity var(--dur-1, 120ms) var(--ease, ease), transform var(--dur-1, 120ms) var(--ease, ease); }
-.primary-btn:hover { opacity:.9; transform:translateY(-1px); }
-.ghost-btn { background:#fff; color:#000; border:1px solid #DDD; border-radius:var(--radius, 2px); padding:10px 16px; font-family:var(--mono); font-size:.82rem; cursor:pointer; transition:border-color var(--dur-1, 120ms) var(--ease, ease), color var(--dur-1, 120ms) var(--ease, ease), background var(--dur-1, 120ms) var(--ease, ease); }
-.ghost-btn:hover { border-color:var(--orange); background:var(--color-soft, #FAFAFA); }
-.cancel-btn { color:var(--orange); border-color:#F3C4B2; }
-.cancel-btn:disabled { color:#bbb; border-color:#E5E5E5; cursor:not-allowed; }
-.resume-btn { color:#166534; border-color:#B7E4C7; }
-.resume-btn:hover { border-color:#16a34a; }
-.resume-btn:disabled { color:#bbb; border-color:#E5E5E5; cursor:not-allowed; }
-.run-prompt-card { border:1px solid var(--border); border-left:3px solid var(--orange); background:#FAFAFA; padding:14px 18px; margin:0 0 22px; }
-.run-prompt-label { display:block; margin-bottom:6px; color:var(--orange); font-family:var(--mono); font-size:.66rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
-.run-prompt-card p { margin:0; color:#222; font-size:.94rem; line-height:1.65; white-space:pre-wrap; overflow-wrap:anywhere; }
-
-.run-layout { display:grid; grid-template-columns:330px 1fr; gap:24px; align-items:start; }
-.rail { position:sticky; top:84px; }
-.workspace { min-width:0; }
-.tabbar { display:flex; gap:4px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-.tab { background:#fff; border:1px solid var(--border); border-bottom:none; border-radius:var(--radius, 2px) var(--radius, 2px) 0 0; padding:11px 18px; font-family:var(--mono); font-size:.8rem; cursor:pointer; color:#777; position:relative; top:1px; display:flex; align-items:center; gap:7px; transition:color var(--dur-1, 120ms) var(--ease, ease), background var(--dur-1, 120ms) var(--ease, ease); }
-.tab:hover:not(.active):not(.disabled) { color:#000; background:var(--color-soft, #FAFAFA); }
-.tab.active { color:#000; border-color:var(--border); border-bottom:2px solid var(--orange); background:#fff; font-weight:700; }
-.tab.disabled { color:#ccc; cursor:not-allowed; background:#FAFAFA; }
-.tab-badge { background:var(--orange); color:#fff; font-size:.62rem; padding:1px 7px; border-radius:var(--radius-pill, 999px); }
-.tab-body { border:1px solid var(--border); border-top:none; min-height:min(560px, 70vh); background:#fff; }
-.graph-wrap { height:600px; }
-.graph-wrap.max { height:calc(100vh - 220px); }
-.lazy-empty { height:100%; display:flex; flex-direction:column; gap:14px; align-items:center; justify-content:center; color:#999; font-family:var(--mono); font-size:.85rem; padding:40px; text-align:center; }
-.lazy-icon { font-size:24px; color:var(--orange); line-height:1; }
-.lazy-spinner { width:22px; height:22px; border:2px solid var(--border); border-top-color:var(--orange); border-radius:50%; animation:rv-spin .8s linear infinite; }
-@keyframes rv-spin { to { transform:rotate(360deg); } }
-
+.nav-links { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.nav-tag { font-size: .78rem; font-weight: 500; color: #647080; margin-right: 12px; }
+.nav-icon-btn, .nav-hist-btn { background: #fff; border: 1px solid var(--border); border-radius: 8px; color: #344151; min-width: 38px; min-height: 38px; padding: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: .78rem; font-weight: 500; transition: background 150ms, border-color 150ms; }
+.nav-hist-btn { padding-inline: 12px; }
+.nav-icon-btn:hover, .nav-hist-btn:hover { background: #f7f7f4; border-color: #aeb6bf; }
+.main-content { max-width: 1360px; margin: 0 auto; padding: 48px 40px 64px; }
+.setup-heading { max-width: 850px; margin-bottom: 32px; }
+.eyebrow { margin: 0 0 12px; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--orange); }
+.main-title { font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif; font-size: clamp(1.9rem, 3vw, 2.65rem); line-height: 1.18; letter-spacing: -.045em; font-weight: 500; margin: 0 0 16px; text-wrap: balance; }
+.lead { max-width: 740px; color: #596575; font-size: .96rem; line-height: 1.75; margin: 0; }
+.setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) 324px; align-items: start; gap: 24px; }
+.console-box, .journey-card { min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 3px 14px rgba(24,34,47,.035); }
+.console-section { padding: 24px; }
+.console-header { margin-bottom: 8px; }
+.console-header label { font-weight: 600; font-size: 1rem; }
+.field-hint { color: #647080; font-size: .76rem; line-height: 1.6; margin: 0 0 14px; }
+.input-wrapper { border: 1px solid #cbd1d8; background: #fbfbf9; border-radius: 8px; transition: border-color 150ms, box-shadow 150ms; }
+.input-wrapper:focus-within { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(168,63,32,.09); background: #fff; }
+.code-input { display: block; width: 100%; border: 0; border-radius: 8px; background: transparent; padding: 16px; font-size: .91rem; line-height: 1.75; color: var(--color-ink); resize: vertical; min-height: 150px; }
+.code-input::placeholder { color: #6b7684; opacity: 1; }
+.code-input:focus-visible { outline-offset: -3px; }
+.examples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.ex-label { font-size: .72rem; color: #647080; }
+.ex-chip { border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: .72rem; padding: 7px 10px; cursor: pointer; color: #425064; transition: background 150ms, border-color 150ms; }
+.ex-chip:hover:not(:disabled) { border-color: #d0a491; color: var(--orange); background: #fff7f2; }
+.ex-chip:disabled { color: #69717b; background: #f0f1f3; }
+.console-divider { display: flex; align-items: center; gap: 12px; margin: 0 24px; color: #647080; font-size: .72rem; font-weight: 500; }
+.console-divider::after { content: ''; flex: 1; height: 1px; background: #e6e8ec; }
+.params-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 24px; }
+.param { min-width: 0; }
+.param label, .param-label { display: block; font-size: .78rem; font-weight: 500; color: #394657; margin-bottom: 9px; }
+.seg { display: flex; gap: 3px; padding: 3px; background: #f0f2f4; border: 1px solid #e1e4e8; border-radius: 8px; }
+.seg button { flex: 1; background: transparent; border: 0; border-radius: 5px; padding: 9px 8px; font-size: .76rem; cursor: pointer; color: #516074; white-space: nowrap; transition: background 150ms, color 150ms; }
+.seg button:hover:not(.active):not(:disabled) { background: #e4e8ed; color: #18222f; }
+.seg button.active { background: #fff; color: #18222f; font-weight: 600; box-shadow: 0 1px 4px rgba(24,34,47,.12); }
+.seg button:disabled { opacity: .65; }
+.rounds-param { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) 160px; column-gap: 18px; align-items: center; }
+.rounds-param label { margin-bottom: 4px; }
+.rounds-param .field-hint { grid-column: 1; grid-row: 2; margin: 0; font-size: .72rem; }
+.num-input { grid-column: 2; grid-row: 1 / 3; }
+.num-input, .adv-select { border: 1px solid #cbd1d8; border-radius: 8px; padding: 10px 12px; color: var(--color-ink); background: #fff; font-size: .82rem; width: 100%; min-height: 42px; }
+.num-input::placeholder { color: #647080; opacity: 1; }
+.adv-toggle { display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; border-radius: 6px; padding: 6px 0; margin: 0 24px 16px; color: #49566a; font-size: .78rem; font-weight: 500; cursor: pointer; }
+.adv-toggle:hover { color: var(--orange); }
+.adv-caret { font-size: .85rem; }
+.adv-row { border-top: 1px solid #edf0f2; background: #fbfbfa; padding-top: 18px; padding-bottom: 18px; }
+.preflight-banner { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; margin: 0 24px 18px; border-radius: 8px; border: 1px solid #dde2e8; background: #f5f7f9; color: #48566a; font-size: .76rem; line-height: 1.55; }
+.preflight-ready { border-color: #d5e4db; background: #f1f7f3; color: #2b6143; }
+.preflight-blocked, .preflight-unavailable { border-color: #ecd8c9; background: #fff7ef; color: #824319; }
+.readiness-mark { font-size: .87rem; font-weight: 700; flex-shrink: 0; }
+.preflight-copy { flex: 1; min-width: 0; }
+.pf-title { font-weight: 500; margin: 0; }
+.pf-detail { margin: 3px 0 0; }
+.pf-list { padding-left: 16px; margin: 6px 0 0; overflow-wrap: anywhere; }
+.pf-list li + li { margin-top: 4px; }
+.preflight-retry { border: 1px solid #d7bba8; border-radius: 6px; background: #fff; color: #824319; padding: 5px 9px; cursor: pointer; font-size: .74rem; }
+.console-section.btn-section { padding-top: 0; }
+.start-engine-btn { width: 100%; background: var(--orange); color: #fff; border: 1px solid var(--orange); border-radius: 8px; padding: 15px 18px; font-weight: 600; font-size: .9rem; display: flex; justify-content: space-between; gap: 12px; align-items: center; cursor: pointer; transition: background 150ms, box-shadow 150ms; text-align: left; }
+.start-engine-btn:hover:not(:disabled) { background: #8f351b; border-color: #8f351b; box-shadow: 0 3px 8px rgba(168,63,32,.12); }
+.start-engine-btn:disabled { background: #e8ebee; border-color: #e1e4e8; color: #5d6776; cursor: not-allowed; }
+.btn-arrow { font-size: 1.15rem; }
+.launch-recovery { border: 1px solid #d5dde6; border-radius: 8px; background: #f7f9fb; padding: 16px; font-size: .85rem; }
+.launch-recovery p { margin: 0 0 12px; line-height: 1.7; }
+.launch-recovery-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.err { color: #a03226; font-size: .8rem; line-height: 1.65; margin: 14px 0 0; overflow-wrap: anywhere; }
+.journey-card { padding: 24px; }
+.journey-card .eyebrow { font-size: .65rem; margin-bottom: 10px; }
+.journey-card h2 { font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif; font-size: 1.2rem; line-height: 1.4; letter-spacing: -.02em; font-weight: 500; margin: 0 0 24px; }
+.journey-list { list-style: none; margin: 0; padding: 0; }
+.journey-list li { display: flex; gap: 14px; position: relative; padding-bottom: 21px; }
+.journey-list li:not(:last-child)::after { content: ''; position: absolute; left: 14px; top: 32px; bottom: 3px; border-left: 1px solid #dbe0e5; }
+.journey-list li:last-child { padding-bottom: 0; }
+.journey-number { display: flex; align-items: center; justify-content: center; flex: 0 0 29px; height: 29px; border: 1px solid #d9dfe5; background: #f6f7f8; color: #536074; border-radius: 9px; font-size: .73rem; font-weight: 600; }
+.journey-list li:first-child .journey-number { background: #fff2e9; border-color: #efcdbd; color: var(--orange); }
+.journey-optional .journey-number { background: #fff; border-style: dashed; }
+.journey-list h3 { margin: 1px 0 5px; font-size: .8rem; font-weight: 600; }
+.journey-list p { margin: 0; color: #647080; font-size: .73rem; line-height: 1.6; }
+.journey-note { border-top: 1px solid #e4e7eb; margin-top: 24px; padding-top: 18px; }
+.journey-note strong { display: block; font-size: .75rem; font-weight: 600; line-height: 1.55; }
+.journey-note p { font-size: .73rem; color: #647080; line-height: 1.7; margin: 8px 0 0; }
+.history-drawer { position: fixed; top: 0; right: 0; width: 420px; max-width: 94vw; height: 100vh; height: 100dvh; background: #fff; border-left: 1px solid var(--border); z-index: 40; box-shadow: -8px 0 40px rgba(24,34,47,.12); display: flex; flex-direction: column; }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 22px; border-bottom: 1px solid var(--border); min-height: 72px; }
+.drawer-head h2 { font-size: 1rem; margin: 0; font-weight: 600; }
+.drawer-close { display: flex; align-items: center; justify-content: center; background: #f4f5f6; border: 1px solid var(--border); border-radius: 8px; width: 36px; height: 36px; cursor: pointer; color: #4b5869; }
+.drawer-close:hover { color: #18222f; background: #e9edf0; }
+.drawer-scrim { position: fixed; inset: 0; background: rgba(24,34,47,.32); z-index: 30; }
+.drawer-enter-active, .drawer-leave-active { transition: transform 200ms ease; }
+.drawer-enter-from, .drawer-leave-to { transform: translateX(100%); }
+.fade-enter-active, .fade-leave-active { transition: opacity 200ms ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+.run-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
+.console-label { font-size: .74rem; color: #647080; display: flex; align-items: center; gap: 10px; }
+.pid-chip { background: #fff; border: 1px solid var(--border); border-radius: 6px; color: #526174; font-family: var(--mono); font-size: .7rem; padding: 5px 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.pid-chip:hover { border-color: var(--orange); color: var(--orange); }
+.pid-copied { color: #2b6143; font-weight: 500; }
+.run-title { font-family: 'Space Grotesk', 'Noto Sans SC', system-ui, sans-serif; font-size: 1.9rem; line-height: 1.3; font-weight: 500; margin: 12px 0 0; letter-spacing: -.035em; }
+.run-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding-top: 5px; }
+.primary-btn { background: var(--orange); color: #fff; border: 0; border-radius: 8px; padding: 12px 18px; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.primary-btn:hover { background: #8f351b; }
+.ghost-btn { background: #fff; color: #394657; border: 1px solid #d5dbe2; border-radius: 8px; padding: 10px 14px; font-size: .78rem; cursor: pointer; }
+.ghost-btn:hover:not(:disabled) { border-color: #aeb8c4; background: #f7f9fa; }
+.cancel-btn { color: #9d3427; border-color: #e4c6c0; }
+.resume-btn { color: #2b6143; border-color: #bdd7c7; }
+.ghost-btn:disabled { color: #6b7380; background: #f0f2f3; }
+.run-prompt-card { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 18px 22px; margin: 0 0 24px; }
+.run-prompt-label { display: block; margin-bottom: 8px; color: #647080; font-size: .69rem; font-weight: 600; letter-spacing: .035em; text-transform: uppercase; }
+.run-prompt-card p { margin: 0; color: #293649; font-size: .91rem; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.run-layout { display: grid; grid-template-columns: 292px minmax(0, 1fr); gap: 24px; align-items: start; }
+.rail { position: sticky; top: 96px; }
+.workspace { min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: 0 3px 14px rgba(24,34,47,.025); }
+.tabbar { display: flex; gap: 4px; padding: 9px; border-bottom: 1px solid var(--border); overflow-x: auto; border-radius: 12px 12px 0 0; background: #f9fafb; }
+.tab { flex: 0 0 auto; display: flex; align-items: center; gap: 7px; background: transparent; border: 1px solid transparent; border-radius: 7px; padding: 10px 13px; font-size: .76rem; cursor: pointer; color: #5b687b; white-space: nowrap; }
+.tab:hover:not(.active):not(:disabled) { color: #18222f; background: #edf0f3; }
+.tab.active { color: #8e371e; border-color: #ecd6c9; background: #fff4ed; font-weight: 600; }
+.tab:disabled { color: #727b88; cursor: not-allowed; }
+.tab-badge { background: #a83f20; color: #fff; font-size: .62rem; padding: 2px 6px; border-radius: 5px; }
+.tab-body { min-height: min(560px, 70vh); background: #fff; border-radius: 0 0 12px 12px; }
+.graph-wrap { height: 600px; }
+.graph-wrap.max { height: calc(100vh - 220px); }
+.lazy-empty { height: 100%; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; color: #647080; font-size: .85rem; padding: 40px; text-align: center; }
+.lazy-icon { font-size: 24px; color: var(--orange); line-height: 1; }
+.lazy-spinner { width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: rv-spin .8s linear infinite; }
+@keyframes rv-spin { to { transform: rotate(360deg); } }
 @media (max-width: 1080px) {
-  .run-layout { grid-template-columns:1fr; }
-  .rail { position:static; }
+  .main-content { padding: 36px 24px 48px; }
+  .setup-grid { grid-template-columns: minmax(0, 1fr) 280px; gap: 20px; }
+  .journey-card { padding: 20px; }
+  .run-layout { grid-template-columns: 1fr; }
+  .rail { position: static; }
+  .params-row { grid-template-columns: 1fr; }
+  .rounds-param { grid-template-columns: minmax(0, 1fr) 140px; }
+  .adv-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
-@media (max-width: 640px) {
-  .navbar { padding:10px 16px; align-items:flex-start; }
-  .nav-brand { font-size:.95rem; line-height:30px; }
-  .nav-links { flex:0 0 auto; gap:8px; }
-  .nav-tag { display:none; }
-  .nav-hist-btn { width:30px; height:30px; padding:0; justify-content:center; }
-  .nav-hist-label { display:none; }
-  .main-content { padding:28px 16px; }
-  .lead { font-size:.95rem; line-height:1.75; }
-  .console-section { padding:16px; }
-  .params-row { gap:18px; }
-  .param, .num-input { width:100%; }
-  .seg { width:100%; }
-  .seg button { flex:1; min-width:0; padding:9px 10px; }
-  .run-header { align-items:flex-start; flex-direction:column; gap:14px; }
-  .run-actions { flex-wrap:wrap; }
+@media (max-width: 800px) {
+  .setup-grid { grid-template-columns: 1fr; }
+  .nav-tag { display: none; }
+  .params-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .journey-card { padding: 24px; }
+  .journey-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .journey-list li { padding: 0; }
+  .journey-list li::after { display: none; }
+  .run-header { flex-direction: column; gap: 16px; }
+  .run-actions { justify-content: flex-start; }
 }
-
-/* Print: the visible tab's document (dossier / report) prints as a clean page;
-   navigation chrome, rails and controls are suppressed. */
+@media (max-width: 480px) {
+  .navbar { min-height: 64px; padding: 10px 14px; gap: 8px; flex-wrap: wrap; }
+  .nav-brand { font-size: .93rem; }
+  .nav-links { gap: 6px; }
+  .nav-icon-btn, .nav-hist-btn { min-width: 32px; min-height: 34px; padding: 7px; }
+  .nav-hist-label { display: none; }
+  .main-content { padding: 30px 16px 40px; }
+  .setup-heading { margin-bottom: 24px; }
+  .main-title { font-size: 2rem; }
+  .lead { font-size: .88rem; }
+  .console-section { padding: 20px; }
+  .console-divider { margin-inline: 20px; }
+  .preflight-banner { margin-inline: 20px; }
+  .adv-toggle { margin-left: 20px; }
+  .params-row { grid-template-columns: 1fr; gap: 20px; }
+  .rounds-param { display: block; }
+  .rounds-param .num-input { margin: 3px 0 9px; }
+  .journey-list { grid-template-columns: 1fr; gap: 18px; }
+  .run-title { font-size: 1.7rem; }
+  .run-prompt-card { padding: 16px; }
+  .tabbar { padding: 6px; }
+  .tab { padding: 9px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
 @media print {
   .navbar, .history-drawer, .drawer-scrim, .rail, .tabbar,
-  .run-actions, .pid-chip, .run-vitals, .run-err { display:none !important; }
-  .research-container { background:#fff; }
-  .main-content { max-width:none; padding:0; }
-  .run-layout { display:block; }
-  .tab-body { border:none; min-height:0; }
-  .run-prompt-card { border:1px solid #ccc; border-left:3px solid #000; background:#fff; }
+  .run-actions, .pid-chip, .run-vitals, .run-err { display: none !important; }
+  .research-container { background: #fff; }
+  .main-content { max-width: none; padding: 0; }
+  .run-layout { display: block; }
+  .workspace, .tab-body { border: none; box-shadow: none; min-height: 0; }
+  .run-prompt-card { border: 1px solid #ccc; background: #fff; }
 }
 </style>

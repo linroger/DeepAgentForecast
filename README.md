@@ -23,7 +23,7 @@ npm run doctor    # check basic prerequisites and imports (seconds)
 npm start         # backend :5001 + frontend :3000; stream logs + stage marks
 ```
 
-Then open **<http://localhost:3000/research>**, type a question, and click **Run research + simulate + forecast**.
+Then open **<http://localhost:3000/>**, type a question, and click **Start research & forecast**.
 
 **There is no graph database to host.** The temporal knowledge graph runs **locally** on an embedded Graphiti + FalkorDB (no account, no Docker, no API key). The only credential you need is **one LLM**: either a local `claude` / `codex` CLI login (zero keys), or an API key for one of the hosted providers (`openai`, `kimi`, `minimax`, `deepseek`, `qwen`, `glm`). `setup.sh` walks you through picking one and live-tests the key.
 
@@ -371,14 +371,16 @@ Fix any ✗ items it reports and re-run until it prints `All checks passed`. The
 npm start          # backend on :5001 + frontend on :3000; live logs + stage marks
 ```
 
-Open **<http://localhost:3000/research>**, type your question, and click **Run research + simulate + forecast**. The backend pre-flights your configuration at launch time — misconfiguration is reported in seconds, not after a 40-minute research run.
+Open **<http://localhost:3000/>**, type your question, and click **Start research & forecast**. The backend pre-flights your configuration at launch time — misconfiguration is reported in seconds, not after a 40-minute research run.
 
-`npm start` keeps the services detached for durability but follows both service logs in the current terminal and prints concise `▶/✓/✕` marks as each durable workflow stage changes. Pressing **Ctrl-C stops only the stream**; use `npm stop` to stop the services. Use `npm start -- --detach` when you want readiness checks without an attached log stream. `npm run dev` remains available as the conventional foreground development launcher.
+`npm start` keeps the services detached for durability but follows both service logs in the current terminal and prints concise `▶/✓/✕` marks as each durable workflow stage changes. Pressing **Ctrl-C stops only the stream**; use `npm stop` to stop the services. Use `npm start -- --detach` when you want readiness checks without an attached log stream, or `npm start -- --detach --no-open` for quiet startup without opening a browser. `npm run dev` remains available as the conventional foreground development launcher.
 
 | Service | URL |
 |---|---|
-| Frontend (Vue 3 + Vite) | <http://localhost:3000> (proxies `/api` → `5001`) |
+| Frontend (Vue 3 + Vite) | <http://localhost:3000> (proxies `/api` and `/health` to the selected backend; default `5001`) |
 | Backend (Flask) | <http://localhost:5001> |
+
+The launcher selects the backend port before startup and passes it to both services. To choose another port, run `FLASK_PORT=5231 npm start`; the backend, proxy and readiness checks all use 5231. This explicit launcher choice wins over dotenv port values. Direct `python run.py` invocation retains its normal post-dotenv `FLASK_PORT` behavior. The launcher opens one research tab only after the frontend's routing metadata and proxied backend health match the selected target. It refuses to reuse an existing frontend that points at a different backend. `/research` remains a compatibility redirect to `/`.
 
 ---
 
@@ -596,7 +598,7 @@ The report stage emits, alongside `full_report.md`, a **charts/** folder (intera
 
 ## The combined frontend dashboard
 
-The frontend is **Vue 3 + Vite** at `http://localhost:3000` (it proxies `/api` to the backend on `5001`). The main view is **`/research`** — a single combined dashboard containing:
+The frontend is **Vue 3 + Vite** at `http://localhost:3000/` (it proxies `/api` and `/health` to the selected backend; default `5001`). The main view is **`/`**, with `/research` and `/legacy` retained as redirects — a single combined dashboard containing:
 
 - A **prompt input** with run parameters.
 - A **sticky 6-stage timeline** tracking research → ontology → graph → prepare → run → report.

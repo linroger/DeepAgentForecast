@@ -21,7 +21,7 @@ async (page) => {
   await page.request.post(origin + '/__qa/reset', {data: {drop_next: true}});
   await page.reload();
   await page.getByRole('textbox').fill('Offline response-loss acceptance');
-  await page.getByRole('button', {name: 'Run research + simulate + forecast →'}).click();
+  await page.getByRole('button', {name: 'Start research & forecast'}).click();
   await page.getByRole('button', {name: 'Check launch', exact: true}).waitFor();
   const locked = await page.getByRole('textbox').isDisabled();
   if (!locked) throw new Error('Unknown response did not lock original inputs');
@@ -44,7 +44,7 @@ async (page) => {
   if (shared.intent_id !== saved.intent_id) throw new Error('Second tab changed intent');
   await second.getByRole('button', {name: '＋ New', exact: true}).click();
   await second.getByRole('textbox').fill('Explicit second launch');
-  await second.getByRole('button', {name: 'Run research + simulate + forecast →'}).click();
+  await second.getByRole('button', {name: 'Start research & forecast'}).click();
   await second.getByRole('button', {name: 'Copy pipeline id'}).waitFor();
   const newIntent = await second.evaluate(() => JSON.parse(localStorage.getItem('drf_launch_intent_v1')));
   if (newIntent.intent_id === saved.intent_id || newIntent.admission.pipeline_id !== 'pipe_qa2') throw new Error('New did not mint a new intent');
@@ -63,7 +63,7 @@ async (page) => {
   await page.request.post(origin + '/__qa/reset', {data: {drop_next: false, reject_next: true, drop_abandon: true}});
   await page.reload();
   await page.getByRole('textbox').fill('Immutable rejection recovery');
-  await page.getByRole('button', {name: 'Run research + simulate + forecast →'}).click();
+  await page.getByRole('button', {name: 'Start research & forecast'}).click();
   await page.getByText('Fixture rejected immutable parameters', {exact: true}).waitFor();
   await page.getByRole('button', {name: 'Discard unsubmitted launch', exact: true}).click();
   await page.getByRole('alertdialog').waitFor();
@@ -75,7 +75,7 @@ async (page) => {
   await page.getByText('This request was retired before launch. Choose New to edit the inputs.').waitFor();
   await page.getByRole('button', {name: 'New', exact: true}).click();
   await page.getByRole('textbox').fill('Corrected after retirement');
-  await page.getByRole('button', {name: 'Run research + simulate + forecast →'}).click();
+  await page.getByRole('button', {name: 'Start research & forecast'}).click();
   await page.getByRole('button', {name: 'Copy pipeline id'}).waitFor();
   const retireResult = await (await page.request.get(origin + '/__qa')).json();
   if (Object.values(retireResult.records).filter(x => x.pipeline_id).length !== 1) throw new Error('Retirement created extra run');
@@ -83,7 +83,7 @@ async (page) => {
   await page.request.post(origin + '/__qa/reset', {data: {drop_next: false, launch_status: 'failed'}});
   await page.reload();
   await page.getByRole('textbox').fill('Interrupted admission');
-  await page.getByRole('button', {name: 'Run research + simulate + forecast →'}).click();
+  await page.getByRole('button', {name: 'Start research & forecast'}).click();
   await page.getByRole('button', {name: 'Open saved run', exact: true}).waitFor();
   await page.getByRole('button', {name: 'Open saved run', exact: true}).click();
   await page.getByRole('button', {name: 'Copy pipeline id'}).waitFor();

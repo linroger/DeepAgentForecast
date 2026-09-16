@@ -6,7 +6,7 @@
   "branch": "codex/astra-workflow-review-2026-09-07",
   "audit_commit": "6f47f47",
   "current_slice": [
-    "ASTRA-INTEGRATION"
+    "ASTRA-06a"
   ],
   "consecutive_blocked_iterations": 0,
   "automation_id": "astra-workflow-improvement-loop",
@@ -332,9 +332,9 @@
       "evidence": []
     }
   ],
-  "next_recommendation": "ASTRA-INTEGRATION",
+  "next_recommendation": "ASTRA-06",
   "last_completed_slice": [
-    "ASTRA-INTEGRATION-03a"
+    "ASTRA-EXPERIENCE-01"
   ],
   "iterations": [
     {
@@ -487,6 +487,15 @@
       "next": "03b input binding and strict publication, then03c owned durable downstream invalidation and ensemble closure before automatic regeneration.",
       "verified_source_hashes": "docs/research/astra-ontology-reuse-verification.json",
       "implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3"
+    },
+    {
+      "completed_at": "2026-09-16T11:43:31.107727+00:00",
+      "recommendations": [
+        "ASTRA-EXPERIENCE-01"
+      ],
+      "result": "Direct workspace/readiness/routing verified:3957backend passes with1known scaffoldfailure,17skip,11xfail;131frontend passes; source review and pre-stop browser acceptance. All26successful pipelines/156stage records/254logs audited.",
+      "next": "ASTRA06a source-level graph receipt preservation; browser automation stopped per user.",
+      "verified_source_hashes": "docs/research/astra-workspace-verification.json"
     }
   ],
   "last_implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3",
@@ -666,13 +675,110 @@
       "recommendation": "ASTRA-INTEGRATION",
       "description": "Pre-cutover drf2 config pins the original checkout skills path while its test expects the current worktree path; corrected full gate must report this portability failure.",
       "evidence": "docs/research/astra-integration-verification.md"
+    },
+    {
+      "id": "ASTRA-UI-01",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Delayed graph requests can display an old run graph under a newly selected run.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-UI-02",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Readiness request failure is shown as Configuration ready; mode/settings races leave stale readiness.",
+      "evidence": "docs/research/astra-workspace-verification.json",
+      "resolved_at": "2026-09-16T11:43:31.107727+00:00"
+    },
+    {
+      "id": "ASTRA-UI-03",
+      "priority": "P2",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Launcher FLASK_PORT and fixed Vite proxy can disagree; Vite open:true duplicates launcher browser opening.",
+      "evidence": "docs/research/astra-workspace-verification.json",
+      "resolved_at": "2026-09-16T11:43:31.107727+00:00"
+    },
+    {
+      "id": "ASTRA-UI-04",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Hidden simulation/report panels keep network polling while inactive.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-01",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Market extraction overwrites research-time price with current quote and drops per-row refresh failure/timestamps.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-02",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Filtering blank token IDs shifts Yes/No positional mapping.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-03",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Contradictory, out-of-range or disputed resolution data is accepted as resolved Yes and can pollute calibration truth.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-VIZ-01",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Null/blank/boolean/array values become0% or0pp and out-of-range probabilities are displayed.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-04",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "History parsing clamps invalid probabilities and infinite timestamps raise OverflowError.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
     }
   ],
   "active_user_request": {
-    "id": "ASTRA-INTEGRATION",
+    "id": "ASTRA-EXPERIENCE",
     "status": "in_progress",
-    "handoff": "docs/handoff/astra-integration/handoff.md",
-    "description": "Verify application components and end-to-end context continuity, then fix confirmed gaps."
+    "handoff": "docs/handoff/astra-experience/handoff.md",
+    "description": "Audit every successful run and each stage/log; improve direct research UI, visualization, Polymarket and workflow while retaining the full integration backlog."
   },
-  "next_issue": "ASTRA-INTEGRATION-03b"
+  "next_issue": "ASTRA-INTEGRATION-03b",
+  "experience_work": [
+    {
+      "id": "ASTRA-EXPERIENCE-AUDIT",
+      "status": "verified_saved_evidence",
+      "title": "Per-run/stage accounting and log audit for every successful saved pipeline",
+      "evidence": "docs/research/astra-successful-runs-audit-20260916.json"
+    },
+    {
+      "id": "ASTRA-EXPERIENCE-01",
+      "status": "verified_offline",
+      "title": "Direct research entry and professional accessible workspace UI",
+      "evidence": "docs/research/astra-workspace-verification.json"
+    },
+    {
+      "id": "ASTRA-EXPERIENCE-VIZ-MARKETS",
+      "status": "investigating",
+      "title": "Visualization quality and Polymarket contract correctness"
+    }
+  ],
+  "user_constraints": {
+    "browser_automation": "Stopped by explicit user direction on September16; require a new explicit request before using Playwright/CUA.",
+    "focus": "Source review, code fixes, unit/integration validation and workflow bottlenecks."
+  }
 }

@@ -5,6 +5,10 @@ MiroFish Backend 启动入口
 import os
 import sys
 
+# Config loads dotenv with override=True. Preserve the launcher's selected port
+# before that import so backend readiness and the frontend proxy stay aligned.
+_LAUNCHER_BACKEND_PORT = os.environ.get('DRF_LAUNCHER_BACKEND_PORT')
+
 # 解决 Windows 控制台中文乱码问题：在所有导入之前设置 UTF-8 编码
 if sys.platform == 'win32':
     # 设置环境变量确保 Python 使用 UTF-8
@@ -24,6 +28,15 @@ from app.config import Config
 
 def main():
     """主函数"""
+    if _LAUNCHER_BACKEND_PORT is not None:
+        raw = _LAUNCHER_BACKEND_PORT
+        if not (raw.isascii() and raw.isdigit() and 1 <= int(raw) <= 65535):
+            print("Launcher backend port must be an integer from 1 through 65535.")
+            sys.exit(1)
+        port = int(raw)
+    else:
+        # Direct invocation continues to use the post-dotenv Flask setting.
+        port = int(os.environ.get('FLASK_PORT', 5001))
     # 验证配置
     errors = Config.validate()
     if errors:
@@ -45,7 +58,6 @@ def main():
     # 默认仅绑定环回（EXECPLAN2 F-13-0）：服务无鉴权时不应暴露在所有网卡上。
     # 需要局域网访问时显式设 FLASK_HOST=0.0.0.0，并务必同时配置 APP_API_TOKEN。
     host = os.environ.get('FLASK_HOST', '127.0.0.1')
-    port = int(os.environ.get('FLASK_PORT', 5001))
     debug = Config.DEBUG
     if host not in ('127.0.0.1', 'localhost', '::1') and not Config.APP_API_TOKEN:
         print(
@@ -59,4 +71,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
