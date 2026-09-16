@@ -100,5 +100,6 @@
     "Comparisons use deterministic fake storage acknowledgements and an injected Future deadline, not production provider or database timing.",
     "No historical token savings or production speedup claim. Browser automation remained stopped."
   ],
-  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/experience-20260916"
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/experience-20260916",
+  "implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7"
 }

@@ -240,7 +240,8 @@
           "title": "Preserve acknowledged batch receipts through synchronous timeout and truthful accounting",
           "status": "verified_offline",
           "verified_at": "2026-09-16T12:30:36.676096+00:00",
-          "evidence": "docs/research/astra-graph-receipt-verification.json"
+          "evidence": "docs/research/astra-graph-receipt-verification.json",
+          "implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7"
         },
         {
           "id": "ASTRA-06b",
@@ -530,10 +531,11 @@
       ],
       "result": "Attempt-local graph receipt preservation verified:21 new scenarios;144 focused and109 independent passes;3978backend passes with1known scaffoldfail/17skip/11existingxfail. Acknowledged siblings survive timeout; no new replay; failure counters stay exact.",
       "next": "Fix binary market token identity before quote provenance; design durable graph/input checkpointing and per-episode deadlines separately.",
-      "verified_source_hashes": "docs/research/astra-graph-receipt-verification.json"
+      "verified_source_hashes": "docs/research/astra-graph-receipt-verification.json",
+      "implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7"
     }
   ],
-  "last_implementation_commit": "45a8da856f54159974fdff7f200e045de80c2357",
+  "last_implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",

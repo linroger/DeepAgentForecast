@@ -127,5 +127,6 @@
     "The UI bundle is modestly larger; no render-speed or workflow-token savings is claimed.",
     "Graph receipt preservation, market correctness, visualization and remaining workflow recommendations remain open."
   ],
-  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/experience-20260916"
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/experience-20260916",
+  "implementation_commit": "45a8da856f54159974fdff7f200e045de80c2357"
 }
