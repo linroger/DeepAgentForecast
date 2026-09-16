@@ -1,0 +1,39 @@
+{
+  "returned": [
+    "uuid-ack"
+  ],
+  "stats": {
+    "total": 2,
+    "failed": 1,
+    "succeeded": 1,
+    "skip_ratio": 0.5,
+    "skip_reasons": {
+      "other": 1
+    },
+    "input_chunks": 2,
+    "skipped_cast_filter": 0,
+    "batch_timeouts": [
+      {
+        "batch_start_index": 0,
+        "input_count": 2,
+        "cleanup_confirmed": true,
+        "acknowledged": [
+          {
+            "input_index": 0,
+            "uuid": "uuid-ack"
+          }
+        ],
+        "started_unacknowledged": [
+          1
+        ],
+        "never_started": []
+      }
+    ],
+    "not_submitted": 0,
+    "cleanup_confirmed": true
+  },
+  "expected_failed_inputs": 1,
+  "observed_other_failure_reasons": 1,
+  "race": "Coroutines and cleanup finish; event-loop callback delays concurrent Future propagation; synchronous deadline cancellation wins this delivery gap.",
+  "network_or_db": "none; fake ingestion and owned loop only"
+}

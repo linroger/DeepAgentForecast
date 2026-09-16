@@ -1,0 +1,104 @@
+{
+  "schema": "astra-graph-receipt-verification/v1",
+  "verified_at": "2026-09-16T12:27:23.089907+00:00",
+  "recommendation": "ASTRA-06a",
+  "scope": "Attempt-local acknowledgement preservation across concurrent graph batch deadline; no durable restart claim",
+  "baseline_commit": "45a8da856f54159974fdff7f200e045de80c2357",
+  "source_sha256": {
+    "backend/app/config.py": "48f9a531492a6b8ee901e7b62ecc30d0e56b045bcc0b47457d0f91be0be484c7",
+    "backend/app/services/graph_builder.py": "3d582fa107baee32e0248b70072a6204e9f1b84ac18897bf9a419bc98bda64be",
+    "backend/app/services/graphiti_client/runtime.py": "c17677af3d473b4e4dd716b252615709106d662e3527023493d2ebea7cde2346",
+    "backend/app/services/graphiti_client/client.py": "c447b94335fd8edc724695e08ffa664dc6df75e9edfadaf4b27d38da58acad1d",
+    "backend/app/services/graphiti_client/batch_receipts.py": "6ca8ec3e5f40621f43a70aa95d6c821a583a2f9418a3eeba38a33f4d3b520760",
+    "backend/tests/test_graph_batch_receipts.py": "ab4d2bbd37e76003432df932f60e3d684c8a3c7a93622f3980fa3fcd20fcfe69"
+  },
+  "configuration_example_sha256": "3f9c1ece1a4d95e3687bf911ab3cdc41a209e17e5901c1c9d920bebe6abb0005",
+  "backend": {
+    "passed": 3978,
+    "failed": 1,
+    "skipped": 17,
+    "xfailed": 11,
+    "seconds": 148.49,
+    "guarded_python_processes": 143,
+    "network_events": 0,
+    "source_drift": [],
+    "command": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/experience-20260916/offline_pytest.py",
+      "graph-backend-final",
+      "backend/tests",
+      "-o",
+      "junit_family=xunit1"
+    ],
+    "receipt_path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/graph-backend-final/command-completed.json",
+    "receipt_sha256": "20d646b53de757365e9322a2c498758d4fbdba9aa80c51af0e696bfa3e6ac4b2",
+    "junit_sha256": "0ae019ae98aedc575c1dcf7141ed8014378e1cd4c7b3ad78fce404090b19185a",
+    "known_failure": "tests.test_drf2_skills_config.TestConfigYaml::test_skills_path_points_at_drf2_skills"
+  },
+  "focused": {
+    "passed": 144,
+    "new_permanent_cases": 21,
+    "warnings": 0,
+    "evidence": "docs/research/astra-graph-receipt-scenarios.json"
+  },
+  "independent": {
+    "passed": 109,
+    "blocking_findings": 0,
+    "evidence": "docs/research/astra-graph-receipt-review.json"
+  },
+  "comparison": {
+    "revisions_and_cases": 8,
+    "acknowledged_receipts_after_sibling_timeout": {
+      "baseline": 0,
+      "current": 1,
+      "both_input_orders": true
+    },
+    "recorded_failed_inputs": {
+      "baseline": 2,
+      "current": 1
+    },
+    "unknown_write_success_receipts": 0,
+    "normal_path_inputs_order_and_calls_unchanged": true,
+    "automatic_replay_added": false,
+    "completion_delivery_race_failure_reason_count": {
+      "before": 2,
+      "after": 1,
+      "actual_failed_inputs": 1
+    }
+  },
+  "configuration": {
+    "name": "GRAPHITI_BATCH_CANCEL_GRACE_S",
+    "default_seconds": 2,
+    "finite_range_seconds": [
+      0,
+      30
+    ],
+    "unparsable_or_nonfinite": "default2",
+    "zero": "do not wait; fail closed unless already cleaned"
+  },
+  "lint": [],
+  "compiled_sources": [
+    "backend/app/config.py",
+    "backend/app/services/graph_builder.py",
+    "backend/app/services/graphiti_client/runtime.py",
+    "backend/app/services/graphiti_client/client.py",
+    "backend/app/services/graphiti_client/batch_receipts.py",
+    "backend/tests/test_graph_batch_receipts.py"
+  ],
+  "artifact_sha256": {
+    "docs/research/astra-graph-receipt-comparison.json": "92c789dd9b931e403559c969a2697a46a04d9ab2b8a0d332b01828e8a8c33977",
+    "docs/research/astra-graph-receipt-review.json": "80bb0908010aa2e36b2dcd8afa632bcfddb9305a645f0819a8917c747f3b46c0",
+    "docs/research/astra-graph-receipt-accounting-race.json": "a50d12c839734de22813d1d0aa3071ea7c25e9c83fd315709446b4f4b8c2b6fd",
+    "docs/research/astra-graph-receipt-scenarios.json": "cb768f3ab39d4645e261aef4f83a9701c45631c77cd48414a82996ef0342a466"
+  },
+  "limits": [
+    "Cleanup acknowledges only owned asyncio work and graph locks, not provider/executor termination or DB rollback.",
+    "Started inputs without receipts remain uncertain; no automatic replay or durable/idempotent restart cache was added.",
+    "No new per-episode deadline; the operation deadline still covers concurrent batch queueing and replay.",
+    "Existing serial behavior, source text/reference time, cast filtering, attempt caps, rate-only replay and actor seed validation are preserved.",
+    "Full backend exits1 for the known drf2 scaffold path mismatch;17skips and11existingxfails remain.",
+    "Comparisons use deterministic fake storage acknowledgements and an injected Future deadline, not production provider or database timing.",
+    "No historical token savings or production speedup claim. Browser automation remained stopped."
+  ],
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/experience-20260916"
+}

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from .graphiti_client import Zep
 from .graphiti_client import EpisodeData, EntityEdgeSourceTarget
+from .graphiti_client.batch_receipts import GraphBatchTimeout
 
 from ..config import Config
 from ..models.task import TaskManager, TaskStatus
@@ -2327,6 +2328,11 @@ class GraphBuilderService:
                         graph_id, input_chunks, len(terms))
         total_chunks = len(chunks)
         failed_chunks = 0
+        batch_timeouts = []
+        timeout_reasons: Dict[str, int] = {}
+        runtime_accounted_timeout_reasons: Dict[str, int] = {}
+        cleanup_error = None
+        not_submitted = 0
 
         for i in range(0, total_chunks, batch_size):
             batch_chunks = chunks[i:i + batch_size]
@@ -2368,6 +2374,51 @@ class GraphBuilderService:
                 if Config.GRAPHITI_REMOTE:
                     time.sleep(1)
 
+            except GraphBatchTimeout as exc:
+                snapshot = exc.snapshot
+                snapshot.validate(graph_id, len(batch_chunks))
+                # Receipt indexes are batch-local, not episode names (which are
+                # reused across batches). Only validated acknowledgements count.
+                episode_uuids.extend(uuid for _, uuid in snapshot.acknowledged)
+                failed_chunks += len(batch_chunks) - len(snapshot.acknowledged)
+                reasons = dict(snapshot.failure_reasons)
+                accounted = dict(snapshot.runtime_accounted_reasons)
+                for index in snapshot.started_unacknowledged:
+                    reason = reasons.get(index, "batch_timeout_unacknowledged")
+                    # Indexed evidence, never subtraction from unscoped graph
+                    # counters: a deadline may arrive after the runtime's final
+                    # skip pass but before delivery of its completed result.
+                    target = runtime_accounted_timeout_reasons if index in accounted else timeout_reasons
+                    target[reason] = target.get(reason, 0) + 1
+                if snapshot.never_started:
+                    timeout_reasons["batch_timeout_not_started"] = (
+                        timeout_reasons.get("batch_timeout_not_started", 0)
+                        + len(snapshot.never_started)
+                    )
+                batch_timeouts.append({
+                    "batch_start_index": i,
+                    "input_count": len(batch_chunks),
+                    "cleanup_confirmed": exc.cleanup_confirmed,
+                    "acknowledged": [
+                        {"input_index": i + index, "uuid": uuid}
+                        for index, uuid in snapshot.acknowledged
+                    ],
+                    "started_unacknowledged": [i + index for index in snapshot.started_unacknowledged],
+                    "never_started": [i + index for index in snapshot.never_started],
+                })
+                logger.warning("[%s] batch %d/%d deadline: %s",
+                               graph_id, batch_num, total_batches, exc)
+                if not exc.cleanup_confirmed:
+                    # Do not submit a later batch, query the still-active runtime
+                    # for counters, or let the caller publish a partially live graph.
+                    cleanup_error = exc
+                    not_submitted = total_chunks - i - len(batch_chunks)
+                    break
+                if progress_callback:
+                    progress_callback(
+                        f"批次 {batch_num} 超时: 已确认 {len(snapshot.acknowledged)}/{len(batch_chunks)} 块",
+                        progress,
+                    )
             except Exception as e:
                 # RESILIENCE: 一整批失败（罕见——单 episode 失败已在 add_batch 内隔离）也不再
                 # 中断整个建图阶段：跳过该批、记账、继续。仅当「全部 chunk 都失败」时才在循环后
@@ -2386,12 +2437,22 @@ class GraphBuilderService:
         # （schema_echo / schema_validation / rate_limit / …）与 skip 比例，一并入账——
         # 「为什么 48-60% 的 chunk 被跳过」从此可量化归因，而非只有一行 warning。
         skip_reasons: Dict[str, int] = {}
-        try:
-            from .graphiti_client.runtime import get_runtime
+        runtime_reasons_loaded = False
+        if cleanup_error is None:
+            try:
+                from .graphiti_client.runtime import get_runtime
 
-            skip_reasons = get_runtime().pop_ingest_skip_reasons(graph_id)
-        except Exception as exc:  # noqa: BLE001 — 审计增强绝不影响建图主流程
-            logger.debug("[%s] pop_ingest_skip_reasons failed: %s", graph_id, exc)
+                skip_reasons = get_runtime().pop_ingest_skip_reasons(graph_id)
+                runtime_reasons_loaded = True
+            except Exception as exc:  # noqa: BLE001 — 审计增强绝不影响建图主流程
+                logger.debug("[%s] pop_ingest_skip_reasons failed: %s", graph_id, exc)
+        if not runtime_reasons_loaded:
+            # On unconfirmed cleanup (or unavailable runtime counters), retain
+            # these known indexed failures in the provisional local diagnostics.
+            for reason, count in runtime_accounted_timeout_reasons.items():
+                skip_reasons[reason] = skip_reasons.get(reason, 0) + count
+        for reason, count in timeout_reasons.items():
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + count
         # W10-COST: cast 预过滤计数以独立标签并入 skip 原因分布（与 schema_echo/
         # rate_limit 等 LLM 失败原因可区分）；``total``/``skip_ratio`` 只覆盖实际
         # 提交 LLM 的 chunk（编排器的 GRAPH_MAX_SKIPPED_RATIO 告警读 failed/total）。
@@ -2407,9 +2468,20 @@ class GraphBuilderService:
             "input_chunks": input_chunks,
             "skipped_cast_filter": cast_filtered,
         }
+        if batch_timeouts:
+            # Indexes address the cast-filtered input sequence. Snapshots with
+            # unconfirmed cleanup are provisional diagnostics, never resume proof.
+            self.last_ingest_stats.update({
+                "batch_timeouts": batch_timeouts,
+                "not_submitted": not_submitted,
+                "cleanup_confirmed": cleanup_error is None,
+            })
         if skip_reasons:
             logger.warning("[%s] episode skip reasons: %s", graph_id,
                            ", ".join(f"{k}={v}" for k, v in sorted(skip_reasons.items())))
+
+        if cleanup_error is not None:
+            raise cleanup_error
 
         # 硬护栏：所有文本块都抽取失败 → 不能静默产出空图谱（下游 prepare/模拟/报告会退化）。
         # 明确失败，给出可诊断信息（最常见诱因：模型 JSON 输出异常/回显 schema）。

@@ -1,0 +1,259 @@
+{
+  "schema": "astra-graph06a-independent-final-review/v1",
+  "reviewed_at": "2026-09-16T12:16:00.274826+00:00",
+  "baseline": "45a8da856f54159974fdff7f200e045de80c2357",
+  "decision": "approved for bounded attempt-local06a; no unresolved blocking finding",
+  "resolved_findings": [
+    {
+      "priority": 2,
+      "finding": "Completion-delivery timeout race doubled a final failed-input reason",
+      "before": {
+        "total": 2,
+        "failed": 1,
+        "succeeded": 1,
+        "skip_ratio": 0.5,
+        "skip_reasons": {
+          "other": 2
+        },
+        "input_chunks": 2,
+        "skipped_cast_filter": 0,
+        "batch_timeouts": [
+          {
+            "batch_start_index": 0,
+            "input_count": 2,
+            "cleanup_confirmed": true,
+            "acknowledged": [
+              {
+                "input_index": 0,
+                "uuid": "uuid-ack"
+              }
+            ],
+            "started_unacknowledged": [
+              1
+            ],
+            "never_started": []
+          }
+        ],
+        "not_submitted": 0,
+        "cleanup_confirmed": true
+      },
+      "after": {
+        "total": 2,
+        "failed": 1,
+        "succeeded": 1,
+        "skip_ratio": 0.5,
+        "skip_reasons": {
+          "other": 1
+        },
+        "input_chunks": 2,
+        "skipped_cast_filter": 0,
+        "batch_timeouts": [
+          {
+            "batch_start_index": 0,
+            "input_count": 2,
+            "cleanup_confirmed": true,
+            "acknowledged": [
+              {
+                "input_index": 0,
+                "uuid": "uuid-ack"
+              }
+            ],
+            "started_unacknowledged": [
+              1
+            ],
+            "never_started": []
+          }
+        ],
+        "not_submitted": 0,
+        "cleanup_confirmed": true
+      },
+      "fix_assessment": "Runtime attests each final accounted input index/reason. Builder adds only unaccounted receipt gaps when counters load, or retains indexed accounted reasons in provisional diagnostics when cleanup/counters are unavailable. No subtraction from mutable graph aggregate counters; normal-path _record_skip_reason stays unchanged."
+    }
+  ],
+  "checks": {
+    "focused_backend_gate": "109 passed,21 warnings in3.19s",
+    "guarded_process_network_events": [],
+    "source_drift": [],
+    "public_baseline_current_observations": 8,
+    "public_observations": [
+      {
+        "revision": "baseline",
+        "case": "ack-first",
+        "returned_uuids": null,
+        "succeeded": 0,
+        "failed": 2,
+        "core_call_count": 2
+      },
+      {
+        "revision": "baseline",
+        "case": "ack-second",
+        "returned_uuids": null,
+        "succeeded": 0,
+        "failed": 2,
+        "core_call_count": 2
+      },
+      {
+        "revision": "baseline",
+        "case": "unknown-write",
+        "returned_uuids": null,
+        "succeeded": 0,
+        "failed": 2,
+        "core_call_count": 2
+      },
+      {
+        "revision": "baseline",
+        "case": "normal-success",
+        "returned_uuids": [
+          "uuid-a",
+          "uuid-b",
+          "uuid-c"
+        ],
+        "succeeded": 3,
+        "failed": 0,
+        "core_call_count": 3
+      },
+      {
+        "revision": "current",
+        "case": "ack-first",
+        "returned_uuids": [
+          "uuid-fast"
+        ],
+        "succeeded": 1,
+        "failed": 1,
+        "core_call_count": 2
+      },
+      {
+        "revision": "current",
+        "case": "ack-second",
+        "returned_uuids": [
+          "uuid-fast"
+        ],
+        "succeeded": 1,
+        "failed": 1,
+        "core_call_count": 2
+      },
+      {
+        "revision": "current",
+        "case": "unknown-write",
+        "returned_uuids": null,
+        "succeeded": 0,
+        "failed": 2,
+        "core_call_count": 2
+      },
+      {
+        "revision": "current",
+        "case": "normal-success",
+        "returned_uuids": [
+          "uuid-a",
+          "uuid-b",
+          "uuid-c"
+        ],
+        "succeeded": 3,
+        "failed": 0,
+        "core_call_count": 3
+      }
+    ],
+    "normal_input_bytes_reference_time_uuid_order_core_calls_parity": true,
+    "completion_delivery_race_failed_inputs": 1,
+    "completion_delivery_race_final_skip_reason_count": 1
+  },
+  "source_assessment": [
+    "Collector creates new tuple snapshots under a threading lock; acknowledged UUIDs are nonempty strings; snapshots retain original input indexes.",
+    "Timeout cleanup waits on submitted coroutine outermost finally rather than concurrent Future.cancelled/done. Unconfirmed cleanup stops before later batches, runtime reads or publication.",
+    "Known failure reasons and never-started inputs remain separate from started-without-acknowledgement.",
+    "Initial fan-out and existing bounded serial429replay share collection; no automatic full-batch retry was added.",
+    "Already-completed inner TimeoutError and failed cancel race preserve actual Future outcome.",
+    "Configured finite cancellation grace is bounded0..30s; invalid/non-finite values default2s.",
+    "Cast-filter denominators, exact source/reference-time forwarding, UUID input order and actor-seed acceptance remain covered; private/direct serial behavior remains as before."
+  ],
+  "limits": [
+    "06a does not implement durable restart recovery, idempotent replay, episode-specific deadlines, ontology/input binding, or ambiguous-write reconciliation.",
+    "Async cleanup acknowledgement is not termination of executor/provider threads and not DB rollback or proof all external effects ceased.",
+    "No provider, real DB, browser, live pipeline or original-checkout deployment acceptance was performed.",
+    "These fixtures measure receipt correctness/call counts, not production runtime or token savings."
+  ],
+  "source_receipts": [
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/services/graphiti_client/batch_receipts.py",
+      "sha256": "6ca8ec3e5f40621f43a70aa95d6c821a583a2f9418a3eeba38a33f4d3b520760",
+      "bytes": 5765
+    },
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/services/graphiti_client/runtime.py",
+      "sha256": "c17677af3d473b4e4dd716b252615709106d662e3527023493d2ebea7cde2346",
+      "bytes": 114361
+    },
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/services/graphiti_client/client.py",
+      "sha256": "c447b94335fd8edc724695e08ffa664dc6df75e9edfadaf4b27d38da58acad1d",
+      "bytes": 14233
+    },
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/services/graph_builder.py",
+      "sha256": "3d582fa107baee32e0248b70072a6204e9f1b84ac18897bf9a419bc98bda64be",
+      "bytes": 132780
+    },
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/config.py",
+      "sha256": "48f9a531492a6b8ee901e7b62ecc30d0e56b045bcc0b47457d0f91be0be484c7",
+      "bytes": 142886
+    },
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/.env.example",
+      "sha256": "3f9c1ece1a4d95e3687bf911ab3cdc41a209e17e5901c1c9d920bebe6abb0005",
+      "bytes": 99075
+    },
+    {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/tests/test_graph_batch_receipts.py",
+      "sha256": "ab4d2bbd37e76003432df932f60e3d684c8a3c7a93622f3980fa3fcd20fcfe69",
+      "bytes": 24428
+    }
+  ],
+  "evidence_receipts": [
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/review-graph-completion-race.json",
+      "sha256": "aa8d8f799f529838285682d7f4abe34568101d399db2b9c3efd841e557d62b43",
+      "bytes": 928
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/review-graph-completion-race-final.json",
+      "sha256": "a50d12c839734de22813d1d0aa3071ea7c25e9c83fd315709446b4f4b8c2b6fd",
+      "bytes": 928
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/graph-public-receipt-comparison.json",
+      "sha256": "b514c1b030ab11b993d496e0748ca9ae1a992bdf37b27cfbba3801dbeb775872",
+      "bytes": 19808
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/graph-public-receipt-comparison-final.json",
+      "sha256": "92c789dd9b931e403559c969a2697a46a04d9ab2b8a0d332b01828e8a8c33977",
+      "bytes": 19808
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/review_graph_completion_race_final.py",
+      "sha256": "16c941dd52024def227bc94855d1b5a6ba2b73e6176c0606e089300442f3f6a4",
+      "bytes": 3305
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/compare_graph_public_receipts_final.py",
+      "sha256": "5fcffbe71bb02ba38812c0e89d40635b7975f3bce5ad9ea2392f6da4794e87ad",
+      "bytes": 7635
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/graph06a-review-final-tests.log",
+      "sha256": "1cf742f29207bd313eacb920ba07eaa7b0ed5ea4aab8c34582bb3c784e4417c0",
+      "bytes": 322
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/graph06a-independent-review-final/results.xml",
+      "sha256": "2c8fc03044ed98f4eda65e9922b61366586d4b1e537d8a38727331cc7b13f6f5",
+      "bytes": 70450
+    },
+    {
+      "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/graph06a-independent-review-final/command-completed.json",
+      "sha256": "e8cbc09c96e57eaa6fd8a5dfe00e7ce2e478708cbfd5e1929d520496f6d9de48",
+      "bytes": 51174
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # Graph batch timeout: source review and next repair
 
-Status: reproduced source defect; repair not yet implemented. The relevant runtime and graph-builder files remain identical between the original checkout and the ASTRA implementation baseline used by this audit.
+Status: the attempt-local06a repair is now [verified offline](astra-graph-receipt-verification.md). The baseline source review below remains the rationale; durable recovery and per-episode deadlines remain open. The relevant runtime and graph-builder files remain identical between the original checkout and the ASTRA implementation baseline used by this audit.
 
 The public path is `GraphBuilderService.add_text_batches` → `_GraphNamespace.add_batch` → `GraphitiRuntime.add_episodes_concurrent` → `run` → `_add_episodes_concurrent`. With concurrency enabled, one synchronous operation deadline covers the entire fan-out, queueing and bounded replay. The runtime's `run` cancels its cross-thread Future on timeout to release the graph write lock, then raises without a partial receipt.
 

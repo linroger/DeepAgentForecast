@@ -24,10 +24,13 @@ import atexit
 import concurrent.futures
 import contextlib
 import logging
+import math
 import os
 import threading
 from datetime import datetime, timezone
 from typing import Any
+
+from .batch_receipts import BatchReceiptCollector, GraphBatchTimeout
 
 logger = logging.getLogger("mirofish.graphiti_runtime")
 
@@ -160,6 +163,21 @@ def _chunk_attempt_budget() -> int | None:
     return value if value > 0 else None
 
 
+def _batch_cancel_grace_s() -> float:
+    """Finite wait for coroutine cleanup: default 2s, clamped to 0..30s.
+
+    Invalid and non-finite values retain the default. Zero does not wait and
+    therefore fails closed unless cleanup was already confirmed.
+    """
+    try:
+        from ...config import Config
+
+        value = float(getattr(Config, "GRAPHITI_BATCH_CANCEL_GRACE_S", 2.0))
+    except (TypeError, ValueError, OverflowError):
+        return 2.0
+    return min(30.0, max(0.0, value)) if math.isfinite(value) else 2.0
+
+
 def _graph_ingest_rate_limit_cooldown_s() -> float:
     """Return the single post-fan-out 429 cooldown, clamped to a safe bound.
 
@@ -221,7 +239,10 @@ class GraphitiRuntime:
     # ------------------------------------------------------------------
     # sync -> async bridge
     # ------------------------------------------------------------------
-    def run(self, coro, timeout: float | None = None):
+    def run(
+        self, coro, timeout: float | None = None,
+        *, batch_receipts: BatchReceiptCollector | None = None,
+    ):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         # 默认给每个操作一个挂钟上限（Config.GRAPHITI_OP_TIMEOUT_S，config 默认 900s；0=旧的无限等待），
         # 避免某次 LLM/DB 调用卡死时永久阻塞调用它的 Flask 线程。超时抛 TimeoutError，调用方一般已
@@ -232,6 +253,10 @@ class GraphitiRuntime:
         try:
             return future.result(eff)
         except concurrent.futures.TimeoutError:
+            # concurrent.futures.TimeoutError aliases built-in TimeoutError.
+            # A completed coroutine's own timeout is not a sync wait deadline.
+            if future.done():
+                return future.result()
             # CRITICAL: future.result() timing out does NOT stop the coroutine — it keeps
             # running on the single bg loop, and if it holds the per-graph write lock
             # (add_episode / merge_nodes / build_communities) that lock is NEVER released,
@@ -239,9 +264,19 @@ class GraphitiRuntime:
             # cascade (observed: graph builds fine, then all post-build reads time out for
             # 15min×retries while the DB itself answers the same query in 0.01s). Cancel
             # the asyncio task threadsafely so its `async with lock` unwinds via __aexit__.
-            future.cancel()
-            logger.warning("graphiti op exceeded %.0fs wall-clock; cancelled to release the "
-                           "per-graph lock (avoids deadlocking later reads)", eff or 0)
+            if not future.cancel():
+                # Completion raced the deadline check; preserve its real outcome.
+                return future.result()
+            if batch_receipts is not None:
+                # Future.cancel() marks the concurrent Future cancelled before
+                # the asyncio coroutine has unwound. Only its outermost finally
+                # acknowledges gather, lock, cooldown and replay cleanup.
+                cleaned = batch_receipts.cleanup_complete.wait(_batch_cancel_grace_s())
+                raise GraphBatchTimeout(
+                    batch_receipts.snapshot(), cleanup_confirmed=cleaned,
+                ) from None
+            logger.warning("graphiti op exceeded %.0fs wall-clock; cancellation requested",
+                           eff or 0)
             raise TimeoutError(f"graphiti operation exceeded {eff:.0f}s") from None
 
     # EXECPLAN2 F-12-8 / F-2-5: lazily create/return the per-graph_id write lock.
@@ -1072,8 +1107,9 @@ class GraphitiRuntime:
         """T2.5: ingest many episodes concurrently under a semaphore on the bg loop.
 
         ``episodes`` is a list of dicts ``{name?, data, type?, source_description?,
-        reference_time?}``. Returns uuids in input order. The serial path
-        (concurrency<=1, the default) is byte-identical to ``add_episode`` in a loop.
+        reference_time?}``. Returns uuids in input order. This runtime method and
+        Config currently default to concurrency 4; the public facade selects its
+        serial ``add_episode`` fallback when configured concurrency is <=1.
 
         WARNING (EXECPLAN2 F-2-5): with ``concurrency>1`` this fans out
         ``graphiti_core.add_episode`` calls that run concurrently against the SAME
@@ -1081,36 +1117,58 @@ class GraphitiRuntime:
         entity resolution reads existing nodes BEFORE the in-flight nodes are
         committed; two episodes that mention the same new entity can therefore both
         miss the dedup lookup and each create a duplicate same-name node. This is
-        an extraction-parallel / dedup-best-effort fast path, NOT a write-safe one.
+        an extraction-parallel / dedup-best-effort path, NOT a write-safe one.
         Keep ``GRAPH_BUILD_CONCURRENCY=1`` unless duplicate same-name entities are
         acceptable for the workload. The whole fan-out is still held under the
         per-graph write lock (F-12-8) so it never overlaps an EXTERNAL writer/reader
         on the same graph_id.
         """
-        return self.run(self._add_episodes_concurrent(graph_id, episodes, concurrency))
+        receipts = BatchReceiptCollector(graph_id, len(episodes))
 
-    async def _add_episodes_concurrent(self, graph_id, episodes, concurrency):
+        async def submitted_batch():
+            try:
+                return await self._add_episodes_concurrent(
+                    graph_id, episodes, concurrency, receipts=receipts,
+                )
+            finally:
+                receipts.cleanup_complete.set()
+
+        return self.run(submitted_batch(), batch_receipts=receipts)
+
+    async def _add_episodes_concurrent(self, graph_id, episodes, concurrency, *, receipts=None):
         await self._ensure_graph(graph_id)  # warm once before fan-out (avoid lock stampede)
         sem = asyncio.Semaphore(max(1, int(concurrency)))
 
         async def ingest(i, ep, attempt_budget=None):
             # Caller holds the per-graph write lock, so call the lock-free core
             # and defer accounting until the bounded replay decision is final.
-            return await self._add_episode_locked(
-                graph_id,
-                name=ep.get("name") or f"chunk-{i}",
-                body=ep.get("data", "") or "",
-                source_type=ep.get("type", "text") or "text",
-                source_description=ep.get("source_description", "") or "mirofish",
-                reference_time=ep.get("reference_time"),
-                record_skip_reason=False,
-                attempt_budget=attempt_budget,
-            )
+            if receipts is not None:
+                receipts.start(i)
+            try:
+                uuid = await self._add_episode_locked(
+                    graph_id,
+                    name=ep.get("name") or f"chunk-{i}",
+                    body=ep.get("data", "") or "",
+                    source_type=ep.get("type", "text") or "text",
+                    source_description=ep.get("source_description", "") or "mirofish",
+                    reference_time=ep.get("reference_time"),
+                    record_skip_reason=False,
+                    attempt_budget=attempt_budget,
+                )
+            except Exception as exc:
+                if receipts is not None:
+                    receipts.failed(i, self._classify_ingest_error(exc))
+                raise
+            if receipts is not None:
+                # Capture immediately, before another await can cancel gather or
+                # serial replay and discard its otherwise completed results.
+                receipts.acknowledge(i, uuid)
+            return uuid
 
         async def one(i, ep):
             async with sem:
                 # The intra-batch dedup race documented above is the accepted
-                # tradeoff of this opt-in fast path.
+                # tradeoff of configured parallel ingestion.
                 return await ingest(i, ep)
 
         # EXECPLAN2 F-12-8: hold the per-graph write lock across the entire fan-out so
@@ -1181,6 +1239,11 @@ class GraphitiRuntime:
                 reason = self._classify_ingest_error(r)
                 reasons[reason] = reasons.get(reason, 0) + 1
                 self._record_skip_reason(graph_id, reason)
+                if receipts is not None:
+                    # A sync deadline can race this final pass/result delivery.
+                    # Track exactly which input was counted so the builder does
+                    # not add the same reason again after reading runtime totals.
+                    receipts.runtime_accounted(idx, reason)
                 ep = episodes[idx]
                 ep_name = ep.get("name") if isinstance(ep, dict) else None
                 ep_name = ep_name or f"chunk-{idx}"

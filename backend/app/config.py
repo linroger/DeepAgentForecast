@@ -1296,9 +1296,12 @@ class Config:
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
     # 每个 Graphiti 操作（add_episode/search/list…）的挂钟上限（秒）。sync→async 桥兜底，
     # 避免某次 LLM/DB 调用卡死时永久阻塞调用它的 Flask 线程。0=不设上限（旧行为）。
-    # GRAPH-9：1800→900。fast-tier 路由 + ~5x 更少 episode 让单批远低于 15 分钟；降到 900 让卡死的
-    # 读取快速失败而不是干等 30 分钟。
+    # Concurrent batch deadlines cover graph setup, lock/semaphore queues, ingestion,
+    # rate-limit cooldown and replay; they are not a per-chunk allowance.
     GRAPHITI_OP_TIMEOUT_S = float(os.environ.get('GRAPHITI_OP_TIMEOUT_S', '900') or '900')
+    # Kept raw so the runtime can safely default invalid/non-finite values without
+    # breaking Config import. Runtime bounds this cancellation cleanup wait to 0..30s.
+    GRAPHITI_BATCH_CANCEL_GRACE_S = os.environ.get('GRAPHITI_BATCH_CANCEL_GRACE_S', '2')
 
     # --- 模拟（Phase 3）---
     # 智能体数量上限；超过则按 (是否匹配 actor, 影响力, 邻边数) 排序保留，始终保留研究 actor（T3.13）

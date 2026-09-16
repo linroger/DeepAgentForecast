@@ -6,7 +6,7 @@
   "branch": "codex/astra-workflow-review-2026-09-07",
   "audit_commit": "6f47f47",
   "current_slice": [
-    "ASTRA-06a"
+    "ASTRA-MARKET-02"
   ],
   "consecutive_blocked_iterations": 0,
   "automation_id": "astra-workflow-improvement-loop",
@@ -230,8 +230,33 @@
       "id": "ASTRA-06",
       "priority": "P1",
       "title": "Checkpoint graph episodes and use individual deadlines",
-      "status": "pending",
-      "evidence": []
+      "status": "in_progress",
+      "evidence": [
+        "docs/research/astra-graph-receipt-verification.json"
+      ],
+      "subtasks": [
+        {
+          "id": "ASTRA-06a",
+          "title": "Preserve acknowledged batch receipts through synchronous timeout and truthful accounting",
+          "status": "verified_offline",
+          "verified_at": "2026-09-16T12:30:36.676096+00:00",
+          "evidence": "docs/research/astra-graph-receipt-verification.json"
+        },
+        {
+          "id": "ASTRA-06b",
+          "title": "Durable episode checkpoints, input/policy identity and ambiguous-write reconciliation",
+          "status": "pending"
+        },
+        {
+          "id": "ASTRA-06c",
+          "title": "Introduce measured per-episode deadlines with bounded queue/replay/cleanup semantics",
+          "status": "pending"
+        }
+      ],
+      "limits": [
+        "06a preserves attempt-local acknowledgement receipts; no durable restart reuse or new per-episode deadline is claimed.",
+        "Unknown external writes remain unresolved. Async cleanup does not prove provider termination or database rollback."
+      ]
     },
     {
       "id": "ASTRA-07",
@@ -332,9 +357,9 @@
       "evidence": []
     }
   ],
-  "next_recommendation": "ASTRA-06",
+  "next_recommendation": "ASTRA-MARKET-02",
   "last_completed_slice": [
-    "ASTRA-EXPERIENCE-01"
+    "ASTRA-06a"
   ],
   "iterations": [
     {
@@ -495,10 +520,20 @@
       ],
       "result": "Direct workspace/readiness/routing verified:3957backend passes with1known scaffoldfailure,17skip,11xfail;131frontend passes; source review and pre-stop browser acceptance. All26successful pipelines/156stage records/254logs audited.",
       "next": "ASTRA06a source-level graph receipt preservation; browser automation stopped per user.",
-      "verified_source_hashes": "docs/research/astra-workspace-verification.json"
+      "verified_source_hashes": "docs/research/astra-workspace-verification.json",
+      "implementation_commit": "45a8da856f54159974fdff7f200e045de80c2357"
+    },
+    {
+      "completed_at": "2026-09-16T12:30:36.676096+00:00",
+      "recommendations": [
+        "ASTRA-06a"
+      ],
+      "result": "Attempt-local graph receipt preservation verified:21 new scenarios;144 focused and109 independent passes;3978backend passes with1known scaffoldfail/17skip/11existingxfail. Acknowledged siblings survive timeout; no new replay; failure counters stay exact.",
+      "next": "Fix binary market token identity before quote provenance; design durable graph/input checkpointing and per-episode deadlines separately.",
+      "verified_source_hashes": "docs/research/astra-graph-receipt-verification.json"
     }
   ],
-  "last_implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3",
+  "last_implementation_commit": "45a8da856f54159974fdff7f200e045de80c2357",
   "optimization_objectives": {
     "minimize": [
       "provider work and accounted consumption",
@@ -757,7 +792,7 @@
     "handoff": "docs/handoff/astra-experience/handoff.md",
     "description": "Audit every successful run and each stage/log; improve direct research UI, visualization, Polymarket and workflow while retaining the full integration backlog."
   },
-  "next_issue": "ASTRA-INTEGRATION-03b",
+  "next_issue": "ASTRA-MARKET-02",
   "experience_work": [
     {
       "id": "ASTRA-EXPERIENCE-AUDIT",
