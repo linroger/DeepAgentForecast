@@ -1,0 +1,149 @@
+{
+  "schema": "rearchitecture-issue-ledger/v1",
+  "note": "Local project issue ledger. Records proposals and source-observed gaps, not fabricated remote tickets or completed fixes. Runtime reproductions are required before implementation.",
+  "issues": [
+    {
+      "id": "RX-00",
+      "title": "Reconcile verified ASTRA changes with the current linear-research baseline",
+      "category": "integration",
+      "status": "in-progress",
+      "source_review": "history-reuse.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-01",
+      "title": "Explain stage reuse and downstream dependencies without executing work",
+      "category": "proposed-feature",
+      "status": "approved-planned",
+      "source_review": "orchestration.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-02",
+      "title": "Bind ontology to effective upstream evidence and strict publication",
+      "category": "source-observed-risk",
+      "status": "approved-planned",
+      "source_review": "orchestration.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-03",
+      "title": "Persist owned invalidation and preserve fork/base generation isolation",
+      "category": "source-observed-risk",
+      "status": "approved-planned",
+      "source_review": "orchestration.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-04",
+      "title": "Extract research runner, evidence, synthesis and contract boundaries",
+      "category": "maintainability",
+      "status": "approved-planned",
+      "source_review": "research-bridge.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-05",
+      "title": "Make research task replay, fetch identity and budgets explicit",
+      "category": "optimization-candidate",
+      "status": "approved-planned",
+      "source_review": "research-bridge.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-06",
+      "title": "Preserve acknowledged graph work and measure residual redundant extraction",
+      "category": "integration-and-recovery",
+      "status": "approved-planned",
+      "source_review": "ontology-graph.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-07",
+      "title": "Unify admitted simulation context and seed/main completion contracts",
+      "category": "cross-stage",
+      "status": "approved-planned",
+      "source_review": "simulation.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-08",
+      "title": "Unify research context across all report and chat entry points",
+      "category": "source-observed-gap",
+      "status": "approved-planned",
+      "source_review": "report-platform.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-09",
+      "title": "Publish complete report generations with dependency-bound section reuse",
+      "category": "recovery-feature",
+      "status": "approved-planned",
+      "source_review": "report-platform.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-10",
+      "title": "Consolidate durable accounting and explicitly covered monetary admission",
+      "category": "integration-and-accounting",
+      "status": "approved-planned",
+      "source_review": "history-reuse.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-11",
+      "title": "Extract stage adapters and expose read-only run diagnostics",
+      "category": "maintainability-and-feature",
+      "status": "approved-planned",
+      "source_review": "orchestration.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    },
+    {
+      "id": "RX-12",
+      "title": "Require portable config and complete contract parity for optional drf2 cutover",
+      "category": "compatibility",
+      "status": "approved-planned",
+      "source_review": "native-drf2.md",
+      "acceptance": "implementation-plan.md",
+      "implemented": false,
+      "fresh_runtime_reproduction": false,
+      "remote_issue": null
+    }
+  ]
+}

@@ -1,3 +1,26 @@
+# Current plan: whole-workflow rearchitecture — 2026-09-19
+
+**Plan ID:** DRF-RX-20260919
+**Status:** Approved by the user on 2026-09-19. Implement one verified slice at a time.
+**Branch:** `codex/workflow-rearchitecture-2026-09-19`
+**Scope:** Research, ontology, graph, preparation, simulation, reporting, and the Python integration boundaries in the four requested source trees.
+
+The complete current plan is [implementation-plan.md](docs/research/workflow-rearchitecture-20260919/implementation-plan.md). It defines invariants, thirteen ordered slices, proposed input/output contracts, the first implementation unit, scenario acceptance, migration and rollback.
+
+Supporting evidence:
+
+- [Orchestration and stage boundaries](docs/research/workflow-rearchitecture-20260919/orchestration.md).
+- [All 880 Python files](docs/research/workflow-rearchitecture-20260919/python-file-index.md), with [machine-readable hashes, imports and symbols](docs/research/workflow-rearchitecture-20260919/python-inventory.json).
+- [Current continuity record](docs/handoff/workflow-rearchitecture-20260919/handoff.md).
+
+The recommended sequence starts by reconciling existing ASTRA improvements with current main, then introduces a pure read-only reuse/dependency planner. Subsequent slices bind generation inputs, make downstream invalidation safe for forks, separate research modules, improve graph recovery, unify simulation/report context, add report checkpoints, and consolidate budgets. Keep one durable coordinator; do not cut over to `drf2` before parity.
+
+This planning work changes documentation only. Structural enumeration covers every requested Python file; it is not a claim of exhaustive semantic review of every line. Specialist reports record actual review depth and outstanding questions. Historical plans below are preserved for traceability and do not override this current plan or constitute approval for it.
+
+---
+
+# Historical plans retained from the branch baseline
+
 # PLANS.md — Agentic Workflow Refinement Program
 
 ## 2026-08-17 LOOP-017 — measurable cost, reliable localhost, and forecast-quality refinement
