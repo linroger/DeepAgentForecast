@@ -1,9 +1,9 @@
 # Report and platform architecture review
 
-**Status:** Complete as a read-only source study; proposals are not implemented or runtime-validated.  
-**Source:** `/Users/rogerlin/Downloads/DeepResearchForecast`, HEAD `ec29ab1d4b9a74ae9f0bea1b4644e4582a3a4d6f`.  
-**Review date:** 2026-09-19, Asia/Shanghai.  
-**Assigned output:** `docs/research/workflow-rearchitecture-20260919/report-platform.md` in `/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919`.  
+**Status:** Complete as a read-only source study; proposals are not implemented or runtime-validated.
+**Source:** `/Users/rogerlin/Downloads/DeepResearchForecast`, HEAD `ec29ab1d4b9a74ae9f0bea1b4644e4582a3a4d6f`.
+**Review date:** 2026-09-19, Asia/Shanghai.
+**Assigned output:** `docs/research/workflow-rearchitecture-20260919/report-platform.md` in `/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919`.
 **Write boundary:** Only this report. No code/runtime edits, provider or network calls, services, saved-run reads or mutations, tests, commits, or changes to another reviewer's files. Existing source checkout changes were observed and preserved. The untracked space-reclamation script/test are explicitly identified below and are not part of the base commit.
 
 All `backend/...:N` references below mean concrete file and one-based line in the source checkout above, not an asserted full-file read. The coverage tables state actual review depth. Python AST inspection reads text without importing application modules. Existing test assertions are evidence of intended protection, not evidence that tests passed in this study. Prior memory identified questions to check; findings below were rechecked in current source.

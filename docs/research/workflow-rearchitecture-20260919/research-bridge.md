@@ -1,9 +1,9 @@
 # Research bridge architecture review
 
-**Status:** Complete as a read-only baseline source study. Parent-approved integration follow-up is recorded in §11; this reviewer performed no implementation or runtime acceptance.  
-**Reviewed baseline:** ec29ab1d4b9a74ae9f0bea1b4644e4582a3a4d6f.  
-**Source:** /Users/rogerlin/Downloads/DeepResearchForecast.  
-**Assigned report:** /Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/docs/research/workflow-rearchitecture-20260919/research-bridge.md.  
+**Status:** Baseline source study complete. Sections 1–10 retain the original read-only findings; §11 records the merge follow-up; §12 records the subsequently approved RX00 implementation and offline verification. Final independent race rereview is pending.
+**Reviewed baseline:** ec29ab1d4b9a74ae9f0bea1b4644e4582a3a4d6f.
+**Source:** /Users/rogerlin/Downloads/DeepResearchForecast.
+**Assigned report:** /Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/docs/research/workflow-rearchitecture-20260919/research-bridge.md.
 **Review date:** 2026-09-19, Asia/Shanghai.
 
 ## Findings that matter for the architecture decision
@@ -401,3 +401,50 @@ Read-only comparison of the merged actor stage against original main explains te
 Conclusion: the observed call-count failure is an old test expectation encountering main’s retained format repair, not evidence of a merge-induced summary-projection or Track-A leakage regression. For this fixture, assert exactly two calls, the second format reminder, and the summary/real receipt/no-global-worker invariants on both captured requests; alternatively return an appropriate ledger-bearing dossier fixture to retain a single-call test and cover retry separately. No code or test edits and no test execution were performed by this reviewer for this follow-up.
 
 Parent-reported resolution: the integration test is now parametrized so a ledger-bearing mock expects one invocation and a ledger-less mock expects exactly two. Every captured request must retain the validated summary and search receipts and exclude global worker fallback. The parent states that production behavior was not weakened. This reviewer did not duplicate that investigation, edit the test, or independently claim its execution result. The parent’s plan approval supersedes the baseline next-step approval request for the parent-owned integration scope; this report remains the only reviewer-owned write.
+
+## 12. RX00 implementation and verification addendum — 2026-09-19
+
+The user subsequently authorized RX00 repairs in the merged main+ASTRA worktree. This supersedes the earlier read-only restriction for the four files below; it does not turn the baseline study into a post-merge exhaustive audit. Changes remain uncommitted by this reviewer. No linear_research.py, provider, service, deployment or saved-run changes were made.
+
+| Changed file | Precise before → after behavior |
+|---|---|
+| [deerflow_research.py](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py:15726) | Actor-enabled extract-only accepted missing lineage as fresh and could skip sealing when the dossier was absent. It now validates prior lineage before extraction and always requires final actor sealing. Model-supplied top-level seals are discarded, while per-actor proposed claims are retained for deterministic provenance/permission validation. Charts may still append an annex before the final report hash is sealed. |
+| [test_actor_intelligence_producer.py](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_actor_intelligence_producer.py:531) | Strengthened the chart-mutation scenario with a forged model seal and assertions that the genuine v1 seal and grounded capability claims survive. Existing missing-lineage, model-citation and explicit-no-actor assertions were preserved. |
+| [test_audit_fixes_research.py](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_audit_fixes_research.py:296) | Added two barrier-controlled races using real executor threads, actual child metadata and real parent stop decoding/fan-in. Both require reserved exit 4, no published report, preserved evidence and only track_1 admitted. Scoped engine/evidence-only environment values prevent in-process main() tests contaminating later tests. |
+| [test_research_checkpoint.py](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_research_checkpoint.py:312) | Added explicit hybrid/linear preflight cases, five unsupported-linear-contract cases with zero engine calls, and an explicit report-only linear dispatch case. No provider runs occur in these tests. |
+
+### Engine capability boundary
+
+[Linear admission](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py:16227) now rejects the following with exit **3**, before importing/running the linear engine: evidence-only, synthesis-manifest, actor-intelligence-required runs without explicit --no-actors, resume, and custom --config. It does not silently substitute hybrid or restart research.
+
+Only the existing fresh, explicitly report-only linear route is admitted, after common credential preflight. This establishes dispatch safety, not acceptance of the entire linear implementation; planner, retrieval, durable-state and accounting defects remain deferred. Explicit --extract-only continues through the shared extraction path regardless of selected engine; actor-enabled extraction still requires lineage and a valid final seal, while explicit --no-actors retains report-only compatibility.
+
+### RX00-R1 timeout/compaction integration repair
+
+Previously, Track B could remain alive after shutdown(wait=False), latch a compaction failure during foreground coverage checks, and let main return ordinary exit 2 without typed metadata. Parent fan-in could then discard the lane and admit queued work.
+
+[Worker settlement](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py:16640) preserves non-waiting shutdown and permits at most **one shared second** to observe both producers' terminal states. An observed compaction error retains its original typed reason. If a producer remains unresolved, the child records research_worker_stop.reason=producer_terminal_state_unconfirmed, latches checkpoint_unavailable and exits **4**. It never advances to foreground publication under an unresolved producer. [Terminal metadata writes](/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py:16189) also route latched stops through the shared typed failure handler.
+
+The tests cover both an observed archive_write_failed during settlement and an unresolved worker, then verify the real parent decoder/fan-in admits only track_1. This fences later admission and publication; it does not claim cancellation or rollback of already-running provider work. Final independent reviewer disposition is still pending.
+
+### Reproducible evidence
+
+All phases used the existing guarded offline runner, fresh phase directories and the existing backend interpreter. Failed phases remain preserved. These are execution results, not prospective test plans.
+
+| Receipt phase under /Users/rogerlin/.codex/rearchitecture-evidence/20260919 | Result and interpretation |
+|---|---|
+| rx00-bridge-baseline-red | 136 passed, 3 failed, 1 skipped: reproduced the three extraction regressions. |
+| rx00-bridge-contract-red | 137 passed, 9 failed, 1 skipped: added preflight/capability cases exposed six further expected failures before repair. |
+| rx00-bridge-contract-green | 146 passed, 1 skipped after extraction/mode repairs. |
+| rx00-bridge-race-red | Both race cases failed with incorrect exit 2. |
+| rx00-bridge-race-green | Child race assertions passed; both cases then failed because the new parent fixture used an invalid pipeline ID. This was a fixture error, not acceptance. |
+| rx00-bridge-race-green-v2 | Both cases passed after correcting the synthetic ID and keeping parent state under the temporary directory. |
+| rx00-bridge-final | 262 passed, 4 failed, 1 skipped: new race fixture leaked evidence-only environment; forced linear default also conflicted with a hybrid resume test. Evidence assertions were not weakened. |
+| rx00-bridge-final-v2 | **266 passed, 1 skipped**, zero network attempts and zero source drift. Race fixture cleanup was scoped with monkeypatch; default engine hybrid, linear scenarios explicit. |
+| rx00-backend-final | Parent-run stable full gate: **4,016 passed, 0 failed, 12 skipped, 11 xfailed**; **143 guard processes**, zero network attempts and zero source drift. Saved XML/receipt inspected by this reviewer; the four current file hashes match the gate's input hashes. |
+
+Focused [results XML](/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-bridge-final-v2/results.xml) and [execution receipt](/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-bridge-final-v2/command-completed.json); full [results XML](/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-backend-final/results.xml) and [execution receipt](/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-backend-final/command-completed.json). JUnit represents the 11 expected failures as skipped entries, giving 23 skipped entries in its 4,039-case aggregate.
+
+Ruff check with --no-cache, AST parsing of all four changed files, and git diff --check passed. The focused skip is deployment-copy parity because the isolated deployed checkout is absent. The final broad gate was not duplicated by this reviewer.
+
+**Current handoff:** source remains frozen at the passing full-gate hashes. RX00 bridge implementation is ready for the parent's final race rereview/integration decision. The report is the only file changed by this documentation follow-up; no source edits or commits are needed.
