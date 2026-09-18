@@ -1,0 +1,616 @@
+{
+  "entity_types": [
+    {
+      "name": "company",
+      "description": "Corporate actor driving or supplying the data center market",
+      "attributes": [
+        {
+          "name": "sector",
+          "type": "text",
+          "description": "hyperscaler|chip_vendor|colo_operator|neocloud|ai_lab|equipment_vendor|china_tech"
+        },
+        {
+          "name": "influence_tier",
+          "type": "text",
+          "description": "high|medium|low influence on 2030 forecast"
+        },
+        {
+          "name": "capex_posture",
+          "type": "text",
+          "description": "expanding|constrained|flat; 2026 capex guidance stance"
+        },
+        {
+          "name": "jurisdiction",
+          "type": "text",
+          "description": "US|CN|other primary operating jurisdiction"
+        }
+      ],
+      "examples": [
+        "Microsoft",
+        "Alphabet",
+        "Amazon",
+        "Meta",
+        "Oracle",
+        "NVIDIA",
+        "Broadcom",
+        "Huawei",
+        "CoreWeave",
+        "OpenAI"
+      ],
+      "archetype": "actor",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "selection_rule": "Any corporate entity whose capex, chips, or contracts causally affect 2030 GW/capex/TWh path",
+      "anti_examples": [
+        "研究机构如 Dell'Oro（属 ForecastSource）",
+        "纯被引用的媒体如 CNBC"
+      ]
+    },
+    {
+      "name": "regulator",
+      "description": "Regulatory/governmental body gating power, export, or market access",
+      "attributes": [
+        {
+          "name": "jurisdiction",
+          "type": "text",
+          "description": "US federal|US state|CN|EU"
+        },
+        {
+          "name": "mandate",
+          "type": "text",
+          "description": "power_market|export_control|antitrust|telecom"
+        },
+        {
+          "name": "influence_tier",
+          "type": "text",
+          "description": "high|medium|low"
+        }
+      ],
+      "examples": [
+        "FERC",
+        "PJM",
+        "NDRC",
+        "工信部"
+      ],
+      "archetype": "institution_rule",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "selection_rule": "Government/ISO body whose rulings or rules can approve, delay, or block capacity delivery",
+      "anti_examples": [
+        "PJM 拍卖结果数据本身（事件/信号，非主体）"
+      ]
+    },
+    {
+      "name": "utility",
+      "description": "Grid operator / electric utility controlling interconnection and supply",
+      "attributes": [
+        {
+          "name": "region",
+          "type": "text",
+          "description": "e.g., PJM, ERCOT, Georgia, Dominion territory"
+        },
+        {
+          "name": "pipeline_gw",
+          "type": "text",
+          "description": "announced large-load pipeline in GW, as-of noted"
+        },
+        {
+          "name": "realization_stance",
+          "type": "text",
+          "description": "constrained|expanding|frozen"
+        }
+      ],
+      "examples": [
+        "Georgia Power",
+        "Dominion Energy",
+        "Exelon",
+        "AEP"
+      ],
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "intermediary",
+      "selection_rule": "Electric utility/ISO-side actor whose queue and rate decisions set delivery realization rates",
+      "anti_examples": [
+        "GE Vernova（设备商，属 company）",
+        "LBNL（研究机构，属 ForecastSource）"
+      ]
+    },
+    {
+      "name": "capital_provider",
+      "description": "Financier of data center debt/SPV/JV structures",
+      "attributes": [
+        {
+          "name": "capital_class",
+          "type": "text",
+          "description": "private_credit|bond_market|insurer|strategic"
+        },
+        {
+          "name": "exposure_size",
+          "type": "text",
+          "description": "approx $B committed"
+        },
+        {
+          "name": "risk_appetite",
+          "type": "text",
+          "description": "expanding|watchtightening|retrenching"
+        }
+      ],
+      "examples": [
+        "Blue Owl Capital",
+        "PIMCO",
+        "Moody's (as credit monitor context)",
+        "Swiss Re"
+      ],
+      "archetype": "actor",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "selection_rule": "Entity providing or pricing DC debt/insurance whose withdrawal would trigger credit-event scenario",
+      "anti_examples": [
+        "Meta Hyperion 项目本身（属 DataCenterFacility）"
+      ]
+    },
+    {
+      "name": "data_center_facility",
+      "description": "Trackable DC facility, cluster, or mega-project as asset object",
+      "attributes": [
+        {
+          "name": "capacity_mw",
+          "type": "text",
+          "description": "planned/operating MW"
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "description": "pipeline|under_construction|operating|paused"
+        },
+        {
+          "name": "cooling_type",
+          "type": "text",
+          "description": "liquid|air|hybrid"
+        },
+        {
+          "name": "power_source",
+          "type": "text",
+          "description": "grid|behind_the_meter|colocated_nuclear"
+        }
+      ],
+      "examples": [
+        "Hyperion (Louisiana)",
+        "Abilene",
+        "Susquehanna co-location",
+        "Stargate"
+      ],
+      "archetype": "asset_object",
+      "simulation_tier": 4,
+      "role_class": "stakeholder",
+      "selection_rule": "Named physical DC project/facility whose delivery or delay affects GW trajectory",
+      "anti_examples": [
+        "“全球装机 200 GW”这类总量指标（信号，非实体）"
+      ]
+    },
+    {
+      "name": "semiconductor_product",
+      "description": "Specific accelerator/HBM/chip generation as supply-side object",
+      "attributes": [
+        {
+          "name": "vendor",
+          "type": "text",
+          "description": "producing company"
+        },
+        {
+          "name": "supply_status",
+          "type": "text",
+          "description": "ramping|constrained|banned|shipping"
+        },
+        {
+          "name": "export_status",
+          "type": "text",
+          "description": "free|licensed|blocked_by_beijing|blocked_by_washington"
+        }
+      ],
+      "examples": [
+        "GB200 NVL72",
+        "昇腾 910C",
+        "H200",
+        "HBM (CXMT/SK Hynix)",
+        "TPU"
+      ],
+      "archetype": "asset_object",
+      "simulation_tier": 4,
+      "role_class": "stakeholder",
+      "selection_rule": "Specific chip/product generation that gates compute supply and capex conversion",
+      "anti_examples": [
+        "“HBM 瓶颈”作为抽象概念（须落到具体产品实体）"
+      ]
+    },
+    {
+      "name": "market_segment",
+      "description": "One of the four DC market tracks as trackable object",
+      "attributes": [
+        {
+          "name": "segment_share",
+          "type": "text",
+          "description": "share of global capacity, as-of"
+        },
+        {
+          "name": "revenue_basis",
+          "type": "text",
+          "description": "capex|service_revenue|physical_GW"
+        },
+        {
+          "name": "trajectory",
+          "type": "text",
+          "description": "share_gaining|share_losing|stable"
+        }
+      ],
+      "examples": [
+        "超大规模云数据中心",
+        "托管机房 colocation",
+        "企业级数据中心",
+        "边缘数据中心"
+      ],
+      "archetype": "asset_object",
+      "simulation_tier": 4,
+      "role_class": "stakeholder",
+      "selection_rule": "One of the four forecast tracks used to decompose the global market",
+      "anti_examples": [
+        "“AI 需求”等抽象主题"
+      ]
+    },
+    {
+      "name": "forecast_source",
+      "description": "Research/agency producing versioned forecasts cited as anchors",
+      "attributes": [
+        {
+          "name": "credibility_tier",
+          "type": "text",
+          "description": "S1|S2|S3|S4"
+        },
+        {
+          "name": "metric_caliber",
+          "type": "text",
+          "description": "capex|GW|TWh|IT_spend|service_revenue"
+        },
+        {
+          "name": "version_drift",
+          "type": "text",
+          "description": "recent revision direction/magnitude"
+        }
+      ],
+      "examples": [
+        "Dell'Oro",
+        "TrendForce",
+        "IEA",
+        "LBNL",
+        "Synergy",
+        "Gartner",
+        "McKinsey",
+        "JLL"
+      ],
+      "archetype": "source",
+      "simulation_tier": 3,
+      "role_class": "amplifier",
+      "selection_rule": "Organization whose published forecast series serves as anchor; passive source, never an agent",
+      "anti_examples": [
+        "NVIDIA（是公司主体非信息源）"
+      ]
+    },
+    {
+      "name": "Organization",
+      "description": "Any organization not fitting other specific organization types.",
+      "attributes": [
+        {
+          "name": "org_name",
+          "type": "text",
+          "description": "Name of the organization"
+        },
+        {
+          "name": "org_type",
+          "type": "text",
+          "description": "Type of organization"
+        }
+      ],
+      "examples": [
+        "small business",
+        "community group"
+      ]
+    }
+  ],
+  "edge_types": [
+    {
+      "name": "RELATES_TO",
+      "description": "Generic association between actors retained from seed taxonomy",
+      "source_targets": [
+        {
+          "source": "company",
+          "target": "company"
+        },
+        {
+          "source": "company",
+          "target": "regulator"
+        },
+        {
+          "source": "company",
+          "target": "utility"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "sentiment",
+          "type": "text",
+          "description": "positive|negative|neutral"
+        },
+        {
+          "name": "strength",
+          "type": "text",
+          "description": "high|medium|low"
+        }
+      ],
+      "family": "alignment",
+      "valence": "neutral",
+      "direction_semantics": "source 与 target 存在未细分的业务/互动关联"
+    },
+    {
+      "name": "REGULATES",
+      "description": "Regulator governs power access, exports, or market rules of target",
+      "source_targets": [
+        {
+          "source": "regulator",
+          "target": "utility"
+        },
+        {
+          "source": "regulator",
+          "target": "company"
+        },
+        {
+          "source": "regulator",
+          "target": "data_center_facility"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "mechanism",
+          "type": "text",
+          "description": "co_location_rule|capacity_auction|export_license|state_moratorium"
+        },
+        {
+          "name": "since_date",
+          "type": "text",
+          "description": "rule effective date"
+        },
+        {
+          "name": "strength",
+          "type": "text",
+          "description": "binding|conditional|advisory"
+        }
+      ],
+      "family": "governance",
+      "valence": "directional",
+      "direction_semantics": "source 监管/裁决 target 的市场准入或并网权"
+    },
+    {
+      "name": "FINANCES",
+      "description": "Capital provider funds facility or company via debt/JV/SPV/equity",
+      "source_targets": [
+        {
+          "source": "capital_provider",
+          "target": "data_center_facility"
+        },
+        {
+          "source": "capital_provider",
+          "target": "company"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "instrument",
+          "type": "text",
+          "description": "off_balance_jv|bond|spv_loan|equity|prepayment"
+        },
+        {
+          "name": "amount_usd_b",
+          "type": "text",
+          "description": "deal size in $B"
+        },
+        {
+          "name": "since_date",
+          "type": "text",
+          "description": "deal announcement date"
+        }
+      ],
+      "family": "economic",
+      "valence": "transactional",
+      "direction_semantics": "source 向 target 提供融资（含表外结构）"
+    },
+    {
+      "name": "SUPPLIES",
+      "description": "Company supplies chips, equipment, power gear, or capacity to buyer",
+      "source_targets": [
+        {
+          "source": "company",
+          "target": "company"
+        },
+        {
+          "source": "company",
+          "target": "data_center_facility"
+        },
+        {
+          "source": "utility",
+          "target": "data_center_facility"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "supply_type",
+          "type": "text",
+          "description": "gpu|asic|turbine|cooling|power|colo_capacity"
+        },
+        {
+          "name": "lead_time",
+          "type": "text",
+          "description": "delivery lead time"
+        },
+        {
+          "name": "strength",
+          "type": "text",
+          "description": "high|medium|low; exclusivity/dependence"
+        }
+      ],
+      "family": "economic",
+      "valence": "transactional",
+      "direction_semantics": "source 向 target 供给产品/电力/容量"
+    },
+    {
+      "name": "COMPETES_WITH",
+      "description": "Direct competition for capacity, chips, tenants, or power",
+      "source_targets": [
+        {
+          "source": "company",
+          "target": "company"
+        },
+        {
+          "source": "company",
+          "target": "market_segment"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "arena",
+          "type": "text",
+          "description": "compute|colo_wholesale|asic_vs_gpu|power_queue"
+        },
+        {
+          "name": "strength",
+          "type": "text",
+          "description": "high|medium|low"
+        }
+      ],
+      "family": "antagonism",
+      "valence": "adversarial",
+      "direction_semantics": "source 与 target 在同一赛道竞争（对称边）"
+    },
+    {
+      "name": "DEPENDS_ON",
+      "description": "Dependence on constrained input: power, HBM, packaging, financing",
+      "source_targets": [
+        {
+          "source": "company",
+          "target": "utility"
+        },
+        {
+          "source": "company",
+          "target": "semiconductor_product"
+        },
+        {
+          "source": "data_center_facility",
+          "target": "utility"
+        },
+        {
+          "source": "data_center_facility",
+          "target": "capital_provider"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "constraint_type",
+          "type": "text",
+          "description": "grid_interconnection|hbm|packaging|debt_distribution|permit"
+        },
+        {
+          "name": "lag",
+          "type": "text",
+          "description": "expected delay impact, e.g., 3yr turbine lead time"
+        },
+        {
+          "name": "strength",
+          "type": "text",
+          "description": "high|medium|low; bottleneck severity"
+        }
+      ],
+      "family": "dependency",
+      "valence": "directional",
+      "direction_semantics": "source 的扩张依赖 target 的供给/批准"
+    },
+    {
+      "name": "CONSTRAINS",
+      "description": "Causal edge: an actor or product caps the achievable capacity path",
+      "source_targets": [
+        {
+          "source": "regulator",
+          "target": "market_segment"
+        },
+        {
+          "source": "semiconductor_product",
+          "target": "market_segment"
+        },
+        {
+          "source": "utility",
+          "target": "market_segment"
+        },
+        {
+          "source": "capital_provider",
+          "target": "market_segment"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "sign",
+          "type": "text",
+          "description": "negative cap or positive enable"
+        },
+        {
+          "name": "magnitude",
+          "type": "text",
+          "description": "e.g., realization-rate haircut 10–35%"
+        },
+        {
+          "name": "lag",
+          "type": "text",
+          "description": "when the constraint bites (e.g., 2028)"
+        }
+      ],
+      "family": "causal",
+      "valence": "directional",
+      "direction_semantics": "source 对 target（赛道产出）施加物理/监管/融资上限"
+    },
+    {
+      "name": "FORECASTS",
+      "description": "Forecast source publishes projection for a segment or product",
+      "source_targets": [
+        {
+          "source": "forecast_source",
+          "target": "market_segment"
+        },
+        {
+          "source": "forecast_source",
+          "target": "data_center_facility"
+        },
+        {
+          "source": "forecast_source",
+          "target": "semiconductor_product"
+        }
+      ],
+      "attributes": [
+        {
+          "name": "metric",
+          "type": "text",
+          "description": "GW|TWh|capex_usd|penetration_pct"
+        },
+        {
+          "name": "version_date",
+          "type": "text",
+          "description": "publication version date (mandatory)"
+        },
+        {
+          "name": "credibility_tier",
+          "type": "text",
+          "description": "S1–S4"
+        }
+      ],
+      "family": "information",
+      "valence": "directional",
+      "direction_semantics": "source 发布关于 target 的预测（被动信息源，非能动主体）"
+    }
+  ],
+  "analysis_summary": "预测问题聚焦 2026–2030 全球数据中心市场的三口径（capex/GW/TWh）路径，核心变量是队列兑现率、电网与设备交期、债务化融资与美中芯片管制。角色阵容以企业（14 家超大规模厂商、芯片商、新云、资本方）与监管机构（FERC/PJM）为主。本体保留种子类型 company/regulator 与 RELATES_TO，新增 6 个领域类型：utility（电网门禁链的关键中介）、capital_provider（融资环与信用情景触发者）、data_center_facility 与 semiconductor_product（可追踪物理客体）、market_segment（四赛道预测客体）、forecast_source（IEA/TrendForce/Dell'Oro 等被引用预测机构，明确标为被动信息源 tier=3）。关系覆盖治理（REGULATES）、经济（FINANCES/SUPPLIES）、对抗（COMPETES_WITH）、依赖（DEPENDS_ON）与高价值因果边（CONSTRAINS，带 sign/lag/magnitude 以刻画兑现率折减与 2028 电力分岔），以及信息边（FORECASTS，强制携带版本日期以执行口径纪律）。"
+}

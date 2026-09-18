@@ -130,8 +130,11 @@
     'run.midterms.title': { en: 'The 2026 US midterms — House & Senate control scenarios', zh: '2026 年美国中期选举 —— 参众两院控制权情景' },
     'run.trade.title': { en: "America's trading system in 2028 — tariffs, reshoring & the AI-productivity race", zh: '2028 年美国贸易体系 —— 关税、供应链回流与 AI 生产力竞赛' },
     'run.grid.title': { en: 'Global grid-scale energy storage through 2040', zh: '2040 年前全球电网级储能产业' },
+    'run.dc.title': { en: 'Global data centers to 2030 — the US–China compute race', zh: '2030 年前全球数据中心市场 —— 中美算力竞赛' },
     'card.grid.title': { en: 'Global grid-scale energy storage through 2040', zh: '2040 年前全球电网级储能产业' },
+    'card.dc.title': { en: 'Global data centers to 2030 — the US–China compute race', zh: '2030 年前全球数据中心市场 —— 中美算力竞赛' },
     'card.grid.meta': { en: '29-round calendar simulation · 19 personas · 183-node knowledge graph · 11 binary forecasts & 5 scenarios — LFP vs. sodium-ion, flow, thermal, CAES & long-duration routes across 8 regions, with an additive decision-channel simulation that moved the base case to LDES-Diversified', zh: '29 轮日历模拟 · 19 位人格 · 183 节点知识图谱 · 11 条二元预测与 5 个情景 —— 磷酸铁锂对钠离子、液流、热储、压缩空气与长时储能路线，覆盖 8 大区域；决策通道模拟真实改变了预测，将基准情景移至「长时储能多元化」' }
+    'card.dc.meta': { en: '17-round calendar simulation · 18 personas · 107-node knowledge graph · 14 binary forecasts & 5 scenarios — revenue/CAGR & IT-capacity outlook, colocation/hyperscale/enterprise/edge split, power & cooling constraints, and the US–China compute race, run end-to-end on GLM-5.3', zh: '17 轮日历模拟 · 18 人格 · 107 节点知识图谱 · 14 条二元预测与 5 情景 —— 营收/CAGR 与 IT 装机容量展望、托管/超大规模/企业级/边缘细分、电力与散热约束、中美算力竞赛，全程由 GLM-5.3 线性研究引擎完成' },
   };
 
   var lang = null;

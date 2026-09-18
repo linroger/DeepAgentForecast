@@ -1,0 +1,608 @@
+[
+  {
+    "title": "AI Buildout Maintains Momentum as Data Center Capex Surpasses $3 Trillion by 2030 — Dell'Oro Group",
+    "url": "https://www.delloro.com/news/ai-buildout-maintains-momentum-as-data-center-capex-surpasses-3-trillion-by-2030",
+    "tier": "S1",
+    "date": "2026-08-18",
+    "supports": [
+      "2030单年capex>$3T",
+      "Top4约占全球一半"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Data Center Capex to Grow at 21 Percent CAGR Through 2029 — Dell'Oro Group（旧版）",
+    "url": "https://www.delloro.com/news/data-center-capex-to-grow-at-21-percent-cagr-through-2029",
+    "tier": "S1",
+    "date": "2025-08-06",
+    "supports": [
+      "版本漂移对照：$1.2T@2029"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Energy demand from AI – Energy and AI — IEA",
+    "url": "https://www.iea.org/reports/energy-and-ai/energy-demand-from-ai",
+    "tier": "S1",
+    "date": "2025-04",
+    "supports": [
+      "全球用电415→~945 TWh",
+      "美中占增量近80%"
+    ],
+    "independent": true,
+    "jurisdiction": "International",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "United States Data Center Energy Usage Report: 2025 Update — LBNL",
+    "url": "https://eta.lbl.gov/publications/united-states-data-center-energy-2025",
+    "tier": "S1",
+    "date": "2026-06",
+    "supports": [
+      "美国2030用电649 TWh（521–843）"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Queued Up: Characteristics of Power Plants Seeking Transmission Interconnection — LBNL",
+    "url": "https://emp.lbl.gov/queues",
+    "tier": "S1",
+    "supports": [
+      "并网兑现基率13%、队列>2,060 GW"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Global data center sector to nearly double to 200GW amid AI infrastructure boom — JLL",
+    "url": "https://www.jll.com/en-us/newsroom/global-data-center-sector-to-nearly-double-to-200gw-amid-ai-infrastructure-boom",
+    "tier": "S1",
+    "date": "2026-01-06",
+    "supports": [
+      "103→200 GW设施容量",
+      "2030债务$870B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Global Power Demand Capacity for Data Centers Expected to Rise 31% YoY in 2026 — TrendForce",
+    "url": "https://www.trendforce.com/presscenter/news/20260916-13237.html",
+    "tier": "S1",
+    "date": "2026-09-16",
+    "supports": [
+      "122.9→161→490.7 GW",
+      "电网缺口268 GW"
+    ],
+    "independent": true,
+    "jurisdiction": "Taiwan",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Tech AI spending approaches $700 billion in 2026, cash taking big hit — CNBC",
+    "url": "https://www.cnbc.com/2026/02/06/google-microsoft-meta-amazon-ai-cash.html",
+    "tier": "S2",
+    "date": "2026-02-06",
+    "supports": [
+      "四大厂capex~$700B",
+      "FCF $237B→$200B",
+      "Amazon TTM FCF −$7.6B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Oracle Announces Record Q4 and FY 2026 Results — Oracle IR",
+    "url": "https://investor.oracle.com/investor-news/news-details/2026/Oracle-Announces-Record-Q4-and-FY-2026-Results-Driven-by-Cloud-Infrastructure--Cloud-Applications/default.aspx",
+    "tier": "S1",
+    "date": "2026-06",
+    "supports": [
+      "RPO $638B",
+      "$75B客户预付",
+      "FY27 capex $90B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "OpenAI resets spend expectations, targets around $600 billion by 2030 — CNBC",
+    "url": "https://www.cnbc.com/2026/02/20/openai-resets-spend-expectations-targets-around-600-billion-by-2030.html",
+    "tier": "S2",
+    "date": "2026-02-20",
+    "supports": [
+      "OpenAI 2030支出目标~$600B（单源）"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Meta in $27 billion financing deal with Blue Owl Capital for Louisiana data center — Reuters",
+    "url": "https://www.reuters.com/technology/meta-forms-joint-venture-with-blue-owl-capital-louisiana-data-center-2025-10-21",
+    "tier": "S1",
+    "date": "2025-10-21",
+    "supports": [
+      "Hyperion JV $27.3B、6.581%、A+"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "NVIDIA Announces Financial Results for Fourth Quarter and Fiscal 2026 — NVIDIA Newsroom",
+    "url": "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-fourth-quarter-and-fiscal-2026",
+    "tier": "S1",
+    "supports": [
+      "FY26营收$215.9B、Q4 DC $62.3B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "华为拟明年生产约60万枚昇腾910C芯片 — RFI（转引Bloomberg）",
+    "url": "https://www.rfi.fr/cn/中国/20250929-华为拟明年生产约60万枚昇腾910c芯片-产量约为今年两倍",
+    "tier": "S2",
+    "date": "2025-09-29",
+    "supports": [
+      "昇腾910C 2026计划60万颗、裸片160万"
+    ],
+    "independent": true,
+    "jurisdiction": "France/China",
+    "lang": "zh",
+    "source_origin": "cited"
+  },
+  {
+    "title": "美国刚授权有条件向中国出口英伟达芯片 中国海关据报限制英伟达H200入境 — RFI",
+    "url": "https://www.rfi.fr/cn/中国/20260114-美国授权有条件向中国出口英伟达芯片-中国海关据报限制英伟达h200入境",
+    "tier": "S2",
+    "date": "2026-01-14",
+    "supports": [
+      "H200双向管制时间线、200万颗订单"
+    ],
+    "independent": true,
+    "jurisdiction": "France/China",
+    "lang": "zh",
+    "source_origin": "cited"
+  },
+  {
+    "title": "PJM Capacity Auction Procures 138,318 MW of Generation Resources — PJM Inside Lines",
+    "url": "https://insidelines.pjm.com/pjm-capacity-auction-procures-138318-mw-of-generation-resources-as-work-continues-to-address-growing-electricity-demand",
+    "tier": "S1",
+    "date": "2025-07-22",
+    "supports": [
+      "2026/27 BRA $329.17/MW-day、$16.1B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "FACT SHEET | FERC Directs Nation's Largest Grid Operator to Create New Rules — FERC",
+    "url": "https://www.ferc.gov/news-events/news/fact-sheet-ferc-directs-nations-largest-grid-operator-create-new-rules-embrace",
+    "tier": "S1",
+    "date": "2025-12-18",
+    "supports": [
+      "共址令193 FERC ¶61,217、四种输电服务选项"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "FERC rejects interconnection pact for Talen-Amazon data center deal — Utility Dive",
+    "url": "https://www.utilitydive.com/news/ferc-interconnection-isa-talen-amazon-data-center-susquehanna-exelon/731841",
+    "tier": "S2",
+    "date": "2024-11-01",
+    "supports": [
+      "2024-11 ISA否决"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Georgia Power's large load pipeline shrinks by 6 GW — Utility Dive",
+    "url": "https://www.utilitydive.com/news/georgia-power-large-load-data-centers/806300",
+    "tier": "S2",
+    "supports": [
+      "GA管线净缩6 GW至50.9 GW、65%投机"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Data centers drive record surge in GE Vernova power equipment orders — Power Engineering",
+    "url": "https://www.power-eng.com/gas/turbines/data-centers-drive-record-surge-in-ge-vernova-power-equipment-orders-as-turbine-slots-tighten-through-2030",
+    "tier": "S2",
+    "supports": [
+      "燃机合同~100 GW、2029–30余~10 GW、交期3年"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "PJM faces 2030 reliability crisis if data center load growth continues — Utility Dive",
+    "url": "https://www.utilitydive.com/news/pjms-reliability-could-start-failing-by-2030-if-data-center-growth-continu/830405",
+    "tier": "S2",
+    "supports": [
+      "2027/28缺口6,623 MW、可靠性临界"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Gartner Forecasts Worldwide IT Spending to Grow 14.2% in 2026 — Gartner",
+    "url": "https://www.gartner.com/en/newsroom/press-releases/2026-07-27-gartner-forecasts-worldwide-it-spending-to-grow-14-point-2-percent-in-2026-totaling-6-point-37-trillion",
+    "tier": "S1",
+    "date": "2026-07-27",
+    "supports": [
+      "DC系统$506B→$822B、三修轨迹"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "The cost of compute power: A $7 trillion race — McKinsey",
+    "url": "https://www.mckinsey.com/industries/technology-media-and-telecommunications/our-insights/the-cost-of-compute-a-7-trillion-dollar-race-to-scale-data-centers",
+    "tier": "S1",
+    "date": "2025-04-28",
+    "supports": [
+      "累计$6.7T、219 GW需求侧"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Liquid Cooling Becomes Standard for High-End AI Infrastructure — TrendForce",
+    "url": "https://www.trendforce.com/presscenter/news/20260817-13183.html",
+    "tier": "S1",
+    "date": "2026-08-17",
+    "supports": [
+      "液冷渗透53%@2026、Google TPU>80%液冷"
+    ],
+    "independent": true,
+    "jurisdiction": "Taiwan",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Price Rally Drives 4Q25 DRAM Revenue Up 29.4% — TrendForce",
+    "url": "https://www.trendforce.com/presscenter/news/20260226-12937.html",
+    "tier": "S1",
+    "date": "2026-02-26",
+    "supports": [
+      "DRAM合约价+45–50% QoQ、1Q26E +90–95%"
+    ],
+    "independent": true,
+    "jurisdiction": "Taiwan",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Client Alert: Emerging Litigation Risks in Financing AI Data Centers Boom — Quinn Emanuel",
+    "url": "https://www.quinnemanuel.com/the-firm/publications/client-alert-emerging-litigation-risks-in-financing-ai-data-centers-boom",
+    "tier": "S2",
+    "date": "2026-03-13",
+    "supports": [
+      "AI收入$60B vs capex $400B、SPV表外债务>$120B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "I. Progress and peril — BIS Annual Economic Report 2026",
+    "url": "https://www.bis.org/publications/aer-2026/progress-peril",
+    "tier": "S1",
+    "date": "2026-06-28",
+    "supports": [
+      "点名表外回租杠杆、AI贡献美国GDP约1pp"
+    ],
+    "independent": true,
+    "jurisdiction": "International",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "'Big Short' investor Michael Burry accuses AI hyperscalers — CNBC",
+    "url": "https://www.cnbc.com/2025/11/11/big-short-investor-michael-burry-accuses-ai-hyperscalers-of-artificially-boosting-earnings.html",
+    "tier": "S2",
+    "date": "2025-11-11",
+    "supports": [
+      "折旧指控$176B（未核实）"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "North America Data Center Trends H2 2025 — CBRE",
+    "url": "https://www.cbre.com/insights/books/north-america-data-center-trends-h2-2025",
+    "tier": "S2",
+    "supports": [
+      "北美空置率1.4%、NoVA 0.3–0.5%"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "China's data center capacity set to top 60 GW by 2030 — Rystad Energy",
+    "url": "https://www.rystadenergy.com/news/chinas-data-center-capacity-doubling-of-power",
+    "tier": "S3",
+    "supports": [
+      "中国32→40→60 GW、289 TWh（单源）"
+    ],
+    "independent": true,
+    "jurisdiction": "Norway",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "中国移动公布2025年全年业绩",
+    "url": "https://www.10086.cn/aboutus/news/groupnews/index_detail_54698.html",
+    "tier": "S1",
+    "date": "2026-03",
+    "supports": [
+      "移动2026 capex ¥136.6B（−9.5%）、算力+62.4%"
+    ],
+    "independent": true,
+    "jurisdiction": "China",
+    "lang": "zh",
+    "source_origin": "cited"
+  },
+  {
+    "title": "深瞳丨利用率仅三成，'沉睡'的算力如何激活 — 科技日报",
+    "url": "https://www.stdaily.com/web/gdxw/2025-07/17/content_371093.html",
+    "tier": "S2",
+    "date": "2025-07-17",
+    "supports": [
+      "智算中心平均利用率约30%、张云泉密度评论"
+    ],
+    "independent": true,
+    "jurisdiction": "China",
+    "lang": "zh",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Tencent joins China's AI spending race with 2025 capex boost — Reuters",
+    "url": "https://www.reuters.com/technology/tencent-joins-chinas-ai-spending-race-with-2025-capex-boost-2025-03-19",
+    "tier": "S2",
+    "date": "2025-03-19",
+    "supports": [
+      "腾讯2025年capex加码"
+    ],
+    "independent": true,
+    "jurisdiction": "UK/China",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "EXCLUSIVE: ByteDance plans $20 billion capex in 2025 — Reuters（单源）",
+    "url": "https://www.reuters.com/technology/bytedance-plans-20-billion-capex-2025-mostly-ai-sources-say-2025-01-23",
+    "tier": "S2",
+    "date": "2025-01-23",
+    "supports": [
+      "字节2025 capex约$20B（匿名信源，永久B3）"
+    ],
+    "independent": true,
+    "jurisdiction": "UK/China",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Nvidia CEO praises Trump move to scrap some AI export curbs — Reuters",
+    "url": "https://www.reuters.com/world/china/nvidia-says-us-export-controls-ai-china-were-a-failure-2025-05-21",
+    "tier": "S2",
+    "date": "2025-05-21",
+    "supports": [
+      "黄仁勋'管制失败'表态"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "CoreWeave 4Q25 Earnings Press Release (EX-99.1) — SEC",
+    "url": "https://www.sec.gov/Archives/edgar/data/1769628/000176962826000094/coreweave4q25earningspress.htm",
+    "tier": "S1",
+    "supports": [
+      "FY25收入$5.131B、积压$66.8B、微软占2024收入62%"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Broadcom Q4 and FY2025 Financial Results — Broadcom IR",
+    "url": "https://investors.broadcom.com/news-releases/news-release-details/broadcom-inc-announces-fourth-quarter-and-fiscal-year-2025",
+    "tier": "S1",
+    "supports": [
+      "AI收入FY25>$20B、单季~$8.4B（+106%）"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Alphabet Q2 2026 Earnings Call / EX-99.1 — SEC",
+    "url": "https://www.sec.gov/Archives/edgar/data/1652044/000165204426000066/googexhibit991q22026.htm",
+    "tier": "S1",
+    "date": "2026-07-22",
+    "supports": [
+      "Alphabet 2026 capex $195–205B、云积压$514B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Meta Reports Second Quarter 2026 Results — Meta IR",
+    "url": "https://investor.atmeta.com/investor-news/press-release-details/2026/Meta-Reports-Second-Quarter-2026-Results/default.aspx",
+    "tier": "S1",
+    "date": "2026-07",
+    "supports": [
+      "Q2 capex $31.08B、FCF $784M、指引$130–145B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Microsoft FY2026 Q4 Earnings Conference Call — Microsoft IR",
+    "url": "https://www.microsoft.com/en-us/investor/events/fy-2026/earnings-fy-2026-q4",
+    "tier": "S1",
+    "date": "2026-07",
+    "supports": [
+      "CY26 ~$175B重分类、PP&E增量$115.9B"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "ADJUSTING IMPORTS OF SEMICONDUCTORS… INTO THE UNITED STATES — White House (232条款)",
+    "url": "https://www.whitehouse.gov/presidential-actions/2026/01/adjusting-imports-of-semiconductors-semiconductor-manufacturing-equipment-and-their-derivative-products-into-the-united-states",
+    "tier": "S1",
+    "date": "2026-01-14",
+    "supports": [
+      "25%从价关税、2026-01-15生效"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "sigma insights 07/2026: Insuring AI — Swiss Re",
+    "url": "https://www.swissre.com/institute/research/sigma-research/sigma-insights-07-2026-insuring-ai-data-centre-risks.html",
+    "tier": "S2",
+    "date": "2026-03",
+    "supports": [
+      "保费$10.6B→$24.2B、液冷占损失24%"
+    ],
+    "independent": true,
+    "jurisdiction": "Switzerland",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Six Things to Know About BNEF's New US Data Center Capacity Outlook — BloombergNEF",
+    "url": "https://about.bnef.com/insights/data-centers/six-things-to-know-about-bnefs-new-us-data-center-capacity-outlook",
+    "tier": "S2",
+    "date": "2026-07",
+    "supports": [
+      "美国2030 118 GW（较前版+52%）、~100 GW预测偏差带"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Hyperscale Operators to Account for 67% of all Data Center Capacity by 2031 — Synergy Research Group",
+    "url": "https://www.srgresearch.com/articles/hyperscale-operators-to-account-for-67-of-all-data-center-capacity-by-2031",
+    "tier": "S2",
+    "supports": [
+      "超大规模份额48%→67%@2031、~50%容量在租赁托管设施"
+    ],
+    "independent": true,
+    "jurisdiction": "UK",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "万国数据2025年第二季度财报（REITs挂牌）— GDS",
+    "url": "https://www.gds-services.com/zh_cn/newsshow_322.html",
+    "tier": "S1",
+    "supports": [
+      "GDS上架率77.5%、首批数据中心公募REITs"
+    ],
+    "independent": true,
+    "jurisdiction": "China",
+    "lang": "zh",
+    "source_origin": "cited"
+  },
+  {
+    "title": "世纪互联2025年财报 — VNET",
+    "url": "https://www.vnet.com/portal/article/index/cid/14/id/1072.html",
+    "tier": "S1",
+    "supports": [
+      "营收¥99.5亿（+20.5%）、交付404 MW、字节约500 MW订单"
+    ],
+    "independent": true,
+    "jurisdiction": "China",
+    "lang": "zh",
+    "source_origin": "cited"
+  },
+  {
+    "title": "AI Value Capture - The Shift To Model Labs — SemiAnalysis",
+    "url": "https://newsletter.semianalysis.com/p/ai-value-capture-the-shift-to-model",
+    "tier": "S3",
+    "date": "2026-04",
+    "supports": [
+      "Anthropic ARR $9B→$44B+、毛利率38%→70%+"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  },
+  {
+    "title": "Uptime Institute 2025 Annual Survey Report",
+    "url": "https://datacenter.uptimeinstitute.com/rs/711-RIA-145/images/2025.Annual.Survey.Report.pdf?version=0",
+    "tier": "S2",
+    "supports": [
+      "全球存量平均PUE 1.54、主流机架10–30 kW"
+    ],
+    "independent": true,
+    "jurisdiction": "US",
+    "lang": "en",
+    "source_origin": "cited"
+  }
+]

@@ -1,0 +1,1387 @@
+{
+  "central_question": "到2030年底，全球数据中心市场将以何种形态落地：全球累计IT装机容量、单年资本开支将达到什么水平（基准情景190–210 GW、$2.5–3.2T），管道兑现率、电力约束与融资结构如何决定情景分岔（A基准40%/B电力受限30%/C财务紧缩20%/D上行10%）？",
+  "as_of_date": "2026-09-16",
+  "situation_brief": {
+    "current_situation": "截至2026年9月，全球数据中心进入队列驱动的物理扩张期：2025年全球容量122.9 GW，2026年预计161 GW（+31%）；四大美国超大规模厂商2026年capex指引合计约$735–760B，但合计FCF已从$237B（2024）降至$200B（2025），Amazon TTM FCF为−$7.6B。融资结构加速债务化与表外化：Meta–Blue Owl Hyperion $27.3B JV债券、Oracle FY26举债$43B、SPV表外债务两年超$120B；Moody's估$1.2T租约承诺中$820B尚未起租。供给端，燃机2028年前售罄（GE Vernova 2029–30仅余约10 GW档期）、变压器交期约3年，PJM 2027/28拍卖首次出现6,623 MW可靠性缺口。",
+    "context": "2024–2026年AI capex基线发生爆炸式上修：Dell'Oro对2030年单年capex的预测七个月内近乎翻倍（$1.2T@2029→>$3T@2030），Gartner九个月内三度上修至2026年$822B。需求真实（Oracle RPO $638B、NVIDIA自述bookings $500B→$1T），但历史并网兑现基率仅13%（LBNL），佐治亚管线单季14.3 GW退出、约65%公告MW被评投机，表明未打折的管道数字系统性注水。美中走出分化：美国靠债务化维持军备竞赛，中国'总量降、算力升'（中国移动2026总capex −9.5%但算力投资+62.4%），且芯片供给由北京海关而非华盛顿许可证决定。",
+    "dynamics": "三股力量在拉锯：（1）需求上修循环——指引与第三方预测形成同向反馈环，迄今所有看空信号（微软租约重分类、GA管线收缩）均被支出上修覆盖；（2）电力硬约束在2026–2028年为物理性（燃机槽位+交期），2028年后转为监管分配型（FERC共址令、州级暂停令、约370项州法案）；（3）融资环脆弱性累积——建设端融资先于需求端合同锁定，若2027年AI收入验证失败（Bain估需$2T年收入），未起租租约与RPO将首先被重谈。变现在分化：Anthropic ARR $9B→$44B+且毛利率70%+，而OpenAI将2030支出目标下修至约$600B。",
+    "fault_lines": [
+      "管道兑现率：LBNL历史基率13% vs 公告管线（ERCOT 410 GW、Dominion 53.8 GW）之间的5–10倍口径差",
+      "AI收入与capex缺口：2025年AI营收约$60B vs capex约$400B（Quinn Emanuel）",
+      "电力分配：FERC共址规则下共址负荷可被削减 vs 绕网自发电（燃料电池/就地燃气）",
+      "表外杠杆：$820B未起租租约+>$120B SPV债务 vs BIS点名的退出条款风险",
+      "折旧会计：Burry指控GPU折旧年限人为拉长、2026–28年少提约$176B（未核实）",
+      "中国芯片供给：华盛顿放行H200 vs 北京海关次日限入；华为昇腾60万颗910C产能上限 vs HBM瓶颈"
+    ],
+    "catalysts": [
+      "2026Q4–2027Q2按期通电率：若2026实际交付低于管线20%，Discount情景概率上调10个百分点",
+      "Oracle RPO季度环比：单季下降超$100B即触发基准情景证伪（当前$638B）",
+      "2027年底美国单年capex是否跌破$1.5T",
+      "PJM 2028/29拍卖：缺口>5,000 MW扩大则政治收紧概率显著上升",
+      "华为昇腾2026实际产量 vs 60万颗计划（低于40万颗则中国智算缺口显性化）",
+      "未起租租约重谈率：单季>5%上调Discount，>10%切换信用收缩情景",
+      "DC ABS利差较BBB企业债走阔超250bp",
+      "Anthropic级变现（ARR×5、毛利率70%+）是否扩散至第二梯队实验室"
+    ]
+  },
+  "actors": [
+    {
+      "name": "Microsoft",
+      "type": "Organization",
+      "role": "全球最大云厂商之一，OpenAI最大股东（约27%权益），四大capex军备竞赛参与者",
+      "stance": "CFO Amy Hood自述'计划不变'；CY2026 capex经折旧/租赁重分类（15→25年）后约$175B",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.92,
+        "basis": "四大厂占全球capex约一半，微软为OpenAI经济性锁定者，其capex与租赁决策直接决定美国交付量"
+      },
+      "description": "美国超大规模云与软件厂商（Azure、OpenAI主要计算供应商），纳斯达克上市公司",
+      "aliases": [
+        "MSFT",
+        "微软"
+      ],
+      "goals": [
+        "锁定OpenAI经济性（PBC约27%权益）",
+        "维持Azure容量稀缺叙事",
+        "平衡capex扩张与股东回报"
+      ],
+      "constraints": [
+        "FY26 PP&E增量$115.9B的融资压力",
+        "折旧会计重分类争议",
+        "电力与许可获取"
+      ],
+      "vulnerabilities": [
+        "Burry折旧操纵指控（2026–28年少提约$176B，未核实）",
+        "CoreWeave等新云收入集中度（占其2024收入62%）"
+      ],
+      "stated_vs_revealed": "公开称'计划不变'，但2025年初曾取消2GW租赁订单（TD Cowen），且经历15→25年折旧重分类使CY26口径由~$190B降至~$175B",
+      "risk_tolerance": "medium",
+      "memory": "微软知道自己的折旧/租赁重分类细节、OpenAI持股安排与Azure容量计划；外界不知道重分类对同比序列的精确影响。"
+    },
+    {
+      "name": "Alphabet (Google)",
+      "type": "Organization",
+      "role": "四大超大规模厂商之一，TPU自研路线代表，垂直整合液冷先行者",
+      "stance": "2026 capex指引$195–205B，CEO Pichai自述'supply constrained'",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "2026年capex指引四大厂中最高之一，TPU自给改变NVIDIA依赖与ASIC结构变量"
+      },
+      "description": "谷歌母公司，全球云与AI厂商，自研TPU加速器，纳斯达克上市",
+      "aliases": [
+        "Google",
+        "GOOG",
+        "谷歌"
+      ],
+      "goals": [
+        "TPU自给降低对NVIDIA依赖",
+        "扩大云份额（云积压$514B）",
+        "维持搜索+AI变现"
+      ],
+      "constraints": [
+        "长期债务一年增至4倍（$46.5B）并新做$84.75B股权融资",
+        "电力与燃机槽位"
+      ],
+      "assets": [
+        "Virgo互联100万加速器TPU集群规划",
+        ">80%自部署TPU集群已液冷"
+      ],
+      "risk_tolerance": "high",
+      "memory": "谷歌知道自己TPU产能与液冷机队比例；市场知道其supply constrained表态与融资结构。"
+    },
+    {
+      "name": "Amazon",
+      "type": "Organization",
+      "role": "四大超大规模厂商之一，AWS母公司，现金capex口径最激进的买家",
+      "stance": "2026年现金capex约$220B（2026-07-30上调），Jassy自述2026–2027年容量均不足",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "2026年capex指引约$220B为四厂最大，其FCF转负是融资结构脆弱性最显性案例"
+      },
+      "description": "美国电商与云计算（AWS）巨头，纳斯达克上市",
+      "aliases": [
+        "AMZN",
+        "亚马逊",
+        "AWS"
+      ],
+      "vulnerabilities": [
+        "TTM FCF −$7.6B；2026年FCF预计−$17B至−$28B",
+        "内存等组件成本上升写入指引"
+      ],
+      "stated_vs_revealed": "宣称容量稀缺支撑AWS定价，同时以负FCF运行，依赖外部融资补差",
+      "risk_tolerance": "high",
+      "memory": "亚马逊知道自己容量计划与组件通胀敞口；市场知道其负FCF与$220B指引。"
+    },
+    {
+      "name": "Meta",
+      "type": "Organization",
+      "role": "四大超大规模厂商之一，表外SPV/JV融资结构的开创者",
+      "stance": "FY26 capex指引$130–145B（含融资租赁本金），Q2'26单季capex $31.08B、季度FCF仅$784M",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.88,
+        "basis": "Hyperion $27.3B表外JV确立行业融资范式，三源采购（Broadcom/AMD/NVIDIA）影响供应链格局"
+      },
+      "description": "美国社交与AI厂商（Llama模型家族），纳斯达克上市",
+      "aliases": [
+        "META",
+        "Facebook",
+        "脸书"
+      ],
+      "goals": [
+        "以SPV/JV保护FCF同时扩张AI训练容量",
+        "多供应商采购分散风险"
+      ],
+      "constraints": [
+        "季度FCF仅$784M；Barclays预计2027–28 FCF转负"
+      ],
+      "vulnerabilities": [
+        "Burry指控其2028年利润高估约21%（未核实）",
+        "表外结构被BIS点名"
+      ],
+      "assets": [
+        "Hyperion（路易斯安那）等超大项目",
+        "AMD 6GW MI450订单、Broadcom ASIC合作"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Meta知道自己JV结构与FCF压力细节；市场知道Hyperion条款与季度FCF。"
+    },
+    {
+      "name": "Oracle",
+      "type": "Organization",
+      "role": "杠杆化AI基础设施极端案例：RPO $638B、FY27 capex指引$90B、FCF −$23.7B",
+      "stance": "以RPO驱动举债扩张，资产出表+燃料电池绕开电网队列",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "Oracle RPO环比变化是卷级证伪触发器（单季降超$100B即证伪基准情景），其融资结构是需求侧最大单一重定价风险"
+      },
+      "description": "美国企业软件与OCI云厂商，纽交所上市，FYE 5月31日",
+      "aliases": [
+        "ORCL",
+        "甲骨文"
+      ],
+      "vulnerabilities": [
+        "单一超大客户集中（市场指向OpenAI $300B合同，WSJ单一来源、双方未公布，B3级）",
+        "FCF −$23.7B、FY27融资需求约$40B"
+      ],
+      "risk_tolerance": "high",
+      "memory": "Oracle知道自己RPO合同细节与客户集中度；外界无法核实OpenAI合同金额。"
+    },
+    {
+      "name": "OpenAI",
+      "type": "Organization",
+      "role": "最大单一AI算力需求方，其支出承诺与LOI兑现决定供应商融资环耐久性",
+      "stance": "2026-02将2030年前算力支出目标下修至约$600B（此前承诺约$1.4T，单源）",
+      "influence": "high",
+      "grade": "B3",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.9,
+        "basis": "OpenAI LOI是否转签约是2027–30管道重定价的首要先导变量；其收入未审计是全行业循环性判断最大盲区"
+      },
+      "description": "美国AI实验室（ChatGPT），重组为OpenAI Group PBC（基金会约26%、微软约27%）",
+      "aliases": [
+        "OpenAI Group PBC"
+      ],
+      "goals": [
+        "锁定10GW+算力",
+        "维持ChatGPT变现增长（>9亿WAU）"
+      ],
+      "constraints": [
+        "2025年营收$13.1B、现金消耗$8B vs 累计承诺约$1.4T",
+        "收入未审计"
+      ],
+      "assets": [
+        "已签约AWS $38B/7年、CoreWeave约$22.4B、AMD 6GW+1.6亿股warrant、NVIDIA $100B/10GW LOI（据报已搁置）"
+      ],
+      "risk_tolerance": "high",
+      "memory": "OpenAI知道自己真实收入与LOI状态；外界仅有单源报道与未审计数字。"
+    },
+    {
+      "name": "NVIDIA",
+      "type": "Organization",
+      "role": "AI加速器主导供应商，供应商融资环核心节点，设定机架级热/液冷规范",
+      "stance": "自述bookings $500B（2025-10）→'2027年前$1T'（2026-03）——需求可见性而非合同",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.93,
+        "basis": "加速器供给与价格决定全行业capex物化；其向客户的股权/认股权证投资构成循环融资环；中国管制挤压其收入"
+      },
+      "description": "美国GPU/AI加速器厂商，GB200/GB300 NVL72液冷机架规范制定者",
+      "aliases": [
+        "NVDA",
+        "英伟达"
+      ],
+      "goals": [
+        "维持数据中心收入增长（FY26 DC收入$193.7B）",
+        "对冲中国份额损失（95%→约50%）",
+        "以投资绑定客户需求"
+      ],
+      "constraints": [
+        "CoWoS先进封装产能（2026年底120–140k wpm）",
+        "中国双向管制（H20/H200被中方阻断）",
+        "大客户自研ASIC反噬毛利"
+      ],
+      "vulnerabilities": [
+        "对OpenAI/xAI/CoreWeave的循环投资结构被达拉斯联储与芝加哥联储点名",
+        "bookings口径为可见性而非已签合同"
+      ],
+      "risk_tolerance": "high",
+      "memory": "NVIDIA知道真实合同vs bookings口径之差；外界无法区分已签合同与可见性指标。"
+    },
+    {
+      "name": "FERC",
+      "type": "Government",
+      "role": "美国联邦能源监管委员会：共址规则门禁的决定者",
+      "stance": "2025-12-18共址令（193 FERC ¶61,217）指示PJM建立四种输电服务选项，过渡期共址负荷可被削减",
+      "influence": "high",
+      "grade": "B1",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "FERC共址规则直接决定美国2028年后'监管分配型'电力约束下谁能拿到电"
+      },
+      "description": "美国联邦能源监管委员会，管辖跨州输电与批发电力市场",
+      "aliases": [
+        "Federal Energy Regulatory Commission"
+      ],
+      "risk_tolerance": "low",
+      "memory": "FERC知道自己共址规则的技术细节与PJM申报进度。"
+    },
+    {
+      "name": "PJM Interconnection",
+      "type": "Organization",
+      "role": "美国最大RTO，容量拍卖价格信号与可靠性缺口的量化载体",
+      "stance": "2027/28 BRA约$333.44/MW-day、$16.4B，首次未满足可靠性需求（缺6,623 MW）；自称拍卖仅推升零售电费1.5–5%",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "high",
+        "score": 0.82,
+        "basis": "PJM拍卖出清价与缺口是电力约束情景（B，30%权重）的核心可监测指标，其2025–2030规划预期新增约30 GW数据中心负荷"
+      },
+      "description": "美国PJM区域输电组织（RTO），覆盖美国东部13州+DC",
+      "aliases": [
+        "PJM"
+      ],
+      "risk_tolerance": "low",
+      "memory": "PJM知道自己负荷预测与拍卖机制细节。"
+    },
+    {
+      "name": "Huawei",
+      "type": "Organization",
+      "role": "中国国产AI芯片主力：昇腾910C产能即中国训练级算力硬上限",
+      "stance": "2026年计划产约60万颗910C（约2025年两倍）；昇腾全系裸片100万（2025）→160万颗（2026）",
+      "influence": "high",
+      "grade": "B2",
+      "simulation_tier": 1,
+      "role_class": "principal",
+      "salience": {
+        "tier": "high",
+        "score": 0.85,
+        "basis": "华为昇腾实际产量对中国2030增量（+175 TWh）兑现率构成芯片侧硬上限，决定中国情景分岔"
+      },
+      "description": "中国电信设备与芯片厂商，昇腾AI芯片设计者，受美制裁约束",
+      "aliases": [
+        "华为",
+        "Huawei Ascend"
+      ],
+      "constraints": [
+        "良率与双芯封装（2:1封装比：160万裸片理论上限约80万颗成品）",
+        "HBM供给（SemiAnalysis估有效产出上限25–30万颗，争议）",
+        "Bernstein估950性能仅为NVIDIA VR200约6%"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "华为知道自己良率、HBM配额与实际排产；外界仅有计划数与第三方估算。"
+    },
+    {
+      "name": "China Mobile",
+      "type": "Organization",
+      "role": "中国最大运营商，'总量降、算力升'资本再平衡的代表",
+      "stance": "2026年总capex ¥1366亿（−9.5%）但算力网络投资¥378亿（+62.4%）",
+      "influence": "medium",
+      "grade": "B2",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "score": 0.6,
+        "basis": "运营商算力投资是中国智算供给的国企承载，但其总量下降限制边际贡献"
+      },
+      "description": "中国移动通信集团，中国三大电信运营商之首",
+      "aliases": [
+        "中国移动"
+      ],
+      "risk_tolerance": "low",
+      "memory": "中国移动知道自己算力投资结构与闲置率。"
+    },
+    {
+      "name": "Alibaba",
+      "type": "Organization",
+      "role": "中国民企AI capex主力：三年≥¥3800亿AI+云投资",
+      "stance": "2025-02宣布三年capex超¥3800亿并称'偏保守'；2026-03承诺五年内年度AI+云收入>$1000亿",
+      "influence": "medium",
+      "grade": "B3",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "score": 0.65,
+        "basis": "官方叙事中的'规模跃升'正由民企capex承载，阿里为最大单一民企买家"
+      },
+      "description": "阿里巴巴集团，中国电商与阿里云母公司",
+      "aliases": [
+        "阿里",
+        "BABA",
+        "Alibaba Cloud"
+      ],
+      "risk_tolerance": "high",
+      "memory": "阿里知道自己芯片采购渠道与完成进度。"
+    },
+    {
+      "name": "Blue Owl Capital",
+      "type": "Organization",
+      "role": "表外SPV/JV数据中心融资的主导资本方（与PIMCO共同锚定Hyperion）",
+      "stance": "向Meta Hyperion投入$27B级JV、向Abilene（OpenAI）SPV投入约$15B（与JPMorgan合计$13B级）",
+      "influence": "medium",
+      "grade": "B2",
+      "simulation_tier": 2,
+      "role_class": "intermediary",
+      "salience": {
+        "tier": "medium",
+        "score": 0.6,
+        "basis": "债务分销能力是2027年后capex的隐性约束——单一$38B建设贷分销耗时逾6个月"
+      },
+      "description": "美国另类资产管理公司，数据中心SPV/JV融资最大提供方之一",
+      "aliases": [
+        "Blue Owl"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Blue Owl知道自己SPV组合的租约与退出条款细节。"
+    },
+    {
+      "name": "GE Vernova",
+      "type": "Organization",
+      "role": "重型燃气轮机垄断供应商：2028年前售罄构成电力硬约束",
+      "stance": "累计合同约100 GW（在手44+槽位预订56），2029–30产能仅剩约10 GW未订，交期约3年",
+      "influence": "medium",
+      "grade": "B2",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "score": 0.62,
+        "basis": "燃机槽位是2026–2028年美国电力约束的物理性上限，直接决定情景B（30%）触发概率"
+      },
+      "description": "美国发电设备厂商（GE能源分拆），重型燃气轮机主要制造商",
+      "aliases": [
+        "GEV"
+      ],
+      "risk_tolerance": "low",
+      "memory": "GE Vernova知道自己槽位分配与扩产计划。"
+    },
+    {
+      "name": "Broadcom",
+      "type": "Organization",
+      "role": "AI ASIC第二供应链：超大规模自研芯片的主要代工设计伙伴",
+      "stance": "FY2025 AI收入超$20B、积压$73B（S3未核验），已给出2027年AI收入指引约$100B/年",
+      "influence": "medium",
+      "grade": "B3",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "score": 0.58,
+        "basis": "ASIC份额每提高10个百分点都会改变GPU单一来源供应链的风险定价——2026–2030最大结构变量之一"
+      },
+      "description": "美国半导体公司，定制AI ASIC（TPU类）设计与网络芯片供应商",
+      "aliases": [
+        "AVGO"
+      ],
+      "risk_tolerance": "medium",
+      "memory": "Broadcom知道自己客户项目与积压订单构成。"
+    },
+    {
+      "name": "CoreWeave",
+      "type": "Organization",
+      "role": "最大Neocloud：投资级化债务堆栈+~$104B积压订单，但收入高度集中",
+      "stance": "FY25收入$5.131B（+168%），积压$66.8B（2025-12）→约$104B（2026-08），债务约$14.0B，2026 capex $35–39B",
+      "influence": "medium",
+      "grade": "B2",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "score": 0.55,
+        "basis": "新云厂商信用是供应商融资环最脆弱节点；微软曾占其2024收入62%"
+      },
+      "description": "美国GPU云服务商（Neocloud），纳斯达克上市",
+      "aliases": [
+        "CRWV"
+      ],
+      "vulnerabilities": [
+        "客户集中（微软占2024年收入62%）",
+        "债务堆栈对DC ABS利差敏感"
+      ],
+      "risk_tolerance": "high",
+      "memory": "CoreWeave知道自己客户合同分布与债务条款。"
+    },
+    {
+      "name": "NDRC (China)",
+      "type": "Government",
+      "role": "中国数据中心去产能与算力结构政策的决定者；海关执行决定NVIDIA对华供给",
+      "stance": "2025年禁止小规模算力项目上新；东数西算要求2025年底新增算力≥60%落位枢纽",
+      "influence": "medium",
+      "grade": "B2",
+      "simulation_tier": 2,
+      "role_class": "arbiter",
+      "salience": {
+        "tier": "medium",
+        "score": 0.6,
+        "basis": "中国AI芯片供给由北京海关而非华盛顿决定——NDRC/海关政策是中国算力上限的第一决定者"
+      },
+      "description": "中国国家发展与改革委员会，产业政策与算力去产能主管机构",
+      "aliases": [
+        "国家发改委",
+        "National Development and Reform Commission"
+      ],
+      "risk_tolerance": "low",
+      "memory": "北京知道自己海关执行口径与国产替代优先级。"
+    },
+    {
+      "name": "AMD",
+      "type": "Organization",
+      "role": "第二GPU来源：OpenAI 6GW+warrant、Meta 6GW MI450，但体量与NVIDIA差一个数量级",
+      "stance": "MI系列收入~$7–8B/年，以认股权证安排绑定大客户",
+      "influence": "medium",
+      "grade": "B3",
+      "simulation_tier": 2,
+      "role_class": "stakeholder",
+      "salience": {
+        "tier": "medium",
+        "score": 0.5,
+        "basis": "多元化在2030年前更多是议价权变量而非供给变量"
+      },
+      "description": "美国半导体公司（MI系列AI加速器），纳斯达克上市",
+      "aliases": [
+        "Advanced Micro Devices"
+      ],
+      "risk_tolerance": "high",
+      "memory": "AMD知道自己warrant条款与产能分配。"
+    }
+  ],
+  "relationships": [
+    {
+      "source": "Microsoft",
+      "target": "OpenAI",
+      "type": "INVESTS_IN",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.7,
+      "basis": "重组后的OpenAI Group PBC中微软持有约27%权益，并锁定OpenAI经济性",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026",
+      "horizon": "长期",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "参与者情报章节"
+      ]
+    },
+    {
+      "source": "OpenAI",
+      "target": "Oracle",
+      "type": "CUSTOMER_OF",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "basis": "市场普遍指向OpenAI为Oracle约$300B大客户（WSJ单一来源、双方未公布）",
+      "evidence_type": "contested",
+      "claim_valid_at": "2026",
+      "horizon": "多年期",
+      "status": "contested",
+      "confidence": "low",
+      "source_refs": [
+        "参与者情报章节（永久B3）"
+      ]
+    },
+    {
+      "source": "OpenAI",
+      "target": "CoreWeave",
+      "type": "CUSTOMER_OF",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "basis": "OpenAI与CoreWeave签约约$22.4B",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026",
+      "horizon": "多年期",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "参与者情报章节"
+      ]
+    },
+    {
+      "source": "NVIDIA",
+      "target": "OpenAI",
+      "type": "INVESTS_IN",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "basis": "NVIDIA–OpenAI $100B/10GW为LOI（2025-09-22），据WSJ 2026报道已'on ice'——非约束性",
+      "evidence_type": "contested",
+      "claim_valid_at": "2026",
+      "horizon": "至2035",
+      "status": "contested",
+      "confidence": "low",
+      "source_refs": [
+        "美国专章"
+      ]
+    },
+    {
+      "source": "NVIDIA",
+      "target": "xAI",
+      "type": "OTHER",
+      "relation_label": "INVESTS_IN",
+      "sign": "ally",
+      "strength": "low",
+      "valence": "transactional",
+      "polarity": 0.2,
+      "basis": "xAI Serie E中NVIDIA投资约$20亿",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026",
+      "horizon": "—",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "xAI [S100]"
+      ]
+    },
+    {
+      "source": "Meta",
+      "target": "Blue Owl Capital",
+      "type": "PARTNERS_WITH",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "transactional",
+      "polarity": 0.5,
+      "basis": "Hyperion $27.3B JV：Meta留20%股权、6.581%票息、2049年、A+评级、PIMCO锚定约$18B",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2025-10-21",
+      "horizon": "至2049",
+      "status": "active",
+      "confidence": "high",
+      "source_refs": [
+        "Reuters [S50]"
+      ]
+    },
+    {
+      "source": "Meta",
+      "target": "Broadcom",
+      "type": "CUSTOMER_OF",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "transactional",
+      "polarity": 0.4,
+      "basis": "Meta三源采购Broadcom/AMD/NVIDIA，含ASIC合作",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026",
+      "horizon": "2026–2028",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "参与者情报章节"
+      ]
+    },
+    {
+      "source": "Meta",
+      "target": "AMD",
+      "type": "CUSTOMER_OF",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "basis": "Meta至6GW MI450订单（2026-07）",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026-07",
+      "horizon": "2026–2028",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "参与者情报章节"
+      ]
+    },
+    {
+      "source": "OpenAI",
+      "target": "AMD",
+      "type": "CUSTOMER_OF",
+      "sign": "ally",
+      "strength": "medium",
+      "valence": "transactional",
+      "polarity": 0.3,
+      "basis": "OpenAI 6GW部署+1.6亿股warrant安排",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026",
+      "horizon": "多年期",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "参与者情报章节"
+      ]
+    },
+    {
+      "source": "FERC",
+      "target": "PJM Interconnection",
+      "type": "REGULATES",
+      "sign": "neutral",
+      "strength": "high",
+      "valence": "directional",
+      "polarity": 0,
+      "basis": "FERC 2025-12-18共址令责令PJM建立四种输电服务选项，过渡期共址负荷可被削减",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2025-12-18",
+      "horizon": "2026+",
+      "status": "active",
+      "confidence": "high",
+      "source_refs": [
+        "FERC Fact Sheet [S66]"
+      ]
+    },
+    {
+      "source": "NDRC (China)",
+      "target": "NVIDIA",
+      "type": "SANCTIONS",
+      "sign": "rival",
+      "strength": "high",
+      "valence": "adversarial",
+      "polarity": -0.7,
+      "basis": "2026-01-13美方放行H200次日（01-14）中方海关限制入境并劝阻采购；2025-08起已实际阻断H20",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026-01-14",
+      "horizon": "2026",
+      "status": "active",
+      "confidence": "high",
+      "source_refs": [
+        "RFI [S44]"
+      ]
+    },
+    {
+      "source": "NDRC (China)",
+      "type": "CONSTRAINS",
+      "target": "Huawei",
+      "sign": "neutral",
+      "strength": "medium",
+      "valence": "directional",
+      "polarity": 0.2,
+      "basis": "NDRC去产能政策（禁止小算力项目、闲置算力转售）约束智算扩张结构，同时国产替代需求涌向华为",
+      "evidence_type": "analyst_inference",
+      "claim_valid_at": "2025",
+      "horizon": "2026–2028",
+      "status": "inference",
+      "confidence": "medium",
+      "source_refs": [
+        "中国专章"
+      ]
+    },
+    {
+      "source": "NDRC (China)",
+      "type": "TRIGGERS",
+      "target": "Huawei",
+      "sign": "ally",
+      "strength": "high",
+      "valence": "allied",
+      "polarity": 0.5,
+      "basis": "双向管制使国产替代需求全部涌向华为：2026年计划60万颗910C（约翻倍）",
+      "evidence_type": "analyst_inference",
+      "claim_valid_at": "2026-01",
+      "horizon": "2026–2028",
+      "status": "inference",
+      "confidence": "medium",
+      "source_refs": [
+        "链4分析",
+        "RFI [S41]"
+      ]
+    },
+    {
+      "source": "Broadcom",
+      "target": "NVIDIA",
+      "type": "COMPETES_WITH",
+      "sign": "rival",
+      "strength": "medium",
+      "valence": "adversarial",
+      "polarity": -0.4,
+      "basis": "ASIC阵营（谷歌TPU等经Broadcom设计）扩展到多家超大规模自研，反噬NVIDIA毛利",
+      "evidence_type": "analyst_inference",
+      "claim_valid_at": "2026-09",
+      "horizon": "2026–2030",
+      "status": "inference",
+      "confidence": "medium",
+      "source_refs": [
+        "链1分析"
+      ]
+    },
+    {
+      "source": "GE Vernova",
+      "type": "CONSTRAINS",
+      "target": "Microsoft",
+      "sign": "neutral",
+      "strength": "high",
+      "valence": "directional",
+      "polarity": 0,
+      "basis": "燃机2029–30仅余约10 GW档期、交期约3年——新增气电2028年前难以并网，物理性约束美国capex落地",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026-Q1",
+      "horizon": "2026–2030",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "Power Engineering [S63]"
+      ],
+      "contradictions": []
+    },
+    {
+      "source": "PJM Interconnection",
+      "type": "CONSTRAINS",
+      "target": "Amazon",
+      "sign": "neutral",
+      "strength": "medium",
+      "valence": "directional",
+      "polarity": 0,
+      "basis": "PJM 2027/28拍卖首次出现6,623 MW可靠性缺口，容量价格约$333/MW-day——东部数据中心通电受拍卖与共址规则制约",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2025-12",
+      "horizon": "2026–2028",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "Utility Dive [S43]",
+        "PJM [S62]"
+      ]
+    },
+    {
+      "source": "Alibaba",
+      "target": "Huawei",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "medium",
+      "valence": "transactional",
+      "polarity": 0.1,
+      "basis": "中国训练级算力增长受限于2026年约60万颗910C产能及HBM上限，而非需求或电力",
+      "evidence_type": "analyst_inference",
+      "claim_valid_at": "2026-09",
+      "horizon": "2026–2028",
+      "status": "inference",
+      "confidence": "medium",
+      "source_refs": [
+        "中国芯片章"
+      ]
+    },
+    {
+      "source": "China Mobile",
+      "target": "NDRC (China)",
+      "type": "DEPENDS_ON",
+      "sign": "neutral",
+      "strength": "high",
+      "valence": "directional",
+      "polarity": 0.2,
+      "basis": "运营商'总量降、算力升'的资本再平衡直接承接NDRC去产能与算力结构政策",
+      "evidence_type": "verified_fact",
+      "claim_valid_at": "2026-03",
+      "horizon": "2026",
+      "status": "active",
+      "confidence": "medium",
+      "source_refs": [
+        "中国移动 [S32]",
+        "中国专章"
+      ]
+    }
+  ],
+  "key_events": [
+    {
+      "date": "2024-11-01",
+      "event": "FERC否决Talen–Amazon Susquehanna核电站ISA扩容（300→480 MW）"
+    },
+    {
+      "date": "2025-02-24",
+      "event": "阿里巴巴宣布三年AI+云capex超¥3800亿"
+    },
+    {
+      "date": "2025-04",
+      "event": "美方禁售H20（NVIDIA后计提$5.5B减值）"
+    },
+    {
+      "date": "2025-07-22",
+      "event": "PJM 2026/27容量拍卖触顶$329.17/MW-day（$16.1B）"
+    },
+    {
+      "date": "2025-09-22",
+      "event": "NVIDIA–OpenAI $100B/10GW LOI（非约束性）"
+    },
+    {
+      "date": "2025-10-21",
+      "event": "Meta–Blue Owl Hyperion $27.3B表外JV确立"
+    },
+    {
+      "date": "2025-11-10",
+      "event": "Burry指控超大规模厂商GPU折旧年限人为拉长（少提约$176B，未核实）"
+    },
+    {
+      "date": "2025-12-18",
+      "event": "FERC共址令（193 FERC ¶61,217）：PJM须建四种输电服务选项"
+    },
+    {
+      "date": "2026-01-13",
+      "event": "美方有条件放行H200；中企订购超200万颗（~$2.7万/颗）"
+    },
+    {
+      "date": "2026-01-14",
+      "event": "中方海关限制H200入境；232条款25%半导体关税次日生效"
+    },
+    {
+      "date": "2026-02-06",
+      "event": "四大厂2026 capex指引合计约$700B（+60%+），2025年合计FCF降至$200B"
+    },
+    {
+      "date": "2026-02-20",
+      "event": "OpenAI将2030年前算力支出目标下修至约$600B（CNBC单源）"
+    },
+    {
+      "date": "2026-06-03",
+      "event": "EU《Cloud & AI Development Act》：三倍EU容量、约€200B投资"
+    },
+    {
+      "date": "2026-06-28",
+      "event": "BIS年报点名AI表外回租杠杆的金融脆弱性"
+    },
+    {
+      "date": "2026-07-30",
+      "event": "Amazon上调2026 capex指引至约$220B"
+    },
+    {
+      "date": "2026-08-18",
+      "event": "Dell'Oro预测2030年单年capex超$3T（较2026年1月版近翻倍）"
+    },
+    {
+      "date": "2026-09-16",
+      "event": "TrendForce：2026年全球电力需求容量+31%至161 GW；2030年电网缺口268 GW"
+    }
+  ],
+  "hot_topics": [
+    "管道兑现率（LBNL历史基率13% vs 10–35%情景区间）是最大可校正参数",
+    "AI收入与capex缺口：2025年AI营收~$60B vs capex~$400B",
+    "表外SPV/JV债务（两年>$120B）与$820B未起租租约的信用风险",
+    "Oracle RPO $638B的可信度与单一客户集中",
+    "双向出口管制下中国AI芯片供给由北京决定",
+    "燃机售罄与变压器三年交期的电力物理约束",
+    "Burry折旧指控（$176B）与盈利质量",
+    "NVIDIA bookings口径（$500B→$1T）vs 已签合同",
+    "液冷渗透率跳升（33%→53%→60%）与保险重定价",
+    "预测版本漂移：单一机构点预测半衰期不足一年"
+  ],
+  "quantitative_facts": [
+    {
+      "metric": "全球数据中心单年capex预测",
+      "series": "global_dc_capex_annual",
+      "value": ">3",
+      "unit": "USD trillion",
+      "as_of_date": "2026-08-18",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Dell'Oro口径：含IT设备+物理设施的年度资本开支",
+      "source": "Dell'Oro Group [S5]",
+      "tier": "S1"
+    },
+    {
+      "metric": "全球数据中心单年capex预测（旧版）",
+      "series": "global_dc_capex_annual",
+      "value": "1.2",
+      "unit": "USD trillion",
+      "as_of_date": "2025-08-06",
+      "period_end": "2029-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Dell'Oro 2025-08版口径，21% CAGR（版本漂移对照）",
+      "source": "Dell'Oro Group [S76]",
+      "tier": "S1"
+    },
+    {
+      "metric": "全球数据中心用电",
+      "series": "global_dc_electricity",
+      "value": "945",
+      "unit": "TWh",
+      "as_of_date": "2025-04",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "IEA Energy and AI基准情景（2024年为415 TWh，年均约15%）",
+      "source": "IEA [S4][S73]",
+      "tier": "S1"
+    },
+    {
+      "metric": "美国数据中心用电2030",
+      "series": "us_dc_electricity",
+      "value": "649",
+      "unit": "TWh",
+      "as_of_date": "2026-06",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "US",
+      "definition": "LBNL 2025 Update参考情形，区间521–843 TWh，占全美电力11.8%",
+      "source": "LBNL [S26]",
+      "tier": "S1"
+    },
+    {
+      "metric": "全球数据中心容量（设施口径）",
+      "series": "global_dc_capacity_facility",
+      "value": "200",
+      "unit": "GW",
+      "as_of_date": "2026-01-06",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "JLL设施级容量（2025年为103 GW，CAGR约14%）",
+      "source": "JLL [S16]",
+      "tier": "S1"
+    },
+    {
+      "metric": "全球数据中心电力需求容量（无约束上限）",
+      "series": "global_dc_power_demand_trendforce",
+      "value": "490.7",
+      "unit": "GW",
+      "as_of_date": "2026-09-16",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "TrendForce电力需求口径，隐含队列完全兑现、排除表后发电（2025年为122.9 GW）",
+      "source": "TrendForce [S61]",
+      "tier": "S1"
+    },
+    {
+      "metric": "2030年电网供需缺口",
+      "series": "grid_supply_gap",
+      "value": "268",
+      "unit": "GW",
+      "as_of_date": "2026-09-16",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global（美>170）",
+      "definition": "TrendForce：需求−电网可用容量（222.6 GW）",
+      "source": "TrendForce [S61]",
+      "tier": "S1"
+    },
+    {
+      "metric": "四大厂2026年capex指引合计",
+      "series": "big4_capex_guidance",
+      "value": "735–760",
+      "unit": "USD billion",
+      "as_of_date": "2026-07-30",
+      "value_type": "target",
+      "geography": "US",
+      "definition": "MSFT ~$175B（重分类后）+Alphabet $195–205B+Amazon ~$220B+Meta $130–145B，异质口径加总",
+      "source": "CNBC [S49]及各厂财报",
+      "tier": "S1"
+    },
+    {
+      "metric": "Oracle RPO",
+      "series": "oracle_rpo",
+      "value": "638",
+      "unit": "USD billion",
+      "as_of_date": "2026-06",
+      "value_type": "observed",
+      "definition": "FY26 Q4（FYE 2026-05-31）剩余履约义务，其中约$75B为客户预付/自供GPU",
+      "source": "Oracle [S67]",
+      "tier": "S1"
+    },
+    {
+      "metric": "数据中心租约承诺（未起租部分）",
+      "series": "dc_lease_commitments",
+      "value": "820",
+      "unit": "USD billion",
+      "as_of_date": "2026",
+      "value_type": "observed",
+      "definition": "Moody's估计：$1.2T总租约承诺中尚未起租部分；直接债务约$460B",
+      "source": "Moody's（经CNBC）",
+      "tier": "S2"
+    },
+    {
+      "metric": "PJM容量拍卖出清价",
+      "series": "pjm_bra_clearing_price",
+      "value": "329.17",
+      "unit": "USD/MW-day",
+      "as_of_date": "2025-07-22",
+      "period_end": "2026-05-31",
+      "value_type": "observed",
+      "geography": "US-PJM",
+      "definition": "2026/27交付年BRA触顶价；2027/28约$333.44并首次缺6,623 MW",
+      "source": "PJM [S53][S62]",
+      "tier": "S1"
+    },
+    {
+      "metric": "并网队列历史兑现基率",
+      "series": "interconnection_queue_completion",
+      "value": "13",
+      "unit": "%",
+      "as_of_date": "2026",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "US",
+      "definition": "LBNL Queued Up：2000–2020年申请装机至2025年底实际投运比例（75%撤回）",
+      "source": "LBNL [S59]",
+      "tier": "S1"
+    },
+    {
+      "metric": "GE Vernova燃机2029–30剩余档期",
+      "series": "gev_turbine_slots",
+      "value": "~10",
+      "unit": "GW",
+      "as_of_date": "2026-03-31",
+      "period_end": "2030-12-31",
+      "value_type": "observed",
+      "definition": "累计合同约100 GW后的未订产能，交期约3年",
+      "source": "Power Engineering [S63]",
+      "tier": "S2"
+    },
+    {
+      "metric": "华为昇腾910C 2026年计划产量",
+      "series": "huawei_ascend_910c_output",
+      "value": "600",
+      "unit": "thousand units",
+      "as_of_date": "2025-09-29",
+      "period_end": "2026-12-31",
+      "value_type": "target",
+      "geography": "China",
+      "definition": "约为2025年产量两倍；全系裸片160万颗；HBM上限存在争议（SemiAnalysis估25–30万颗）",
+      "source": "Bloomberg经RFI [S41]",
+      "tier": "S2"
+    },
+    {
+      "metric": "DRAM合约价环比涨幅",
+      "series": "dram_contract_price_qoq",
+      "value": "+45–50",
+      "unit": "% QoQ",
+      "as_of_date": "2026-02-26",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "Global",
+      "definition": "4Q25常规DRAM合约价；1Q26预计再涨+90–95%（HBM挤占产能）",
+      "source": "TrendForce [S90]",
+      "tier": "S1"
+    },
+    {
+      "metric": "AI芯片液冷渗透率",
+      "series": "liquid_cooling_penetration_ai",
+      "value": "53",
+      "unit": "%",
+      "as_of_date": "2026-08-17",
+      "period_end": "2026-12-31",
+      "value_type": "forecast",
+      "definition": "TrendForce AI芯片口径：14%(2024)→33%(2025)→53%(2026E)→~60%(2027E)",
+      "source": "TrendForce [S34]",
+      "tier": "S1"
+    },
+    {
+      "metric": "Gartner数据中心系统支出",
+      "series": "gartner_dc_systems_spending",
+      "value": "822",
+      "unit": "USD billion",
+      "as_of_date": "2026-07-27",
+      "period_end": "2026-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "IT支出口径（硬件+基础系统软件），2025年为$506B（+51.6%）；9个月内三修（$582B→$653B→$822B）",
+      "source": "Gartner [S24][S21]",
+      "tier": "S1"
+    },
+    {
+      "metric": "北美托管空置率",
+      "series": "na_colocation_vacancy",
+      "value": "1.4",
+      "unit": "%",
+      "as_of_date": "2026",
+      "period_end": "2025-12-31",
+      "value_type": "observed",
+      "geography": "North America",
+      "definition": "CBRE primary市场口径，历史最低；NoVA为0.3–0.5%",
+      "source": "CBRE [S78][S11]",
+      "tier": "S2"
+    },
+    {
+      "metric": "Meta–Blue Owl Hyperion JV债券",
+      "series": "hyperion_jv_bond",
+      "value": "27.3",
+      "unit": "USD billion",
+      "as_of_date": "2025-10-21",
+      "value_type": "observed",
+      "definition": "票息6.581%、2049年到期、A+评级、PIMCO锚定约$18B；Meta留20%股权",
+      "source": "Reuters [S50]",
+      "tier": "S1"
+    },
+    {
+      "metric": "NVIDIA FY2026营收",
+      "series": "nvidia_annual_revenue",
+      "value": "215.9",
+      "unit": "USD billion",
+      "as_of_date": "2026",
+      "period_end": "2026-01-31",
+      "value_type": "observed",
+      "definition": "全年总营收（+65%）；其中数据中心收入$193.7B，Q4 DC $62.3B",
+      "source": "NVIDIA [S95]",
+      "tier": "S1"
+    },
+    {
+      "metric": "中国移动2026年capex",
+      "series": "china_mobile_capex",
+      "value": "136.6",
+      "unit": "CNY billion",
+      "as_of_date": "2026-03",
+      "period_end": "2026-12-31",
+      "value_type": "target",
+      "geography": "China",
+      "definition": "总capex同比−9.5%，但算力网络投资¥37.8B（+62.4%）",
+      "source": "中国移动 [S32]",
+      "tier": "S1"
+    },
+    {
+      "metric": "中国2030年数据中心容量（单源）",
+      "series": "china_dc_capacity",
+      "value": "60",
+      "unit": "GW",
+      "as_of_date": "2026",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "China",
+      "definition": "Rystad单源：32 GW(2025底)→40(2026)→60(2030)，对应用电289 TWh",
+      "source": "Rystad Energy [S13]",
+      "tier": "S3"
+    },
+    {
+      "metric": "全球数据中心保费",
+      "series": "global_dc_insurance_premium",
+      "value": "24.2",
+      "unit": "USD billion",
+      "as_of_date": "2026-03",
+      "period_end": "2030-12-31",
+      "value_type": "forecast",
+      "geography": "Global",
+      "definition": "Swiss Re估算：2024年$10.6B→2030年$24.2B；液冷相关占损失成本约24%",
+      "source": "Swiss Re [S94]",
+      "tier": "S2"
+    }
+  ],
+  "contested_claims": [
+    {
+      "claim": "2030年全球数据中心装机容量",
+      "positions": [
+        {
+          "stance": "200 GW（设施容量交付口径）",
+          "sources": [
+            "JLL 2026-01-06 [S16]"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "490.7 GW（无约束电力需求上限）",
+          "sources": [
+            "TrendForce 2026-09-16 [S61]"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "219 GW（需求侧测算，AI 156 GW）",
+          "sources": [
+            "McKinsey 2025-04 [S72]"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "122 GW（偏低异常值，未随2025–26上修更新）",
+          "sources": [
+            "Goldman（2025年初，经容量章）"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "口径（设施容量vs IT负载vs无约束需求）与发布时点不同——490.7 GW隐含队列完全兑现，JLL为交付侧；分歧大部分是问题定义差异而非数值矛盾"
+    },
+    {
+      "claim": "管道兑现率（决定190–210 GW基准的关键参数）",
+      "positions": [
+        {
+          "stance": "历史基率约13%（2000–2020队列至2025年底投运比例）",
+          "sources": [
+            "LBNL Queued Up [S59]"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "约20%已规划项目面临延期风险（设备供应链约束）",
+          "sources": [
+            "IEA [S73]"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "佐治亚约65%公告MW属投机、已被移出管线",
+          "sources": [
+            "Georgia PSC证词（经Utility Dive [S64]）"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "乐观端：签约管线快速放大（AEP 56→69 GW）",
+          "sources": [
+            "Utility Dive [S18]"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "签约管线vs公告管线存在5–10倍口径差；IEA的20%与BNEF德州暂停的20%机制不同（设备交期vs监管干预），数值巧合不构成三角验证"
+    },
+    {
+      "claim": "中国智算中心平均利用率",
+      "positions": [
+        {
+          "stance": "区域智算中心平均约30%，西部千卡集群在架利用率<30%",
+          "sources": [
+            "科技日报 2025-07-17 [S40]（浪潮AI研究院估算）"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "头部第三方IDC满载：GDS上架率77.5%",
+          "sources": [
+            "GDS [S33]"
+          ],
+          "tier": "S1"
+        },
+        {
+          "stance": "官方均值约60%（2024年7月政策目标口径）",
+          "sources": [
+            "工信部绿色DC政策 [S27]"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "双峰分布：区域政府项目低利用率与头部第三方高利用率并存；统计范围（名义算力vs有效算力）与样本集不同"
+    },
+    {
+      "claim": "华为昇腾910C 2026年有效产出上限",
+      "positions": [
+        {
+          "stance": "计划产约60万颗（裸片产能160万，2:1封装）",
+          "sources": [
+            "Bloomberg经RFI [S41]"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "HBM供给将有效产出压至约25–30万颗",
+          "sources": [
+            "SemiAnalysis（经中国芯片章转引）"
+          ],
+          "tier": "S3"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "裸片产能口径vs可用HBM口径；良率损耗与CXMT HBM配额为分歧核心"
+    },
+    {
+      "claim": "字节跳动AI capex规模",
+      "positions": [
+        {
+          "stance": "2025年约$20B（多为AI）",
+          "sources": [
+            "Reuters 2025-01-23（匿名信源）[S75]"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "single-origin",
+      "why_they_differ": "公司未上市无披露且否认相关数字——卷宗标注永久B3，不得进入任何基准情景"
+    },
+    {
+      "claim": "北弗吉尼亚数据中心租金涨幅（2025）",
+      "positions": [
+        {
+          "stance": "租金'保持平稳'",
+          "sources": [
+            "CBRE H2 2025 [S78][S87]"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "全国口径2025年租金+9%",
+          "sources": [
+            "JLL [S83]"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "市场集与统计口径不同；'+30–50%暴涨'叙事无已抓取源支持，卷宗弃用"
+    },
+    {
+      "claim": "OpenAI 2030年前算力支出目标",
+      "positions": [
+        {
+          "stance": "累计承诺约$1.4T（2025下半年宣布口径）",
+          "sources": [
+            "美国专章汇总"
+          ],
+          "tier": "S2"
+        },
+        {
+          "stance": "下修至约$600B",
+          "sources": [
+            "CNBC 2026-02-20（单源引述知情者）[S52]"
+          ],
+          "tier": "S2"
+        }
+      ],
+      "status": "contested",
+      "why_they_differ": "承诺（含LOI/框架）vs支出目标为不同口径；下修被解读为纪律信号而非违约，但为单一起源"
+    }
+  ]
+}
