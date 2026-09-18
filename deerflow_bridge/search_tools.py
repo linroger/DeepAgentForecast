@@ -42,6 +42,7 @@ import hashlib
 import json
 import logging
 import os
+import random
 import re
 import time
 from typing import Any, Optional
@@ -75,6 +76,19 @@ DEFAULT_FIRECRAWL_SEARCH_LIMIT = 5           # 单次 /search 计费结果条数
 DEFAULT_FIRECRAWL_SEARCH_CALL_CEILING = 300  # 单进程 /search 计费调用上限；<=0=不限
 _firecrawl_search_calls = 0        # 本进程已发出的真实 /search 计费调用数
 _firecrawl_ceiling_warned = False  # 越线只 warn 一次，不逐调用刷屏
+
+# —— Firecrawl 限流护栏（2026-09-17：实测 key 为 25 req/min，3 条 lane × fan-out 并发
+# 搜索时 429 连片，主 agent 的直连搜索几乎全军覆没）——
+# 1) 进程内滚动窗口节流：本进程每 60s 最多 RESEARCH_FIRECRAWL_CALLS_PER_MINUTE（默认 8）
+#    次真实 /search（3 lane × 8 ≈ 24，留 1 次余量给本机其他进程）；<=0 关闭。窗口满则
+#    sleep 到最早一次调用滑出 60s 窗口（带上限，绝不无限等）。
+# 2) 429 有界重试：firecrawl 的 429 body 带 "please retry after Ns" 提示——解析后按
+#    min(提示 + 抖动, 上限) 退避重试，至多 RESEARCH_FIRECRAWL_SEARCH_MAX_RETRIES
+#    （默认 4）次；仍失败才向 agent 返回 {"error"}。
+DEFAULT_FIRECRAWL_CALLS_PER_MINUTE = 8
+DEFAULT_FIRECRAWL_SEARCH_MAX_RETRIES = 4
+_FIRECRAWL_RETRY_AFTER_RE = re.compile(r"retry after (\d+)\s*s", re.IGNORECASE)
+_firecrawl_window: list[float] = []  # 本进程最近 60s 内发出请求的 monotonic 时间戳
 
 # ---------------------------------------------------------------------------
 # WAVE9 —— web_search 结果磁盘缓存（镜像 cached_fetch.py 的模式，自包含不 import 桥）。
@@ -379,6 +393,45 @@ def get_firecrawl_call_counts() -> dict[str, int]:
     return {"search": _firecrawl_search_calls}
 
 
+def _firecrawl_calls_per_minute() -> int:
+    """进程内每分钟 /search 配额。RESEARCH_FIRECRAWL_CALLS_PER_MINUTE 缺省 8；<=0 关闭节流。"""
+    raw = os.environ.get("RESEARCH_FIRECRAWL_CALLS_PER_MINUTE", "").strip()
+    try:
+        return int(float(raw)) if raw else DEFAULT_FIRECRAWL_CALLS_PER_MINUTE
+    except (TypeError, ValueError):
+        return DEFAULT_FIRECRAWL_CALLS_PER_MINUTE
+
+
+def _firecrawl_search_max_retries() -> int:
+    """429 有界重试次数。RESEARCH_FIRECRAWL_SEARCH_MAX_RETRIES 缺省 4；0=不重试。"""
+    raw = os.environ.get("RESEARCH_FIRECRAWL_SEARCH_MAX_RETRIES", "").strip()
+    try:
+        return max(0, int(float(raw)) if raw else DEFAULT_FIRECRAWL_SEARCH_MAX_RETRIES)
+    except (TypeError, ValueError):
+        return DEFAULT_FIRECRAWL_SEARCH_MAX_RETRIES
+
+
+def _firecrawl_throttle() -> None:
+    """滚动窗口节流：60s 内超过配额则睡到最早一次调用滑出窗口（封顶 65s，防时钟异常卡死）。"""
+    global _firecrawl_window
+    cap = _firecrawl_calls_per_minute()
+    if cap <= 0:
+        return
+    now = time.monotonic()
+    _firecrawl_window = [t for t in _firecrawl_window if now - t < 60.0]
+    if len(_firecrawl_window) < cap:
+        _firecrawl_window.append(now)
+        return
+    wait = min(60.0 - (now - _firecrawl_window[0]) + 0.05, 65.0)
+    if wait > 0:
+        logger.info(
+            "search_tools: Firecrawl 进程内 %d/min 节流，等待 %.1fs", cap, wait)
+        time.sleep(wait)
+    now = time.monotonic()
+    _firecrawl_window = [t for t in _firecrawl_window if now - t < 60.0]
+    _firecrawl_window.append(now)
+
+
 def _firecrawl_search(query: str, max_results: int) -> str:
     """Firecrawl v2 /search 直连实现，输出与 community 工具同形的 JSON 字符串。
 
@@ -412,19 +465,36 @@ def _firecrawl_search(query: str, max_results: int) -> str:
         ).strip() or "https://api.firecrawl.dev/v2/search"
         limit = max(1, min(int(max_results), _firecrawl_search_limit_cap()))
         _firecrawl_search_calls += 1  # 计在发出请求前：HTTP 4xx/5xx 同样可能计费
-        with httpx.Client(timeout=timeout, trust_env=True) as client:
-            response = client.post(
-                endpoint,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "query": q,
-                    "limit": limit,
-                    "sources": ["web"],
-                },
-            )
+        max_retries = _firecrawl_search_max_retries()
+        attempt = 0
+        while True:
+            _firecrawl_throttle()
+            with httpx.Client(timeout=timeout, trust_env=True) as client:
+                response = client.post(
+                    endpoint,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "query": q,
+                        "limit": limit,
+                        "sources": ["web"],
+                    },
+                )
+            if response.status_code != 429 or attempt >= max_retries:
+                break
+            # 429：优先信 body 里的 "please retry after Ns" 提示，缺省退避 5s×2^n + 抖动。
+            hint = 5.0 * (2 ** attempt)
+            m = _FIRECRAWL_RETRY_AFTER_RE.search(response.text or "")
+            if m:
+                hint = float(m.group(1)) + 1.0
+            backoff = min(hint + random.uniform(0.0, 2.0), 70.0)
+            logger.warning(
+                "search_tools: Firecrawl /search 429（第 %d/%d 次重试，退避 %.1fs）",
+                attempt + 1, max_retries, backoff)
+            attempt += 1
+            time.sleep(backoff)
         if response.status_code >= 400:
             return json.dumps(
                 {"error": f"firecrawl search HTTP {response.status_code}",

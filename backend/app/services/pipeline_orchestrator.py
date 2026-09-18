@@ -1412,7 +1412,8 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
         # setup.sh copies them, but a bridge-only edit (no ./setup.sh rerun) would
         # otherwise drift exactly like deerflow_research.py did; mirror that guard here.
         for _tool_mod in (
-            "market_tools.py", "search_tools.py", "cached_fetch.py", "research_budget.py"
+            "market_tools.py", "search_tools.py", "cached_fetch.py",
+            "research_budget.py", "linear_research.py"
         ):
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
@@ -12860,7 +12861,7 @@ class PipelineOrchestrator:
                         from ..utils.llm_client import LLMClient as _PreflightLLM
                         _PreflightLLM().chat(
                             [{"role": "user", "content": f"ping {uuid.uuid4().hex[:8]} — reply: pong"}],
-                            temperature=0.0, max_tokens=8,
+                            temperature=0.0, max_tokens=64,
                         )
                     except Exception as _pf_err:  # noqa: BLE001
                         raise RuntimeError(

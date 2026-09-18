@@ -11135,6 +11135,32 @@ def _report_scorecard_adoptable(candidate: Any, previous: Any = None) -> bool:
     )
 
 
+def _report_scorecard_improves(candidate: Any, previous: Any = None) -> bool:
+    """GLM-run 2026-09-18: strict-improvement test between two non-passing scorecards.
+
+    Lets the judge-refine loop iterate on the best FAILing draft instead of
+    discarding a strictly better candidate (and its remaining rounds). Ordered
+    lexicographically: (min dimension, average, -gap count). Both scorecards
+    must be complete and finite; a PASS candidate is handled by
+    :func:`_report_scorecard_adoptable` before this runs.
+    """
+    candidate_scores = _validated_report_scores(candidate)
+    previous_scores = _validated_report_scores(previous)
+    if candidate_scores is None or previous_scores is None:
+        return False
+    cand_key = (
+        min(candidate_scores),
+        sum(candidate_scores) / len(candidate_scores),
+        -len((candidate or {}).get("gaps") or []),
+    )
+    prev_key = (
+        min(previous_scores),
+        sum(previous_scores) / len(previous_scores),
+        -len((previous or {}).get("gaps") or []),
+    )
+    return cand_key > prev_key
+
+
 def judge_research_report(report: str, question: str, target_language: str | None,
                           depth: str, model_name: str, plog: "ProgressLog", *,
                           actor_coverage: "dict[str, Any] | None" = None) -> "dict | None":
@@ -11468,6 +11494,22 @@ def run_report_judge_refine(client, thread_id: str, question: str, depth: str,
                     context=f"post-refine round {refine_round}",
                 )
                 if not _report_scorecard_adoptable(finalized_scorecard, scorecard):
+                    if _report_scorecard_improves(finalized_scorecard, scorecard):
+                        # GLM-run 2026-09-18: a refine round can make the draft
+                        # strictly better (e.g. thesis 2→5, fewer gaps) yet
+                        # still FAIL on a remaining gap. Breaking there wasted
+                        # every remaining judge round and shipped the WORSE
+                        # prior draft. Adopt the improvement and keep refining;
+                        # the final publication gate below stays fail-closed.
+                        plog.write(
+                            "warn",
+                            f"research-report refine round {refine_round}: "
+                            "rejudge still FAIL but strictly improved; "
+                            "adopting and continuing refinement",
+                        )
+                        report = finalized_report
+                        scorecard = finalized_scorecard
+                        continue
                     plog.write(
                         "warn",
                         f"research-report refine round {refine_round}: final "
@@ -13788,6 +13830,43 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
             ))
             _log_model_response_usage(plog, "actor-dossier-synthesis", resp)
             dossier = _message_text(getattr(resp, "content", resp))
+            # GLM-run 2026-09-18: glm-5.3's tool-free synthesis twice produced
+            # a substantive dossier that nonetheless omitted the mandatory
+            # §7 ``<!-- ACTOR_INTELLIGENCE_LEDGER_V1 ... -->`` comment, which
+            # the deterministic coverage audit then read as 0 dimension slots
+            # (fail-closed, no dossier). Retry once with a format reminder —
+            # the model still writes the ledger itself from the same gathered
+            # evidence; nothing is fabricated or patched in deterministically.
+            if ("ACTOR_INTELLIGENCE_LEDGER_V1" not in dossier
+                    and _ACTOR_LEDGER_RE.search(dossier) is None):
+                plog.write(
+                    "warn",
+                    "actor-ontology synthesize: draft omitted the mandatory "
+                    "ledger comment; retrying once with a format reminder",
+                )
+                resp = _invoke_model(model, _stage1_model_messages(
+                    governing + (
+                        "\n\nFORMAT REMINDER — your previous draft omitted the "
+                        "machine-accountable ledger. The dossier MUST end with "
+                        "exactly one HTML comment of the form "
+                        "`<!-- ACTOR_INTELLIGENCE_LEDGER_V1 {...} -->` per §7, "
+                        "covering EVERY Tier-1/2 actor exactly once across all "
+                        "17 dimensions (status covered or gap). Re-emit the "
+                        "COMPLETE dossier including that ledger comment."
+                    ),
+                    "actor dossier gathered research",
+                    context,
+                ))
+                _log_model_response_usage(plog, "actor-dossier-synthesis-retry", resp)
+                _retried = _message_text(getattr(resp, "content", resp))
+                if _ACTOR_LEDGER_RE.search(_retried) is not None:
+                    dossier = _retried
+                else:
+                    plog.write(
+                        "warn",
+                        "actor-ontology synthesize: ledger-format retry still "
+                        "omitted the comment; shipping the richer draft",
+                    )
             plog.write("stage", f"actor-ontology synthesize: produced {len(dossier)} chars")
             if len(dossier.strip()) >= len(research_text.strip()):
                 return dossier
@@ -15464,7 +15543,12 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
     report = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
     dossier_path = out_dir / ACTOR_DOSSIER_FILENAME
     dossier = dossier_path.read_text(encoding="utf-8") if dossier_path.exists() else ""
-    if not args.no_actors:
+    if not args.no_actors and (out_dir / ACTOR_INTELLIGENCE_LINEAGE_FILENAME).is_file():
+        # LINEAR-RESEARCH 2026-09-18: the lineage file exists only after a
+        # previous extraction recorded it. A FIRST extraction has nothing to
+        # reuse and nothing to go stale — validating (and failing) here made
+        # every dossier-less extract-only run unreachable. Validate only when
+        # there is actually a lineage to check.
         try:
             validate_actor_artifact_lineage(
                 out_dir,
@@ -15481,6 +15565,12 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
             plog.write("error", str(exc))
             plog.close()
             return 2
+    elif not args.no_actors:
+        plog.write(
+            "stage",
+            "extract-only: no prior actor-artifact lineage (fresh extraction); "
+            "nothing to validate for reuse",
+        )
     # Extract-only performs no web fetches.  It may reuse producer-owned fetched
     # provenance already sealed in this output directory, but it must never
     # promote model-reconstructed citations from the report into fetched facts.
@@ -15520,6 +15610,39 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
                     plog,
                 )
             )
+            # LINEAR-RESEARCH 2026-09-18: the extraction prompt tells the model
+            # to emit a bare ``actor_intelligence_contract`` marker, but the
+            # contract is only real once the dossier-bound sealing writes the
+            # full hashed version. An unsealed actors.json carrying the marker
+            # makes the parent's graph stage treat it as sealed v1 and fail
+            # closed on a projection that does not exist. Withhold the marker
+            # until sealing actually happens (persist_final_actor_intelligence_
+            # contract re-adds the complete contract when a dossier is sealed).
+            if isinstance(obj, dict) and "actor_intelligence_contract" in obj:
+                obj.pop("actor_intelligence_contract", None)
+                plog.write(
+                    "stage",
+                    "extract-only: withholding model-emitted actor-intelligence "
+                    "marker (not sealed; report-only cast)",
+                )
+            if isinstance(obj, dict):
+                # Same false-claim problem one level down: per-actor
+                # ``intelligence: {schema_version: v1}`` blocks emitted per the
+                # extraction prompt make the parent's prepare stage demand a
+                # sealed top-level contract. Without dossier-bound sealing there
+                # is none, so the rows must ship in the legacy cast shape.
+                _stripped_rows = 0
+                for _row in (obj.get("actors") or []):
+                    if (isinstance(_row, dict)
+                            and isinstance(_row.get("intelligence"), dict)):
+                        _row.pop("intelligence", None)
+                        _stripped_rows += 1
+                if _stripped_rows:
+                    plog.write(
+                        "stage",
+                        f"extract-only: withheld unsealed per-actor "
+                        f"intelligence payloads from {_stripped_rows} rows",
+                    )
             persisted_failures = persist_structured_extraction_failures(
                 out_dir, failed_candidates, meta, write_meta)
             if persisted_failures:
@@ -15634,31 +15757,45 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
         if report_path.is_file() else report
     )
     if not args.no_actors:
-        try:
-            persist_final_actor_intelligence_contract(
-                out_dir,
-                report=final_report,
-                dossier=dossier,
-                meta=meta,
-                plog=plog,
-                required=True,
-                require_current_extraction=True,
-                expected_unsealed_actors_sha256=actor_extraction_sha256,
-            )
-        except ActorIntelligenceFinalizationError as exc:
-            meta.update(
-                status="failed",
-                error=str(exc),
-                finished_at=_utcnow(),
-            )
-            write_meta()
+        if not dossier.strip():
+            # LINEAR-RESEARCH 2026-09-18: the sealed actor-intelligence/v1
+            # contract is definitionally dossier-bound (its coverage audit
+            # requires the dossier's ledger). A dossier-less run — e.g. the
+            # linear engine or dual-track disabled — has nothing to seal:
+            # actors/sources/timeline above are still real extractions, so
+            # complete honestly with a report-only contract instead of failing
+            # closed after the artifacts were already written.
             plog.write(
-                "error",
-                "extract-only actor-enabled run failed closed at the final "
-                "actor-intelligence boundary",
+                "warn",
+                "extract-only: no actor dossier — skipping dossier-bound "
+                "actor-intelligence sealing (report-only contract)",
             )
-            plog.close()
-            return 2
+        else:
+            try:
+                persist_final_actor_intelligence_contract(
+                    out_dir,
+                    report=final_report,
+                    dossier=dossier,
+                    meta=meta,
+                    plog=plog,
+                    required=True,
+                    require_current_extraction=True,
+                    expected_unsealed_actors_sha256=actor_extraction_sha256,
+                )
+            except ActorIntelligenceFinalizationError as exc:
+                meta.update(
+                    status="failed",
+                    error=str(exc),
+                    finished_at=_utcnow(),
+                )
+                write_meta()
+                plog.write(
+                    "error",
+                    "extract-only actor-enabled run failed closed at the final "
+                    "actor-intelligence boundary",
+                )
+                plog.close()
+                return 2
 
     meta.update(status="completed", finished_at=_utcnow())
     write_meta()
@@ -15890,6 +16027,31 @@ def main() -> int:
         _atomic_write_text(out_dir / META_FILENAME, json.dumps(meta, ensure_ascii=False, indent=2))
 
     write_meta()
+
+    # LINEAR-ENGINE DISPATCH (2026-09-18 rearchitecture). RESEARCH_ENGINE=linear
+    # replaces the multi-pass agentic loop with a strictly linear, phase-artifact
+    # pipeline (see linear_research.py for the design rationale and budget math:
+    # ~30 stateless LLM calls and a hard prompt-token ledger, vs 46.6M prompt
+    # tokens / 1771 tool calls / 22 from-zero restarts measured on one question).
+    # Interface contract (report/actors/sources/timeline/meta + exit code) is
+    # unchanged, so every downstream stage consumes it unmodified.
+    if (os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "linear"
+            and not getattr(args, "extract_only", False)):
+        try:
+            import linear_research
+            return linear_research.run(question, out_dir, args, meta, plog, write_meta)
+        except Exception as _lin_exc:  # noqa: BLE001
+            meta.update(status="failed",
+                        error=f"linear engine failed: {type(_lin_exc).__name__}: {_lin_exc}",
+                        traceback=traceback.format_exc(),
+                        finished_at=_utcnow())
+            write_meta()
+            try:  # plog may already be closed by a nested helper — never mask the real error
+                plog.write("error", f"linear engine failed: {type(_lin_exc).__name__}: {_lin_exc}")
+                plog.close()
+            except Exception:  # noqa: BLE001
+                pass
+            return 2
 
     # Quiet DeerFlow's verbose import-time logging on stderr; keep warnings.
     logging.basicConfig(level=logging.WARNING)
@@ -16187,6 +16349,13 @@ def main() -> int:
             actor_thread_id = thread_id + "-actor"
             dual_workers = min(
                 2, _model_parallel_slots(_stream_model_lease_weight()))
+            # GLM-run 2026-09-18: under the GLM coding-plan gateway, Track B's
+            # first model call wedged in the harness stream bridge in 2 of 3
+            # attempts while Track A's opening turn + subagent fan-out streamed
+            # concurrently on the same key. RESEARCH_SEQUENTIAL_DUAL_TRACK=1
+            # runs Track A to completion first, then Track B alone.
+            if _env_flag("RESEARCH_SEQUENTIAL_DUAL_TRACK", False):
+                dual_workers = 1
 
             def _run_track_a():
                 return run_research_stage(
@@ -16220,15 +16389,68 @@ def main() -> int:
                     "dual-track: running Track A (report) + Track B "
                     "(actor dossier) concurrently under the global model lease",
                 )
-                with _cf.ThreadPoolExecutor(max_workers=dual_workers) as _ex:
+                # GLM-run 2026-09-18: a dropped provider stream can park a
+                # harness stream worker forever; an unbounded ``.result()``
+                # then strands the whole lane (observed twice with the GLM
+                # coding-plan gateway). Bound both joins by wall clock. On a
+                # Track-B timeout we abandon its worker thread (shutdown
+                # wait=False) and degrade single-track; a Track-A timeout is
+                # a lane failure, re-raised for the standard error path.
+                def _dual_wall(env: str, default_s: int) -> float:
+                    try:
+                        return max(60.0, float(
+                            os.environ.get(env, "") or default_s))
+                    except (TypeError, ValueError):
+                        return float(default_s)
+
+                _ex = _cf.ThreadPoolExecutor(max_workers=dual_workers)
+                try:
                     _fut_a = _ex.submit(_run_track_a)
                     _fut_b = _ex.submit(_run_track_b)
-                    report = _fut_a.result()
+                    report = _fut_a.result(
+                        timeout=_dual_wall("RESEARCH_TRACK_A_WALL_SECONDS", 10800))
+                    # GLM-run 2026-09-18: publish Track A's evidence durably the
+                    # moment it exists, BEFORE joining Track B. A wedged Track-B
+                    # worker (or its wall-clock timeout / fail-closed exit) must
+                    # never cost the replayed evidence again — with the pack on
+                    # disk the next --resume reuses it and skips all Track A
+                    # passes. The authoritative write below re-writes the same
+                    # bytes; this is purely an early durable copy.
+                    if (args.evidence_only and out_dir is not None
+                            and str(report or "").startswith(
+                                "# Internal Evidence Lane Pack")):
+                        try:
+                            _atomic_write_text(
+                                out_dir / EVIDENCE_PACK_FILENAME, report)
+                            persist_evidence_sources(
+                                out_dir, export_fetched_sources_for_manifest())
+                            plog.write(
+                                "stage",
+                                "dual-track: Track A evidence pack published "
+                                "durably before the Track B join",
+                            )
+                        except Exception as _pub_exc:  # noqa: BLE001 — 早发布失败不阻断主流程
+                            plog.write(
+                                "warn",
+                                "dual-track: early evidence publish failed "
+                                f"({type(_pub_exc).__name__})",
+                            )
                     try:
-                        dossier = _fut_b.result() or ""
+                        dossier = _fut_b.result(
+                            timeout=_dual_wall("RESEARCH_TRACK_B_WALL_SECONDS", 10800)) or ""
+                    except _cf.TimeoutError:
+                        dossier = ""
+                        plog.write(
+                            "warn",
+                            "dual-track: Track B (actor dossier) exceeded its "
+                            "wall-clock budget; abandoning its worker thread "
+                            "and continuing single-track",
+                        )
                     except Exception as _exc:  # noqa: BLE001 — Track B 失败退回单轨
                         dossier = ""
                         plog.write("warn", f"dual-track: Track B (actor dossier) failed; continuing single-track ({type(_exc).__name__}: {_exc})")
+                finally:
+                    _ex.shutdown(wait=False, cancel_futures=True)
             else:
                 plog.write(
                     "stage",
@@ -16985,4 +17207,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    _exit_code = main()
+    # GLM-run 2026-09-18: a dropped provider stream can leave a harness stream
+    # worker thread parked forever (sync-async bridge waits on an event that
+    # never comes). Normal interpreter exit joins non-daemon threads and would
+    # hang the whole subprocess after main() already flushed every artifact.
+    # main() writes meta.json / evidence packs / logs before returning, so a
+    # hard exit here only bypasses that join, never any pending I/O.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(_exit_code)

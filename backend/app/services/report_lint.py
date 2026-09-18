@@ -1273,12 +1273,44 @@ _MISSING_SENTENCE_SPACE_RE = re.compile(
     r"(?<=[a-z0-9\]\)\"”’」』])([.!?])(?=[A-Z])")
 
 
+# GLM-run 2026-09-18: regions where sentence-join repair must never apply —
+# markdown link labels+destinations, bare URLs, and filename-ish tokens. The
+# old implementation only masked code fences, so a cited URL like
+# ``2025.Annual.Survey.Report.pdf`` matched ``digit.Uppercase`` three times per
+# occurrence and the rule silently rewrote the URL; the citation finalizer then
+# regenerated the appendix from its canonical index, producing the exact
+# lint-changes / finalize-reverts ping-pong that failed publication twice
+# (passes=4 and passes=6, semantic_unsupported=0 both times).
+_URLISH_RE = re.compile(
+    r"\[[^\]]*\]\([^)]*\)"      # [label](destination)
+    r"|https?://\S+"                # bare URLs
+    r"|www\.\S+"                   # www.*
+    r"|\S*/[A-Za-z0-9_.\-%]+/\S*"   # path-like tokens (a slash-delimited run)
+    r"|[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+){2,}"  # ASCII dotted tokens (filenames/hosts)
+)
+
+
+def _mask_urlish(line: str) -> List[Tuple[str, bool]]:
+    """Split a line into (span, protected) segments; protected spans are opaque."""
+    spans: List[Tuple[str, bool]] = []
+    pos = 0
+    for m in _URLISH_RE.finditer(line):
+        if m.start() > pos:
+            spans.append((line[pos:m.start()], False))
+        spans.append((m.group(0), True))
+        pos = m.end()
+    if pos < len(line):
+        spans.append((line[pos:], False))
+    return spans or [(line, False)]
+
+
 def repair_missing_sentence_spaces(md: str) -> Tuple[str, int]:
     """Repair legacy ``Sentence.Next`` joins without touching URLs/initialisms.
 
     The narrow boundary requires a lowercase/digit/closer before the terminal
     and an uppercase-led word after it. This fixes the historical lint bug
-    while leaving ``N.V.``, ``U.S.``, decimals, and lowercase domains intact.
+    while leaving ``N.V.``, ``U.S.``, decimals, lowercase domains, markdown
+    links and bare/filename URLs intact (see ``_URLISH_RE``).
     """
     lines = (md or "").split("\n")
     mask = _fence_mask(lines)
@@ -1286,7 +1318,16 @@ def repair_missing_sentence_spaces(md: str) -> Tuple[str, int]:
     for index, line in enumerate(lines):
         if mask[index] or not line:
             continue
-        lines[index], count = _MISSING_SENTENCE_SPACE_RE.subn(r"\1 ", line)
+        out_parts: List[str] = []
+        count = 0
+        for span, protected in _mask_urlish(line):
+            if protected:
+                out_parts.append(span)
+            else:
+                fixed, n = _MISSING_SENTENCE_SPACE_RE.subn(r"\1 ", span)
+                out_parts.append(fixed)
+                count += n
+        lines[index] = "".join(out_parts)
         repaired += count
     return "\n".join(lines), repaired
 

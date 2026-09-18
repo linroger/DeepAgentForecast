@@ -261,6 +261,16 @@ class LLMClient:
         if not api_key:
             raise ValueError(f"LLM_PROVIDER={provider} 时必须配置 LLM_API_KEY")
         client_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        # GLM-run 2026-09-18: an explicit hard timeout on EVERY call. Without
+        # it (HTTP/2 path off), a provider stream that dies mid-read can wedge
+        # the calling pipeline thread forever — observed live on the report
+        # planning call (38+ min silent hang, no SDK timeout fired, no retry).
+        # chat()'s backoff loop owns recovery; this only bounds the wait.
+        try:
+            _http_timeout_s = float(getattr(Config, "LLM_HTTP_TIMEOUT_S", 600.0) or 600.0)
+        except (TypeError, ValueError):
+            _http_timeout_s = 600.0
+        client_kwargs["timeout"] = _http_timeout_s
         # Kimi-for-coding 网关按 User-Agent 校验 coding-agent 身份；
         # 不带可识别的 UA 会被拒绝（access_terminated_error）。
         if provider == "kimi":
