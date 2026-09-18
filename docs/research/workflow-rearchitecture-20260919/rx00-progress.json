@@ -1,0 +1,47 @@
+[
+  {
+    "phase": "rx00-focused",
+    "exit_code": 1,
+    "duration_seconds": 8.094328459003009,
+    "network_attempts": 0,
+    "guard_processes": 1,
+    "source_drift": [],
+    "raw_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-focused/command-completed.json"
+  },
+  {
+    "phase": "rx00-focused-v2",
+    "exit_code": 0,
+    "duration_seconds": 7.08004295900173,
+    "network_attempts": 0,
+    "guard_processes": 1,
+    "source_drift": [],
+    "raw_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-focused-v2/command-completed.json"
+  },
+  {
+    "phase": "rx00-backend-full",
+    "exit_code": 1,
+    "duration_seconds": 211.26383379200706,
+    "network_attempts": 1,
+    "guard_processes": 143,
+    "source_drift": [],
+    "raw_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-backend-full/command-completed.json"
+  },
+  {
+    "phase": "rx00-oasis-offline",
+    "exit_code": 1,
+    "duration_seconds": 4.594804791995557,
+    "network_attempts": 1,
+    "guard_processes": 1,
+    "source_drift": [],
+    "raw_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-oasis-offline/command-completed.json"
+  },
+  {
+    "phase": "rx00-oasis-offline-fixed",
+    "exit_code": 0,
+    "duration_seconds": 5.066788083000574,
+    "network_attempts": 0,
+    "guard_processes": 1,
+    "source_drift": [],
+    "raw_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx00-oasis-offline-fixed/command-completed.json"
+  }
+]

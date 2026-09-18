@@ -1,0 +1,158 @@
+{
+  "schema": "astra-usage-verification/v1",
+  "verified_at": "2026-09-07T18:00:54.750363+00:00",
+  "slice": "ASTRA-04a",
+  "status": "verified_offline",
+  "baseline_commit": "38c857e67463fac6fd86d030d210676b238cd589",
+  "scope": "Durable accounting foundation, producer/import correctness and cumulative read-only status. ASTRA-04 overall remains in progress; no live deployment or provider calls.",
+  "gates": {
+    "backend": {
+      "passed": 419,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 7.22,
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+      "command": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python -m pytest backend/tests/test_usage_ledger.py backend/tests/test_durable_telemetry.py backend/tests/test_llm_durable_accounting_stop.py backend/tests/test_durable_pipeline_usage.py backend/tests/test_usage_completion_gate.py backend/tests/test_telemetry.py backend/tests/test_telemetry_fallback_attribution.py backend/tests/test_audit_fixes_infra.py backend/tests/test_research_spend_flush.py backend/tests/test_wave9_orchestrator.py backend/tests/test_orchestrator_research_wiring.py backend/tests/test_token_budget.py backend/tests/test_seed_ensemble.py backend/tests/test_status_live_block.py backend/tests/test_launch_intent_api.py backend/tests/test_launch_intents.py backend/tests/test_sim_meter_persistence.py backend/tests/test_persona_meter_context.py backend/tests/test_sim_context_persona.py backend/tests/test_actor_role_prompt.py -q --disable-warnings --maxfail=3 --junitxml=/tmp/astra-04a-backend.xml"
+    },
+    "frontend": {
+      "passed": 113,
+      "failures": 0,
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/frontend",
+      "command": "/Users/rogerlin/.local/bin/node --test tests/*.test.mjs"
+    },
+    "build": {
+      "result": "passed",
+      "seconds": 1.23,
+      "command": "/Users/rogerlin/.local/bin/node node_modules/vite/bin/vite.js build",
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/frontend"
+    },
+    "browser": {
+      "result": "passed",
+      "receipt": "docs/research/astra-usage-browser.json",
+      "scenarios": [
+        "known cumulative usage",
+        "unavailable usage with hidden fill and preserved DOM identity",
+        "explicit recorded zero"
+      ],
+      "outbound_requests": 0,
+      "launch_posts": 0,
+      "fixture_stopped": true
+    },
+    "ruff": {
+      "new_and_other_changed_python": "passed",
+      "legacy_producer_baseline": {
+        "backend/app/services/oasis_profile_generator.py": {
+          "baseline_findings": 11,
+          "current_findings": 11,
+          "no_added_findings": true,
+          "codes": {
+            "F541": 10,
+            "B905": 1
+          }
+        },
+        "backend/scripts/run_parallel_simulation.py": {
+          "baseline_findings": 12,
+          "current_findings": 12,
+          "no_added_findings": true,
+          "codes": {
+            "B905": 1,
+            "C420": 1,
+            "B007": 2,
+            "B904": 2,
+            "F541": 6
+          }
+        }
+      },
+      "scope": "23 existing findings in two legacy producer files match baseline codes/messages; no new findings. No claim of a globally clean linter."
+    },
+    "diff_whitespace": "passed",
+    "historical_source_receipts_verified": 83
+  },
+  "observed_regressions": [
+    {
+      "scenario": "ordinary nested JSON call",
+      "before_calls": 2,
+      "after_calls": 1
+    },
+    {
+      "scenario": "JSON repair with two physical calls",
+      "before_calls": 3,
+      "after_calls": 2
+    },
+    {
+      "scenario": "two parallel JSON calls plus direct chat",
+      "before_calls": 5,
+      "after_calls": 3
+    },
+    {
+      "scenario": "same child token grows from120 to180 then240 tokens across reset",
+      "after_cumulative_tokens": 240,
+      "second_attempt_tokens": 60,
+      "replay_credit": 0
+    },
+    {
+      "scenario": "500 distinct operations, each replayed once",
+      "after_calls": 500,
+      "after_tokens": 550000,
+      "replay_credit": 0
+    }
+  ],
+  "independent_review": {
+    "result": "no_remaining_blocking_findings_within_slice",
+    "reviewer": "past_run_bottlenecks",
+    "independent_acceptance": "backend/tests/test_usage_completion_gate.py",
+    "resolved": [
+      "native telemetry swallowed ledger failure",
+      "legacy totals lost by coercion",
+      "baseline child seed lost after projection crash",
+      "failed initialization finalizer overwrote protected telemetry",
+      "swallowed final write permitted completion",
+      "unknown CSS auto-width looked fully spent",
+      "foreign cached usage baseline",
+      "cold initialization speculative schema read"
+    ]
+  },
+  "benchmark": "docs/research/astra-usage-benchmark.json",
+  "historical_evidence": "docs/research/astra-iteration-04-run-evidence.json",
+  "remaining_limits": [
+    "ASTRA-04b provider-boundary reservations and live detached-child coverage are pending.",
+    "Budget checks use cumulative recorded observations but remain post-call; not a complete hard spend cap.",
+    "Exact CLI request provenance and cumulative checkpoint-message delta extraction remain incomplete.",
+    "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
+    "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
+    "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
+    "Only local synthetic overhead and offline behavior were measured; no production speedup or global Pareto optimum is claimed.",
+    "Deployment and remote publication remain pending; GitHub authentication previously failed."
+  ],
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE",
+    "cadence": "hourly",
+    "next": "ASTRA-04b"
+  },
+  "source_files": {
+    "backend/app/api/research.py": "24beadd01a36fde87c2097127b450e897509ce0cdd16030c8125af31f25b7f67",
+    "backend/app/services/oasis_profile_generator.py": "88c0717dd4e73a72f5cd5a2be1dc843ea0c1905be2a900d9a8a224d5c78de95f",
+    "backend/app/services/pipeline_orchestrator.py": "50553b8e9f09d2eea7ede172e88416ceb7a8bb9e094023b32160daaf8a78fe6a",
+    "backend/app/utils/llm_client.py": "910a6b24ce582453defd1229db06a1501b16c5fdf5d50f73294df60309c8aa8c",
+    "backend/app/utils/telemetry.py": "e91f7694a2c443f443928bd4baba51abb221364e47ac0620b6e6c0b9482cc817",
+    "backend/app/utils/usage_ledger.py": "0353a71320831afc4658c1882201e1018d0c553177ccd33c20824ed80123e998",
+    "backend/scripts/benchmark_usage_ledger.py": "d3859ed7078214b9a73c45ae5c6463e9225c417f2b0244c17696830c0ba5ac8c",
+    "backend/scripts/run_parallel_simulation.py": "65af03c98af0ad6d3cc7f19718893b7f34ab42ac83e2bf42d9c8765e1be30fcb",
+    "backend/tests/test_durable_pipeline_usage.py": "cdb864a9b1fdaee090f412a84759446b1ca111f9e270a66747b3e65a24060565",
+    "backend/tests/test_durable_telemetry.py": "f5dcbf1935420923633cdab8ec0d6ec49c3a1543fc8ec9eb0ddfa8fe21416af8",
+    "backend/tests/test_llm_durable_accounting_stop.py": "5bbb536ae53f9657ef8121f44533539c8483cb6c4b13e0645b4a1c4462f69dcb",
+    "backend/tests/test_persona_meter_context.py": "457e87e2092dd79ac6e618e2214cded07d2c2458694b853d9472a1e5cc05e3cf",
+    "backend/tests/test_sim_meter_persistence.py": "ea024c11c3fd643ad8702646c0daca7bbb4ea391541dfa9a04f9bec8188f9bba",
+    "backend/tests/test_status_live_block.py": "17529069ad07e7f40947d018cc0a5f2710b6107ae30f3b35418d142c7d57ebf6",
+    "backend/tests/test_usage_completion_gate.py": "55fb9c2686f83bdaa6103c5e862f109c7cf2e78cc2167ba2d65389fb13c3a65d",
+    "backend/tests/test_usage_ledger.py": "f9896597d14482ccbef3ab9c037649f8b9bdecbeb42fa23d3d338264c77741dd",
+    "frontend/src/components/research/RunVitals.vue": "63f0b236c7e30e08673bc9abf99cb0caeef19007b7bc711b1a433de4511dcfe3",
+    "frontend/src/utils/runVitals.js": "a04360e2175d866642918ff43e0b06320213a4309d20261211137381ece49f67",
+    "frontend/tests/manual/astra-usage.playwright.js": "0b68320f13d30136970458b9e9f18cf58d6bc2aed26fdae2a2538c9a2eb4f69e",
+    "frontend/tests/runVitals.test.mjs": "82aa62a188849e0315b91943c99f17fbf3f94a064bc7f4297d68e4a650dca222",
+    "frontend/tests/runVitalsRender.test.mjs": "e3f6ec41505c565c1659ee9fc8b9c94c8f2dd59df9c97a32a35c9e518eaba2ca"
+  },
+  "implementation_commit": "8eaa71b"
+}

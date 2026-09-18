@@ -235,6 +235,51 @@ test('render model: zero-filled spend is treated as unmetered and omitted', () =
   assert.equal(tokensOnly.spendCostUsd, null)
 })
 
+test('render model: explicitly recorded zero stays visible with partial coverage', () => {
+  const model = buildRunVitalsModel({ spend_so_far: {
+    available: true, tokens: 0, cost_usd: 0, usage_complete: false,
+    coverage: 'recorded_observations'
+  } }, RUNNING)
+  assert.ok(model)
+  assert.equal(model.spendTokens, 0)
+  assert.equal(model.spendCostUsd, 0)
+  assert.equal(model.spendUnknown, false)
+  assert.equal(model.usageComplete, false)
+  assert.equal(model.spendCoverage, 'recorded_observations')
+})
+
+test('render model: unavailable spend suppresses stale numbers and never invents remaining budget', () => {
+  const model = buildRunVitalsModel({
+    spend_so_far: { available: false, tokens: 100, cost_usd: 2, usage_complete: false },
+    budget: { available: false, limit_tokens: 1000, spent_tokens: 100, remaining_tokens: 900 }
+  }, RUNNING)
+  assert.equal(model.spendTokens, null)
+  assert.equal(model.spendCostUsd, null)
+  assert.equal(model.spendUnknown, true)
+  assert.equal(model.budget.spentTokens, null)
+  assert.equal(model.budget.remainingTokens, null)
+  assert.equal(model.budget.pctUsed, null)
+})
+
+test('render model: budget with absent or null spent stays unknown', () => {
+  for (const spent of [undefined, null, false]) {
+    const model = buildRunVitalsModel({
+      budget: { limit_tokens: 1000, spent_tokens: spent }
+    }, RUNNING)
+    assert.equal(model.budget.spentTokens, null)
+    assert.equal(model.budget.remainingTokens, null)
+    assert.equal(model.budget.pctUsed, null)
+    assert.equal(model.budget.critical, false)
+  }
+})
+
+test('render model: explicitly unavailable remaining budget is not recomputed', () => {
+  const model = buildRunVitalsModel({ budget: {
+    limit_tokens: 1000, spent_tokens: 100, remaining_tokens: null
+  } }, RUNNING)
+  assert.equal(model.budget.remainingTokens, null)
+})
+
 test('render model: budget crosses critical strictly beyond 90% and clamps the fill', () => {
   const at90 = buildRunVitalsModel(
     { budget: { limit_tokens: 1_000_000, spent_tokens: 900_000, remaining_tokens: 100_000 } },

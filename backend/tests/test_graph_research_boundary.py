@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.services import pipeline_orchestrator as po
 
 
@@ -48,3 +50,27 @@ def test_graph_chunks_detect_control_split_across_lines():
     assert "ignore all" not in joined
     assert "previous instructions" not in joined
     assert "[unsafe instruction-like dossier text omitted]" in joined
+
+
+@pytest.mark.parametrize(
+    "body", ["\ufdfa" * 1000, "<tool>\r" * 1000],
+    ids=["unicode_normalization_expansion", "cr_only_omission_expansion"],
+)
+def test_graph_chunks_preserve_tail_after_complete_sanitation(monkeypatch, body):
+    monkeypatch.setattr(po.Config, "DEFAULT_CHUNK_SIZE", 600)
+    monkeypatch.setattr(po.Config, "DEFAULT_CHUNK_OVERLAP", 60)
+    raw = "SAFE_GRAPH_HEAD_MARKER\n" + body + "\nSAFE_GRAPH_TAIL_MARKER"
+
+    chunks = po._graph_research_chunks(raw, "Stage 1 research report")
+
+    assert len(chunks) > 1
+    joined = "\n".join(chunks)
+    assert "SAFE_GRAPH_HEAD_MARKER" in joined
+    assert "SAFE_GRAPH_TAIL_MARKER" in joined
+    assert "<tool>" not in joined
+    for index, chunk in enumerate(chunks, start=1):
+        label = f"Stage 1 research report chunk {index}/{len(chunks)}"
+        assert chunk.startswith(f"BEGIN UNTRUSTED RESEARCH DATA — {label}\n")
+        assert chunk.endswith(f"END UNTRUSTED RESEARCH DATA — {label}")
+        # Keep the existing chunk policy and allow the fixed evidence wrapper.
+        assert len(chunk) <= 600 + 400

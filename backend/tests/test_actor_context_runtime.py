@@ -925,6 +925,8 @@ def test_sparse_legacy_dossier_gets_a_safe_pack_without_fake_report_coverage():
 
 
 def test_role_context_reaches_real_reddit_and_twitter_oasis_system_messages(tmp_path):
+    from camel.models.stub_model import StubModel
+    from camel.types import ModelType
     from oasis import generate_reddit_agent_graph, generate_twitter_agent_graph
 
     dossier = _dossier()
@@ -973,8 +975,15 @@ def test_role_context_reaches_real_reddit_and_twitter_oasis_system_messages(tmp_
         assert provenance["report_sha256"] == manifest["report_sha256"]
 
     async def load_system_messages() -> tuple[str, str]:
-        reddit_graph = await generate_reddit_agent_graph(str(reddit_path))
-        twitter_graph = await generate_twitter_agent_graph(str(twitter_path))
+        # Exercise the real OASIS profile/prompt consumer with an offline model.
+        # Its default model downloads tokenizer data on a clean machine; this
+        # test establishes prompt propagation, not provider tokenization.
+        reddit_graph = await generate_reddit_agent_graph(
+            str(reddit_path), model=StubModel(ModelType.STUB)
+        )
+        twitter_graph = await generate_twitter_agent_graph(
+            str(twitter_path), model=StubModel(ModelType.STUB)
+        )
         return (
             reddit_graph.get_agent(0).system_message.content,
             twitter_graph.get_agent(0).system_message.content,

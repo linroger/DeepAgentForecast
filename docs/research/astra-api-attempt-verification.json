@@ -1,0 +1,248 @@
+{
+  "schema": "astra-api-attempt-verification/v1",
+  "verified_at": "2026-09-07T19:29:32.165379+00:00",
+  "slice": "ASTRA-04b2",
+  "status": "verified_offline",
+  "baseline_commit": "a1180cc135f1cd2ccdcbf4899437b4288d4c87e1",
+  "scope": "Backend OpenAI-compatible chat and native-tool physical SDK attempts; full ASTRA-04 remains incomplete.",
+  "gates": {
+    "backend": {
+      "passed": 741,
+      "failures": 0,
+      "errors": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "seconds": 11.522,
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_fallback_model.py",
+        "backend/tests/test_graph_cost_containment.py",
+        "backend/tests/test_graph_optimizations.py",
+        "backend/tests/test_wave9_kg.py",
+        "backend/tests/test_report_chart_quality.py",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-evidence-lgbxcwwt/backend.xml"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    }
+  },
+  "comparison": {
+    "path": "docs/research/astra-api-attempt-comparison.json",
+    "sha256": "e6ea1a9b504dddb0a3678ffaa77a36ecd014eda0034834380cf4b8e100f53fb7",
+    "command": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "backend/scripts/benchmark_api_attempts.py",
+        "--baseline-ref",
+        "a1180cc",
+        "--repetitions",
+        "30",
+        "--output",
+        "docs/research/astra-api-attempt-comparison.json"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "cases": {
+      "rate_limit_chat": {
+        "before": {
+          "mock_transport_requests": 9,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "outcome": "RateLimitError",
+          "samples": 1,
+          "median_local_elapsed_ms": 58.565
+        },
+        "after": {
+          "mock_transport_requests": 3,
+          "recorded_calls": 3,
+          "recorded_tokens": 0,
+          "outcome": "RateLimitError",
+          "samples": 1,
+          "median_local_elapsed_ms": 4.701
+        }
+      },
+      "rate_limit_native": {
+        "before": {
+          "mock_transport_requests": 9,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "outcome": "RateLimitError",
+          "samples": 1,
+          "median_local_elapsed_ms": 1.49
+        },
+        "after": {
+          "mock_transport_requests": 3,
+          "recorded_calls": 3,
+          "recorded_tokens": 0,
+          "outcome": "RateLimitError",
+          "samples": 1,
+          "median_local_elapsed_ms": 3.26
+        }
+      },
+      "empty_then_success": {
+        "before": {
+          "mock_transport_requests": 2,
+          "recorded_calls": 1,
+          "recorded_tokens": 60,
+          "outcome": "success",
+          "samples": 1,
+          "median_local_elapsed_ms": 3.273
+        },
+        "after": {
+          "mock_transport_requests": 2,
+          "recorded_calls": 2,
+          "recorded_tokens": 180,
+          "outcome": "success",
+          "samples": 1,
+          "median_local_elapsed_ms": 2.772
+        }
+      },
+      "empty_over_budget": {
+        "before": {
+          "mock_transport_requests": 3,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "outcome": "RuntimeError",
+          "samples": 1,
+          "median_local_elapsed_ms": 1.939
+        },
+        "after": {
+          "mock_transport_requests": 1,
+          "recorded_calls": 1,
+          "recorded_tokens": 25,
+          "outcome": "BudgetExceeded",
+          "samples": 1,
+          "median_local_elapsed_ms": 1.852
+        }
+      },
+      "successful_request_overhead": {
+        "before": {
+          "mock_transport_requests": 30,
+          "recorded_calls": 30,
+          "recorded_tokens": 450,
+          "outcome": "success",
+          "samples": 30,
+          "median_local_elapsed_ms": 0.844
+        },
+        "after": {
+          "mock_transport_requests": 30,
+          "recorded_calls": 30,
+          "recorded_tokens": 450,
+          "outcome": "success",
+          "samples": 30,
+          "median_local_elapsed_ms": 1.318
+        }
+      }
+    }
+  },
+  "saved_run_evidence": {
+    "path": "docs/research/astra-api-run-evidence.json",
+    "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be",
+    "saved_hashes_matching": 77,
+    "pipeline_count": 32,
+    "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "log_files_checked": 12,
+    "interpretation": "Literal historical log counts overlap and are not distinct requests, invoice data or post-change performance."
+  },
+  "review": {
+    "reviewer": "api_attempt_review",
+    "result": "No blocking findings remain within ASTRA-04b2.",
+    "independent_tests_passed": 85,
+    "resolved": [
+      "Reject malformed usage and token-details containers instead of estimating them as missing.",
+      "Reject cache counts exceeding inclusive input and positive cache-only incomplete usage.",
+      "Cache fallback results only under the serving provider and model."
+    ],
+    "coverage_notes": [
+      "Detached simulation exports do not yet transport every physical attempt to the parent.",
+      "Unresolved zero-counter operation markers exist in usage_operations but are not exposed as unresolved counts in cumulative projections."
+    ],
+    "documentation": "Source and receipt hashes, embedded case data, JUnit counts and overhead arithmetic independently verified; budget wording preserves strict greater-than semantics."
+  },
+  "quality": {
+    "ruff": {
+      "result": "All seven changed Python files passed.",
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/telemetry.py",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/scripts/benchmark_api_attempts.py"
+      ]
+    },
+    "python_parse": "All seven changed Python files parsed.",
+    "diff_check": "passed",
+    "frontend": "No frontend change; no new frontend gate or deployment parity claim."
+  },
+  "source_sha256": {
+    "backend/app/utils/llm_client.py": "0b2fbbb513c921e3911ad39b0db4b9c17cdde0082e2b31a8d3947d83a2d153de",
+    "backend/app/utils/telemetry.py": "906bf3eec6f6064aaa9f5935b4ce761a04eba053893bfa066ecccaa676f0d194",
+    "backend/tests/test_llm_physical_attempts.py": "b28a788ba993988cfcd16b64e5034f617bccf76fb0115018a6769666e03f620d",
+    "backend/tests/test_llm_sdk_attempt_boundary.py": "74f03d80d992c783092cc8df8444e39ae7a6af3db3b09c4c3faea8b6a49ee883",
+    "backend/tests/test_llm_durable_accounting_stop.py": "5d0c268b5018317a682a74fae17656f01f0ee016e76ba761fd45db53f44b03f5",
+    "backend/tests/test_audit_fixes_infra.py": "8547fc52279950a41c2c5a361bd82f5175d54a6bf6a8c2a24e94c6c5a3693082",
+    "backend/scripts/benchmark_api_attempts.py": "eece620899e280b8af64c3c683f31b607deb61c1ac26ded5896a2c9438e0b4e0"
+  },
+  "raw_evidence_directory": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-evidence-lgbxcwwt",
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "kind": "heartbeat",
+    "status": "ACTIVE"
+  },
+  "limits": [
+    "No provider calls, production synchronization, live restarts or saved-run mutations.",
+    "SDK transport retry multiplication is removed; the existing three-attempt application loop and configured fallback remain.",
+    "A zero-counter unknown attempt is not evidence of zero consumption. Missing usage remains a labeled estimate and is not invoice authority.",
+    "The in-flight row is not a token reservation. Checks prevent new calls once recorded limits are exceeded but concurrent calls can still exceed a cap.",
+    "CLI logical-call accounting, detached child physical coverage, unresolved projections and transactional reservations remain pending; usage_complete remains false.",
+    "Cache observations are retained with an unknown input partition; malformed positive partial usage stops further dispatch.",
+    "completed denotes usage settlement, not successful logical response validation.",
+    "Synthetic overhead and request counts do not establish production savings or Pareto optimality.",
+    "GitHub publication remains blocked by the previous authentication rejection; deployment remains pending."
+  ],
+  "implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06"
+}

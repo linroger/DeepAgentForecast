@@ -13,6 +13,8 @@ import hashlib
 import os
 from pathlib import Path
 import runpy
+import subprocess
+import sys
 
 import pytest
 
@@ -94,6 +96,30 @@ def test_noop_when_already_in_sync(tmp_path, monkeypatch):
     assert deployed_script.stat().st_mtime_ns == mtime_before
 
 
+def test_sync_preserves_linear_engine_and_compaction_safety(tmp_path, monkeypatch):
+    """Both sides of the main/ASTRA merge must reach the child deployment."""
+    bridge_dir = tmp_path / "deerflow_bridge"
+    deployed_dir = tmp_path / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "# current bridge\n")
+    _write(deployed_dir / "deerflow_research.py", "# current bridge\n")
+    modules = {
+        "linear_research.py": "# linear research engine\n",
+        "research_compaction.py": "# durable compaction receipt verifier\n",
+    }
+    for name, content in modules.items():
+        _write(bridge_dir / name, content)
+        _write(deployed_dir / name, "# stale\n")
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(tmp_path / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
+    )
+
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+
+    for name, content in modules.items():
+        assert (deployed_dir / name).read_text() == content
+
+
 def test_syncs_skill_files_too(tmp_path, monkeypatch):
     repo_root = tmp_path
     bridge_dir = repo_root / "deerflow_bridge"
@@ -167,6 +193,7 @@ def test_syncs_config_reflected_tool_modules(tmp_path, monkeypatch):
     _write(bridge_dir / "search_tools.py", "# search_tools body\n")
     _write(bridge_dir / "cached_fetch.py", "# cached_fetch body\n")
     _write(bridge_dir / "research_budget.py", "# research_budget body\n")
+    _write(bridge_dir / "research_compaction.py", "# research_compaction body\n")
 
     monkeypatch.setattr(
         "app.services.pipeline_orchestrator.__file__",
@@ -179,6 +206,44 @@ def test_syncs_config_reflected_tool_modules(tmp_path, monkeypatch):
     assert (deployed_dir / "search_tools.py").read_text() == "# search_tools body\n"
     assert (deployed_dir / "cached_fetch.py").read_text() == "# cached_fetch body\n"
     assert (deployed_dir / "research_budget.py").read_text() == "# research_budget body\n"
+    assert (deployed_dir / "research_compaction.py").read_text() == "# research_compaction body\n"
+    assert (deployed_dir / "backend" / "research_compaction.py").read_text() == (
+        "# research_compaction body\n")
+
+    _write(bridge_dir / "research_compaction.py", "# updated compaction contract\n")
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    assert (deployed_dir / "research_compaction.py").read_text() == (
+        "# updated compaction contract\n")
+    assert (deployed_dir / "backend" / "research_compaction.py").read_text() == (
+        "# updated compaction contract\n")
+
+
+def test_native_backend_startup_imports_its_synced_compaction_helper(tmp_path, monkeypatch):
+    bridge_dir = tmp_path / "deerflow_bridge"
+    deployed_dir = tmp_path / "deer-flow"
+    _write(bridge_dir / "deerflow_research.py", "# bridge\n")
+    _write(deployed_dir / "deerflow_research.py", "# bridge\n")
+    helper = Path(__file__).resolve().parents[2] / "deerflow_bridge" / "research_compaction.py"
+    _write(bridge_dir / "research_compaction.py", helper.read_text(encoding="utf-8"))
+    monkeypatch.setattr(
+        "app.services.pipeline_orchestrator.__file__",
+        str(tmp_path / "backend" / "app" / "services" / "pipeline_orchestrator.py"),
+    )
+    _sync_deerflow_bridge_if_stale(str(deployed_dir))
+    result = subprocess.run(
+        [sys.executable, "-c", (
+            "from pathlib import Path; import research_compaction as rc; "
+            "assert Path(rc.__file__).resolve() == Path('research_compaction.py').resolve(); "
+            "rc.record_compaction(thread_id='native-thread', message_id='summary-1', "
+            "content='Derived evidence', source_messages=[{'type': 'ai', 'data': "
+            "{'content': 'original evidence'}}], archive_path='archive.sqlite3'); "
+            "print('native helper imported and archived')"
+        )],
+        cwd=deployed_dir / "backend", env={"PYTHONPATH": "."},
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "native helper imported and archived"
+    assert (deployed_dir / "backend" / "archive.sqlite3").is_file()
 
 
 def test_syncs_tracked_middleware_overlay(tmp_path, monkeypatch):
@@ -385,39 +450,10 @@ def test_syncs_tracked_embedded_subagent_overlay(tmp_path, monkeypatch):
     deployed_harness = (
         deployed_dir / "backend" / "packages" / "harness" / "deerflow"
     )
-    _write(
-        deployed_harness / "client.py",
-        '''class DeerFlowClient:
-    def stream(self, thread_id):
-        context = {"thread_id": thread_id}
-        # The same message id carries identical cumulative ``usage_metadata``
-        # in both the final ``messages`` chunk and the values snapshot —
-        # count it only on whichever arrives first.
-        counted_usage_ids: set[str] = set()
-        cumulative_usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
-
-        def _account_usage(msg_id, usage):
-            if not usage:
-                return None
-            if msg_id and msg_id in counted_usage_ids:
-                return None
-            if msg_id:
-                counted_usage_ids.add(msg_id)
-            input_tokens = usage.get("input_tokens", 0) or 0
-            output_tokens = usage.get("output_tokens", 0) or 0
-            total_tokens = usage.get("total_tokens", 0) or 0
-            cumulative_usage["input_tokens"] += input_tokens
-            cumulative_usage["output_tokens"] += output_tokens
-            cumulative_usage["total_tokens"] += total_tokens
-            return {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-                "total_tokens": total_tokens,
-            }
-
-        return context, _account_usage
-''',
-    )
+    fixture_path = (Path(__file__).resolve().parents[2] / "deerflow_bridge"
+                    / "patches" / "tests" / "test_client_usage_overlay.py")
+    client_fixture = runpy.run_path(str(fixture_path))["_SYNTHETIC_CLIENT"]
+    _write(deployed_harness / "client.py", client_fixture)
     _write(
         deployed_harness / "tools" / "builtins" / "task_tool.py",
         '''def task_tool(runtime):

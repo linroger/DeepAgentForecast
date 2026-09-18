@@ -99,3 +99,7 @@ handoff.md
 
 # Foglamp codebase scan state (the lock file contains a private edit token)
 .foglamp/
+
+# Isolated browser verification outputs; evidence is retained separately.
+/.playwright-cli/
+/output/playwright/

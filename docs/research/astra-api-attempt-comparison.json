@@ -1,0 +1,105 @@
+{
+  "schema": "astra-api-attempt-comparison/v1",
+  "baseline_commit": "a1180cc135f1cd2ccdcbf4899437b4288d4c87e1",
+  "source_sha256": {
+    "before": "910a6b24ce582453defd1229db06a1501b16c5fdf5d50f73294df60309c8aa8c",
+    "after": "0b2fbbb513c921e3911ad39b0db4b9c17cdde0082e2b31a8d3947d83a2d153de"
+  },
+  "network_requests": 0,
+  "provider_requests": 0,
+  "transport": "httpx.MockTransport with actual OpenAI SDK",
+  "backoff_sleeps": "disabled for both versions",
+  "cases": {
+    "rate_limit_chat": {
+      "before": {
+        "mock_transport_requests": 9,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "outcome": "RateLimitError",
+        "samples": 1,
+        "median_local_elapsed_ms": 58.565
+      },
+      "after": {
+        "mock_transport_requests": 3,
+        "recorded_calls": 3,
+        "recorded_tokens": 0,
+        "outcome": "RateLimitError",
+        "samples": 1,
+        "median_local_elapsed_ms": 4.701
+      }
+    },
+    "rate_limit_native": {
+      "before": {
+        "mock_transport_requests": 9,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "outcome": "RateLimitError",
+        "samples": 1,
+        "median_local_elapsed_ms": 1.49
+      },
+      "after": {
+        "mock_transport_requests": 3,
+        "recorded_calls": 3,
+        "recorded_tokens": 0,
+        "outcome": "RateLimitError",
+        "samples": 1,
+        "median_local_elapsed_ms": 3.26
+      }
+    },
+    "empty_then_success": {
+      "before": {
+        "mock_transport_requests": 2,
+        "recorded_calls": 1,
+        "recorded_tokens": 60,
+        "outcome": "success",
+        "samples": 1,
+        "median_local_elapsed_ms": 3.273
+      },
+      "after": {
+        "mock_transport_requests": 2,
+        "recorded_calls": 2,
+        "recorded_tokens": 180,
+        "outcome": "success",
+        "samples": 1,
+        "median_local_elapsed_ms": 2.772
+      }
+    },
+    "empty_over_budget": {
+      "before": {
+        "mock_transport_requests": 3,
+        "recorded_calls": 0,
+        "recorded_tokens": 0,
+        "outcome": "RuntimeError",
+        "samples": 1,
+        "median_local_elapsed_ms": 1.939
+      },
+      "after": {
+        "mock_transport_requests": 1,
+        "recorded_calls": 1,
+        "recorded_tokens": 25,
+        "outcome": "BudgetExceeded",
+        "samples": 1,
+        "median_local_elapsed_ms": 1.852
+      }
+    },
+    "successful_request_overhead": {
+      "before": {
+        "mock_transport_requests": 30,
+        "recorded_calls": 30,
+        "recorded_tokens": 450,
+        "outcome": "success",
+        "samples": 30,
+        "median_local_elapsed_ms": 0.844
+      },
+      "after": {
+        "mock_transport_requests": 30,
+        "recorded_calls": 30,
+        "recorded_tokens": 450,
+        "outcome": "success",
+        "samples": 30,
+        "median_local_elapsed_ms": 1.318
+      }
+    }
+  },
+  "limits": "Synthetic transport counts and local overhead only; not historical billing or production speedup. Baseline and changed client share current telemetry."
+}

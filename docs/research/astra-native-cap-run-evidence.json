@@ -1,0 +1,269 @@
+{
+  "schema": "astra-native-cap-run-evidence/v1",
+  "validated_at": "2026-09-08T00:14:36.346073+00:00",
+  "iteration_baseline": "b0532c91b6a90f2ce31a467aec82b43cb4d75688",
+  "scope": "Read-only ASTRA-04b5b2 explicit native output-cap evidence. Historical numeric settings plus pinned factory/planner source; no runtime, provider, network, private payload exports or original saved writes.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipts": [
+    {
+      "path": "docs/research/astra-reservation-run-evidence.json",
+      "sha256": "60c9f378cfc49cfc8ff391a332893c6e71e4b96fee63a62293e9ff98308a4b12"
+    },
+    {
+      "path": "docs/research/astra-api-run-evidence.json",
+      "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be"
+    },
+    {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264"
+    },
+    {
+      "path": "docs/research/astra-simulation-run-evidence.json",
+      "sha256": "ce479031708da725d197919d635f0b82e2a3438dbed94eb40f77e742ced86037"
+    }
+  ],
+  "validation": {
+    "saved_artifacts": {
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+      "new_or_changed_logs_parsed": 0,
+      "parsed_aggregates": [],
+      "prior_aggregates_reused": true,
+      "prior_aggregate_reference": "astra-reservation-run-evidence.json reused_log_aggregates; counts remain nonexclusive literal log markers."
+    },
+    "selected_child_health": {
+      "checked": 4,
+      "all_hashes_match": true,
+      "all_parent_run_entries_still_absent": true,
+      "all_child_token_snapshots_still_absent": true
+    }
+  },
+  "settings_lookup": {
+    "scope": "Recursive dictionary/list traversal of four selected run.json manifests and simulation_config.json files; inspect only the exact key allowlist below. Environment files, active service configuration and provider payloads are excluded.",
+    "key_allowlist": [
+      "LLM_RUN_BUDGET_TOKENS",
+      "LLM_RUN_BUDGET_USD",
+      "OASIS_MAX_OUTPUT_TOKENS",
+      "OASIS_MAX_TOKENS",
+      "llm_max_tokens",
+      "llm_output_tokens",
+      "max_completion_tokens",
+      "max_tokens",
+      "native_output_token_limit",
+      "native_output_tokens",
+      "output_token_limit"
+    ],
+    "no_matching_key_interpretation": "The inspected documents do not establish a native output cap or enabled run budget. Absence is unknown, not a zero cap, unconstrained provider output, or proof of historical defaults."
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "simulation_id": "sim_a0a936f8104c",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run.json",
+        "sha256": "4c56590a6ddb5e1691cbfbe9229a331a16dfab1128979d76243f5e0858bea2be"
+      },
+      "simulation_config_source": {
+        "path": "backend/uploads/simulations/sim_a0a936f8104c/simulation_config.json",
+        "sha256": "66c82ab26e5e496ec5b1ae85ad2e7a2442ee9a59f3a9f1fdd1e15aa528f0fbbf"
+      },
+      "manifest_lineage_matches": true,
+      "manifest_cap_fields": [],
+      "simulation_config_cap_fields": [],
+      "historical_native_output_cap": null,
+      "historical_run_token_cap": null,
+      "historical_run_usd_cap": null,
+      "observed_physical_request_output_limit": null,
+      "saved_health_calls": 221,
+      "health_reference": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; child.health_source hash revalidated.",
+      "parent_run_meter_present": false,
+      "child_token_snapshot_exists": false
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "simulation_id": "sim_85b123350ee3",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run.json",
+        "sha256": "b7404294eef796f71ef5b3fc086bd351bfd9ef621c765b94298fc1368ae16b30"
+      },
+      "simulation_config_source": {
+        "path": "backend/uploads/simulations/sim_85b123350ee3/simulation_config.json",
+        "sha256": "7dacef09a06023b62f4a614f06235c2a93d1fa8c8fb18dc343789322949f80f8"
+      },
+      "manifest_lineage_matches": true,
+      "manifest_cap_fields": [],
+      "simulation_config_cap_fields": [],
+      "historical_native_output_cap": null,
+      "historical_run_token_cap": null,
+      "historical_run_usd_cap": null,
+      "observed_physical_request_output_limit": null,
+      "saved_health_calls": 456,
+      "health_reference": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; child.health_source hash revalidated.",
+      "parent_run_meter_present": false,
+      "child_token_snapshot_exists": false
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "simulation_id": "sim_05ab2bdebbd2",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run.json",
+        "sha256": "59e2683039b0d5646138068b7b2202170eefd21a627c6c8524a8ce58a59cf3ff"
+      },
+      "simulation_config_source": {
+        "path": "backend/uploads/simulations/sim_05ab2bdebbd2/simulation_config.json",
+        "sha256": "a5bacb97c35260219e60e07c6166c5227daae06a05385582feaa2f79ff9792a9"
+      },
+      "manifest_lineage_matches": true,
+      "manifest_cap_fields": [],
+      "simulation_config_cap_fields": [],
+      "historical_native_output_cap": null,
+      "historical_run_token_cap": null,
+      "historical_run_usd_cap": null,
+      "observed_physical_request_output_limit": null,
+      "saved_health_calls": 648,
+      "health_reference": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; child.health_source hash revalidated.",
+      "parent_run_meter_present": false,
+      "child_token_snapshot_exists": false
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "simulation_id": "sim_9fc88d28ccb1",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run.json",
+        "sha256": "90a89e823e19070c9ef18a2a4ff15f1337db4df91af922b1de0dd6d1c7bb2cdd"
+      },
+      "simulation_config_source": {
+        "path": "backend/uploads/simulations/sim_9fc88d28ccb1/simulation_config.json",
+        "sha256": "5e5848f6093c3f381458423c4ffca0ab909607e082b36cee0a36b7c166abd8f7"
+      },
+      "manifest_lineage_matches": true,
+      "manifest_cap_fields": [],
+      "simulation_config_cap_fields": [],
+      "historical_native_output_cap": null,
+      "historical_run_token_cap": null,
+      "historical_run_usd_cap": null,
+      "observed_physical_request_output_limit": null,
+      "saved_health_calls": 212,
+      "health_reference": "astra-simulation-run-evidence.json selected_runs matching pipeline_id; child.health_source hash revalidated.",
+      "parent_run_meter_present": false,
+      "child_token_snapshot_exists": false
+    }
+  ],
+  "pinned_source_snapshot": [
+    {
+      "path": "backend/app/utils/oasis_llm.py",
+      "revision": "b0532c91b6a90f2ce31a467aec82b43cb4d75688",
+      "sha256": "51271cfe0692dfd1352a0ff1c01c1785fc2b2b00d30d2bc6ed944f76c7e66092",
+      "anchors": {
+        "def _create_openai_model": 495,
+        "_m = ModelFactory.create(": 531,
+        "def create_oasis_model": 562
+      }
+    },
+    {
+      "path": "backend/app/utils/api_budget.py",
+      "revision": "b0532c91b6a90f2ce31a467aec82b43cb4d75688",
+      "sha256": "e1ad29975c37181bbaabe81a15a27d16aa98f1100344a76c9d27499872d20b37",
+      "anchors": {
+        "def prepare_token_request": 30,
+        "caps = [request[key]": 61,
+        "reject(\"set exactly one positive integer output limit\")": 65
+      }
+    },
+    {
+      "path": "backend/app/config.py",
+      "revision": "b0532c91b6a90f2ce31a467aec82b43cb4d75688",
+      "sha256": "99427a7b8f7cf862a43dedcc664198f584cf0782c897d0f77a60874bec394770",
+      "anchors": {
+        "LLM_RUN_BUDGET_TOKENS =": 58,
+        "LLM_RUN_BUDGET_USD =": 59
+      }
+    },
+    {
+      "path": "backend/app/utils/simulation_usage.py",
+      "revision": "b0532c91b6a90f2ce31a467aec82b43cb4d75688",
+      "sha256": "ff4aeb6b40bc78c31dfe77cd9598e51bf5944086fd268c26e8739a25617c5a0a",
+      "anchors": {
+        "def bootstrap": 81,
+        "Config.LLM_RUN_BUDGET_TOKENS =": 103
+      }
+    }
+  ],
+  "factory_gap": {
+    "factory": "backend/app/utils/oasis_llm.py:_create_openai_model",
+    "model_factory_create_keywords": [
+      "model_platform",
+      "model_type",
+      "api_key",
+      "url"
+    ],
+    "explicit_model_config_dict_forwarded": false,
+    "explicit_output_limit_forwarded": false,
+    "native_output_limit_value": null,
+    "planner_requires_exactly_one_positive_explicit_output_limit_when_durable_token_budget_enabled": true,
+    "planner_supported_output_limit_fields": [
+      "max_tokens",
+      "max_completion_tokens"
+    ],
+    "source_run_budget_token_default": 0,
+    "source_run_budget_usd_default": 0,
+    "current_service_values": null,
+    "interpretation": "The pinned native factory has no explicit output-limit configuration forwarding. The preceding reservation planner rejects uncapped requests when durable token planning is enabled. Explicitly capped SDK fixtures from 04b5b1 do not prove that normal factory/child configuration supplies such a cap."
+  },
+  "acceptance_needed": [
+    "Verify the normal native factory passes an operator-selected output cap to the actual synchronous and asynchronous SDK request under enabled durable token planning.",
+    "Verify configuration precedence, invalid values, dual-platform/boost selection and detached-child propagation while preserving pinned launch identity and configuration hashes.",
+    "Verify the unchanged unset/default path does not silently inject a new output limit or enable run budgets.",
+    "Keep unsupported request types, unknown usage, reservations, actual usage settlement and source/actor contracts intact."
+  ],
+  "interpretation": [
+    "No saved artifact, state inventory or bounded log changed; no newer production baseline or historical latency improvement is established.",
+    "Selected saved health calls 221/456/648/212 overlap their parent embedded counters. They do not establish physical requests, output truncation, peak overlap, historical enabled caps or budget overshoot.",
+    "The selected old RUN token entries and child token snapshots remain absent. Missing token accounting is not measured zero use and cannot quantify savings from a new output cap.",
+    "Output limits can affect response quality; the source gap supports explicit configuration and validation, not silently imposing a new default or reducing requested output.",
+    "Source defaults, saved settings and active runtime configuration are separate authorities. This receipt does not infer SDK/provider defaults from absent saved fields.",
+    "The next implementation needs a factory-to-SDK/child acceptance scenario. The historical evidence does not by itself validate the new configuration path, model compatibility, production throughput or an invoice ceiling."
+  ]
+}

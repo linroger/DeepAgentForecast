@@ -10,6 +10,8 @@ import hashlib
 import importlib.util
 import json
 import sys
+import concurrent.futures
+import threading
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -182,6 +184,7 @@ def test_evidence_only_baseline_can_own_shared_actor_track(mod, monkeypatch):
 def test_evidence_only_main_publishes_track_a_with_shared_track_b(
         mod, tmp_path, monkeypatch):
     """Exercise the CLI wiring without a real provider call or hanging thread."""
+    monkeypatch.setenv("RESEARCH_ENGINE", "hybrid")
     monkeypatch.setenv("MINIMAX_API_KEY", "test-key-not-used")
     monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "true")
     monkeypatch.setenv("RESEARCH_EVIDENCE_ONLY", "false")
@@ -287,6 +290,125 @@ def test_evidence_only_main_publishes_track_a_with_shared_track_b(
     assert meta["actor_dossier_generated"] is True
     assert meta["actor_dossier_required"] is True
     assert meta["actor_dossier_coverage"]["accountable"] is True
+
+
+@pytest.mark.parametrize("stop_during_settlement", [False, True])
+def test_timed_out_actor_cannot_hide_compaction_stop(
+        mod, tmp_path, monkeypatch, stop_during_settlement):
+    """Real worker thread: late stop must reach parent before another lane starts."""
+    from app.services import pipeline_orchestrator as po
+
+    monkeypatch.setenv("RESEARCH_ENGINE", "hybrid")
+    monkeypatch.setenv("DEERFLOW_DUAL_TRACK", "true")
+    monkeypatch.setenv("RESEARCH_EVIDENCE_ONLY", "false")
+    monkeypatch.setenv("RESEARCH_SEQUENTIAL_DUAL_TRACK", "false")
+    monkeypatch.setenv("RESEARCH_PROCESS_ATTEMPT_ID", "race-attempt")
+    monkeypatch.setattr(mod, "_model_parallel_slots", lambda *_: 2)
+    monkeypatch.setattr(mod, "runtime_skill_sync_telemetry", lambda: {})
+    client_module = ModuleType("deerflow.client")
+    client_module.DeerFlowClient = lambda **_: object()
+    monkeypatch.setitem(sys.modules, "deerflow", ModuleType("deerflow"))
+    monkeypatch.setitem(sys.modules, "deerflow.client", client_module)
+    monkeypatch.setattr(mod, "run_research_stage", lambda *_a, **_k:
+                        mod.render_evidence_pack(["Verified evidence. " * 60]))
+    monkeypatch.setattr(mod, "export_fetched_sources_for_manifest", lambda: [{
+        "url": "https://example.gov/source", "source_origin": "fetched",
+        "reachable": True,
+    }])
+    started = threading.Event()
+    release = threading.Event()
+    stopped = threading.Event()
+    shutdown_waits = []
+    actor_futures = []
+    real_executor = concurrent.futures.ThreadPoolExecutor
+    real_wait = concurrent.futures.wait
+
+    def actor(*_args, **_kwargs):
+        started.set()
+        assert release.wait(5), "test must release the actor worker"
+        error = mod.ResearchCompactionError("archive_write_failed", "race-actor")
+        mod._stop_after_compaction_failure(error)
+        stopped.set()
+        raise error
+
+    class TimedExecutor(real_executor):
+        def submit(self, fn, *args, **kwargs):
+            future = super().submit(fn, *args, **kwargs)
+            if fn.__name__ == "_run_track_b":
+                actor_futures.append(future)
+                assert started.wait(2)
+                result = future.result
+                future.result = lambda timeout=None: result(timeout=0)
+            return future
+
+        def shutdown(self, wait=True, *, cancel_futures=False):
+            shutdown_waits.append(wait)
+            return super().shutdown(wait=wait, cancel_futures=cancel_futures)
+
+    def settle(futures, timeout=None, **kwargs):
+        if stop_during_settlement:
+            release.set()
+            assert stopped.wait(2)
+        return real_wait(futures, timeout=0.02, **kwargs)
+
+    def coverage(*_args, **_kwargs):
+        # Original regression: this callback occurs AFTER the post-track stop
+        # check, then main used to return the ordinary missing-dossier exit 2.
+        release.set()
+        assert stopped.wait(2)
+        return {"accountable": False}
+
+    monkeypatch.setattr(mod, "run_actor_ontology_stage", actor)
+    monkeypatch.setattr(mod, "actor_dossier_coverage_audit", coverage)
+    monkeypatch.setattr(concurrent.futures, "ThreadPoolExecutor", TimedExecutor)
+    monkeypatch.setattr(concurrent.futures, "wait", settle)
+    monkeypatch.setattr(sys, "argv", [
+        "deerflow_research.py", "--prompt", "Question", "--out-dir", str(tmp_path),
+        "--model", "offline", "--evidence-only", "--thread-id", "race",
+    ])
+    try:
+        rc = mod.main()
+    finally:
+        release.set()
+        real_wait(actor_futures, timeout=2)
+        mod._reset_compaction_stop()
+
+    assert stopped.is_set()
+    assert rc == 4
+    meta = json.loads((tmp_path / mod.META_FILENAME).read_text())
+    assert meta["status"] == "failed"
+    assert meta["compaction_stop"]["reason"] == (
+        "archive_write_failed" if stop_during_settlement else "checkpoint_unavailable")
+    assert shutdown_waits == [False]
+    assert (tmp_path / mod.EVIDENCE_PACK_FILENAME).is_file()
+    assert not (tmp_path / mod.REPORT_FILENAME).exists()
+
+    # Pass the actual child's terminal artifact through the real parent stop
+    # decoder and fan-in. Pending outer lanes must not be admitted.
+    monkeypatch.setattr(concurrent.futures, "ThreadPoolExecutor", real_executor)
+    monkeypatch.setattr(concurrent.futures, "wait", real_wait)
+    monkeypatch.setattr(po.Config, "RESEARCH_GLOBAL_SYNTHESIS", True)
+    monkeypatch.setattr(po.Config, "DEERFLOW_DUAL_TRACK", True)
+    monkeypatch.setattr(po.Config, "UPLOAD_FOLDER", str(tmp_path / "uploads"))
+    monkeypatch.setattr(po, "research_outer_track_workers", lambda *_: 1)
+    monkeypatch.setattr(po, "_sync_deerflow_bridge_if_stale", lambda _: None)
+    launches = []
+
+    def run_lane(_prompt, handoff_dir, **_kwargs):
+        launches.append(Path(handoff_dir).name)
+        po._raise_current_research_compaction_stop(str(tmp_path), "race-attempt", rc)
+        pytest.fail("typed child stop must prevent a successful lane result")
+
+    monkeypatch.setattr(po.DeerFlowResearchRunner, "run", staticmethod(run_lane))
+    handoff = tmp_path / "parent"
+    state = po.PipelineState(
+        pipeline_id="pipe_rx00_race", prompt="Question", handoff_dir=str(handoff),
+        options={"depth": "deep", "research_model": "offline"},
+    )
+    with pytest.raises(po._ResearchCompactionStopped):
+        po.PipelineOrchestrator()._run_parallel_research_tracks(
+            state, str(handoff), lambda *_: None, 3)
+    assert launches == ["track_1"]
 
 
 # ---------------------------------------------------------------------------

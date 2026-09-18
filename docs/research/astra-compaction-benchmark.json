@@ -1,0 +1,28 @@
+{
+  "measured_at": "2026-09-07T15:46:25+00:00",
+  "kind": "offline_synthetic_compaction_archive_overhead",
+  "fixture_message_count": 1000,
+  "fixture_canonical_bytes": 1074781,
+  "iterations": 7,
+  "archive_write_ms": [
+    6.428874999983236,
+    6.071625000004133,
+    5.367124999793305,
+    5.406375000347907,
+    5.11741699938284,
+    5.620541999633133,
+    6.020915999215504
+  ],
+  "archive_validation_ms": [
+    1.8638750007085036,
+    1.8246249992444064,
+    1.8083339991790126,
+    1.7182499996124534,
+    1.7624590000195894,
+    1.8388329999652342,
+    2.034791999903973
+  ],
+  "median_archive_write_ms": 5.620541999633133,
+  "median_validation_ms": 1.8246249992444064,
+  "limits": "Local warm filesystem synthetic fixture, not a production latency benchmark or provider/token saving estimate. Every original is retained; validation reopens archive."
+}

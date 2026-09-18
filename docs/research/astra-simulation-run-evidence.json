@@ -1,0 +1,627 @@
+{
+  "schema": "astra-simulation-run-evidence/v1",
+  "validated_at": "2026-09-07T21:11:36.921491+00:00",
+  "iteration_baseline": "b9a9f7981f92b13100140570ea160d29ab950517",
+  "scope": "Read-only saved-run coverage refresh for ASTRA-04b4. No paid providers, network, deployment, saved-artifact writes, or raw prompt/report/provider-payload exports.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipts": [
+    {
+      "path": "docs/research/astra-unresolved-run-evidence.json",
+      "sha256": "b7d68ba5ab311dd99e86908aecd42ae34a9a133a83d2447f8ed8a4b64e1f3516"
+    },
+    {
+      "path": "docs/research/astra-api-run-evidence.json",
+      "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be"
+    },
+    {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264"
+    }
+  ],
+  "validation": {
+    "saved_artifacts": {
+      "inventory": "astra-iteration-04-run-evidence.json source_files entries prefixed saved:; six historical code entries excluded.",
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+      "new_or_changed_logs_parsed": 0,
+      "parsed_aggregates": [],
+      "unchanged_pattern_counts_reused": true
+    },
+    "simulation_snapshot_inventory": {
+      "scope": "Direct sim_* child directories under backend/uploads/simulations at validation time.",
+      "directory_count": 43,
+      "sim_llm_telemetry_file_count": 0,
+      "unmeasured_tokens": null
+    }
+  },
+  "selected_runs": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "selection_reason": "Largest recorded pipeline total in the prior 32-pipeline inventory.",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+        "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240"
+      },
+      "simulation_id": "sim_a0a936f8104c",
+      "lineage": {
+        "parent_simulation_key": "$.simulation_id",
+        "child_state_simulation_key": "$.simulation_id",
+        "child_run_state_simulation_key": "$.simulation_id",
+        "simulation_ids_match": true,
+        "project_and_graph_ids_match": true
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": false,
+        "value": null
+      },
+      "parent_current_attempt_total_tokens": {
+        "key": "$.total.total_tokens",
+        "present": true,
+        "value": 82983739
+      },
+      "parent_cumulative_total_tokens": {
+        "key": "$.cumulative_total.total_tokens",
+        "present": false,
+        "value": null
+      },
+      "parent_run_stage": {
+        "key": "$.by_stage.run",
+        "present": false,
+        "value": null
+      },
+      "parent_simulation_import": {
+        "sim_llm_telemetry": {
+          "key": "$.options.sim_llm_telemetry",
+          "present": false,
+          "value": null
+        },
+        "sim_llm_telemetry_recorded": {
+          "key": "$.options.sim_llm_telemetry_recorded",
+          "present": false,
+          "value": null
+        },
+        "simulation_usage_gap": {
+          "key": "$.options.simulation_usage_gap",
+          "present": false,
+          "value": null
+        }
+      },
+      "embedded_health_matches_child_platforms": true,
+      "child": {
+        "state_source": {
+          "path": "backend/uploads/simulations/sim_a0a936f8104c/state.json",
+          "sha256": "29b2f60e079aea37f571ab121173c08aff15a599eedb492f1daa2c63b7c87df0"
+        },
+        "run_state_source": {
+          "path": "backend/uploads/simulations/sim_a0a936f8104c/run_state.json",
+          "sha256": "896827b80a511d2e10abd91737e3299229ee141a64c0fab08fab6fa149c2c6c0"
+        },
+        "health_source": {
+          "path": "backend/uploads/simulations/sim_a0a936f8104c/llm_health.json",
+          "sha256": "154eb99b0a44cb309aea80f569da29042c181ff441b4b8266a951cc2ded40109"
+        },
+        "health_updated_at": "2026-07-10T03:43:16.464429",
+        "health_by_platform": {
+          "twitter": {
+            "llm_calls": 109,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          },
+          "reddit": {
+            "llm_calls": 112,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          }
+        },
+        "health_calls": 221,
+        "health_errors": 0,
+        "health_key_prefix": "$.platforms.*",
+        "health_unit": "Saved model-boundary health counter; not physical provider request receipts.",
+        "run_state_selected": {
+          "runner_status": {
+            "key": "$.runner_status",
+            "present": true,
+            "value": "completed"
+          },
+          "current_round": {
+            "key": "$.current_round",
+            "present": true,
+            "value": 36
+          },
+          "total_rounds": {
+            "key": "$.total_rounds",
+            "present": true,
+            "value": 36
+          },
+          "resumed_from_round": {
+            "key": "$.resumed_from_round",
+            "present": true,
+            "value": null
+          },
+          "started_at": {
+            "key": "$.started_at",
+            "present": true,
+            "value": "2026-07-10T03:33:32.113975"
+          },
+          "completed_at": {
+            "key": "$.completed_at",
+            "present": true,
+            "value": "2026-07-10T05:25:24.572372"
+          }
+        },
+        "token_snapshot": {
+          "path": "backend/uploads/simulations/sim_a0a936f8104c/sim_llm_telemetry.json",
+          "exists": false,
+          "sha256": null,
+          "recorded_total_tokens": null,
+          "physical_attempt_count": null
+        }
+      }
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "selection_reason": "Largest saved cumulative total after the reference; resumed pipeline.",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/run_telemetry.json",
+        "sha256": "c6281f59d12a9d6e84f70254d9218c3799f2082469ae5d96263671fe43fad1a6"
+      },
+      "simulation_id": "sim_85b123350ee3",
+      "lineage": {
+        "parent_simulation_key": "$.simulation_id",
+        "child_state_simulation_key": "$.simulation_id",
+        "child_run_state_simulation_key": "$.simulation_id",
+        "simulation_ids_match": true,
+        "project_and_graph_ids_match": true
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": true,
+        "value": 4
+      },
+      "parent_current_attempt_total_tokens": {
+        "key": "$.total.total_tokens",
+        "present": true,
+        "value": 2386860
+      },
+      "parent_cumulative_total_tokens": {
+        "key": "$.cumulative_total.total_tokens",
+        "present": true,
+        "value": 30322382
+      },
+      "parent_run_stage": {
+        "key": "$.by_stage.run",
+        "present": false,
+        "value": null
+      },
+      "parent_simulation_import": {
+        "sim_llm_telemetry": {
+          "key": "$.options.sim_llm_telemetry",
+          "present": false,
+          "value": null
+        },
+        "sim_llm_telemetry_recorded": {
+          "key": "$.options.sim_llm_telemetry_recorded",
+          "present": false,
+          "value": null
+        },
+        "simulation_usage_gap": {
+          "key": "$.options.simulation_usage_gap",
+          "present": false,
+          "value": null
+        }
+      },
+      "embedded_health_matches_child_platforms": true,
+      "child": {
+        "state_source": {
+          "path": "backend/uploads/simulations/sim_85b123350ee3/state.json",
+          "sha256": "5d6250d7b71f08eccaf7b7d9a4b66f41f53c72fd0c2d1e1f7837ae9cfee1911f"
+        },
+        "run_state_source": {
+          "path": "backend/uploads/simulations/sim_85b123350ee3/run_state.json",
+          "sha256": "331c90f88fa0fc1893cf78d6f88ad1cf7aa4fe29e831715dc40f6f3e6cefbce8"
+        },
+        "health_source": {
+          "path": "backend/uploads/simulations/sim_85b123350ee3/llm_health.json",
+          "sha256": "f172d72f82f70f56f57e2da83f3ef5bc20d97bdfe3f77b8abd460b86d43b5763"
+        },
+        "health_updated_at": "2026-07-13T00:33:51.255754",
+        "health_by_platform": {
+          "twitter": {
+            "llm_calls": 228,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          },
+          "reddit": {
+            "llm_calls": 228,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          }
+        },
+        "health_calls": 456,
+        "health_errors": 0,
+        "health_key_prefix": "$.platforms.*",
+        "health_unit": "Saved model-boundary health counter; not physical provider request receipts.",
+        "run_state_selected": {
+          "runner_status": {
+            "key": "$.runner_status",
+            "present": true,
+            "value": "completed"
+          },
+          "current_round": {
+            "key": "$.current_round",
+            "present": true,
+            "value": 19
+          },
+          "total_rounds": {
+            "key": "$.total_rounds",
+            "present": true,
+            "value": 19
+          },
+          "resumed_from_round": {
+            "key": "$.resumed_from_round",
+            "present": true,
+            "value": null
+          },
+          "started_at": {
+            "key": "$.started_at",
+            "present": true,
+            "value": "2026-07-13T00:21:58.793285"
+          },
+          "completed_at": {
+            "key": "$.completed_at",
+            "present": true,
+            "value": "2026-07-13T00:33:51.825021"
+          }
+        },
+        "token_snapshot": {
+          "path": "backend/uploads/simulations/sim_85b123350ee3/sim_llm_telemetry.json",
+          "exists": false,
+          "sha256": null,
+          "recorded_total_tokens": null,
+          "physical_attempt_count": null
+        }
+      }
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "selection_reason": "Latest completed pipeline before the newest; seven saved resumes.",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+        "sha256": "42dace2bb7276a04eb3f987ee232fee04905852bd97691449cc59dcb1e22ff1e"
+      },
+      "simulation_id": "sim_05ab2bdebbd2",
+      "lineage": {
+        "parent_simulation_key": "$.simulation_id",
+        "child_state_simulation_key": "$.simulation_id",
+        "child_run_state_simulation_key": "$.simulation_id",
+        "simulation_ids_match": true,
+        "project_and_graph_ids_match": true
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": true,
+        "value": 7
+      },
+      "parent_current_attempt_total_tokens": {
+        "key": "$.total.total_tokens",
+        "present": true,
+        "value": 2558618
+      },
+      "parent_cumulative_total_tokens": {
+        "key": "$.cumulative_total.total_tokens",
+        "present": true,
+        "value": 5353285
+      },
+      "parent_run_stage": {
+        "key": "$.by_stage.run",
+        "present": false,
+        "value": null
+      },
+      "parent_simulation_import": {
+        "sim_llm_telemetry": {
+          "key": "$.options.sim_llm_telemetry",
+          "present": false,
+          "value": null
+        },
+        "sim_llm_telemetry_recorded": {
+          "key": "$.options.sim_llm_telemetry_recorded",
+          "present": false,
+          "value": null
+        },
+        "simulation_usage_gap": {
+          "key": "$.options.simulation_usage_gap",
+          "present": false,
+          "value": null
+        }
+      },
+      "embedded_health_matches_child_platforms": true,
+      "child": {
+        "state_source": {
+          "path": "backend/uploads/simulations/sim_05ab2bdebbd2/state.json",
+          "sha256": "f09c8a69fc863bbf3a11724b59a57ad7c8e584a7cdaed3e7485a35c05700f0a7"
+        },
+        "run_state_source": {
+          "path": "backend/uploads/simulations/sim_05ab2bdebbd2/run_state.json",
+          "sha256": "89135f8c6de3c168e5af4a3acf77a8182dba07c41c436410c5ca300a073f33c3"
+        },
+        "health_source": {
+          "path": "backend/uploads/simulations/sim_05ab2bdebbd2/llm_health.json",
+          "sha256": "99bde1cab21bb3be4f65c4207c5992051f7912a1cf8c55172a8ba6c5fbabcf7d"
+        },
+        "health_updated_at": "2026-07-15T12:37:23.503344",
+        "health_by_platform": {
+          "twitter": {
+            "llm_calls": 324,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          },
+          "reddit": {
+            "llm_calls": 324,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          }
+        },
+        "health_calls": 648,
+        "health_errors": 0,
+        "health_key_prefix": "$.platforms.*",
+        "health_unit": "Saved model-boundary health counter; not physical provider request receipts.",
+        "run_state_selected": {
+          "runner_status": {
+            "key": "$.runner_status",
+            "present": true,
+            "value": "completed"
+          },
+          "current_round": {
+            "key": "$.current_round",
+            "present": true,
+            "value": 18
+          },
+          "total_rounds": {
+            "key": "$.total_rounds",
+            "present": true,
+            "value": 18
+          },
+          "resumed_from_round": {
+            "key": "$.resumed_from_round",
+            "present": true,
+            "value": null
+          },
+          "started_at": {
+            "key": "$.started_at",
+            "present": true,
+            "value": "2026-07-15T11:49:27.769880"
+          },
+          "completed_at": {
+            "key": "$.completed_at",
+            "present": true,
+            "value": "2026-07-15T12:37:25.072471"
+          }
+        },
+        "token_snapshot": {
+          "path": "backend/uploads/simulations/sim_05ab2bdebbd2/sim_llm_telemetry.json",
+          "exists": false,
+          "sha256": null,
+          "recorded_total_tokens": null,
+          "physical_attempt_count": null
+        }
+      }
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "selection_reason": "Newest pipeline creation timestamp in the 32-pipeline inventory; nine saved resumes.",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+        "sha256": "71f60f4930ba2d325c8ce6f395f1b897cbbcd4c17aaa912d0ce936e46ecad968"
+      },
+      "simulation_id": "sim_9fc88d28ccb1",
+      "lineage": {
+        "parent_simulation_key": "$.simulation_id",
+        "child_state_simulation_key": "$.simulation_id",
+        "child_run_state_simulation_key": "$.simulation_id",
+        "simulation_ids_match": true,
+        "project_and_graph_ids_match": true
+      },
+      "resume_count": {
+        "key": "$.options.resume_count",
+        "present": true,
+        "value": 9
+      },
+      "parent_current_attempt_total_tokens": {
+        "key": "$.total.total_tokens",
+        "present": true,
+        "value": 2940662
+      },
+      "parent_cumulative_total_tokens": {
+        "key": "$.cumulative_total.total_tokens",
+        "present": true,
+        "value": 2954750
+      },
+      "parent_run_stage": {
+        "key": "$.by_stage.run",
+        "present": false,
+        "value": null
+      },
+      "parent_simulation_import": {
+        "sim_llm_telemetry": {
+          "key": "$.options.sim_llm_telemetry",
+          "present": false,
+          "value": null
+        },
+        "sim_llm_telemetry_recorded": {
+          "key": "$.options.sim_llm_telemetry_recorded",
+          "present": false,
+          "value": null
+        },
+        "simulation_usage_gap": {
+          "key": "$.options.simulation_usage_gap",
+          "present": false,
+          "value": null
+        }
+      },
+      "embedded_health_matches_child_platforms": true,
+      "child": {
+        "state_source": {
+          "path": "backend/uploads/simulations/sim_9fc88d28ccb1/state.json",
+          "sha256": "d58649d3fd7dcdb19d69653e4eac91af22c7bde8d3a796e57d9ee41ad217a769"
+        },
+        "run_state_source": {
+          "path": "backend/uploads/simulations/sim_9fc88d28ccb1/run_state.json",
+          "sha256": "671631e05cdb15a13ccf679e754056307a77c67b15463ee71331ff980aca361b"
+        },
+        "health_source": {
+          "path": "backend/uploads/simulations/sim_9fc88d28ccb1/llm_health.json",
+          "sha256": "4a8719146a5685b898c37d2c4b1e39de16618df32ee3ce55bd6d4a464a6ce954"
+        },
+        "health_updated_at": "2026-07-16T05:11:58.439980",
+        "health_by_platform": {
+          "twitter": {
+            "llm_calls": 137,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          },
+          "reddit": {
+            "llm_calls": 75,
+            "llm_errors": 0,
+            "error_rate": 0.0,
+            "degraded": false
+          }
+        },
+        "health_calls": 212,
+        "health_errors": 0,
+        "health_key_prefix": "$.platforms.*",
+        "health_unit": "Saved model-boundary health counter; not physical provider request receipts.",
+        "run_state_selected": {
+          "runner_status": {
+            "key": "$.runner_status",
+            "present": true,
+            "value": "completed"
+          },
+          "current_round": {
+            "key": "$.current_round",
+            "present": true,
+            "value": 29
+          },
+          "total_rounds": {
+            "key": "$.total_rounds",
+            "present": true,
+            "value": 29
+          },
+          "resumed_from_round": {
+            "key": "$.resumed_from_round",
+            "present": true,
+            "value": 23
+          },
+          "started_at": {
+            "key": "$.started_at",
+            "present": true,
+            "value": "2026-07-16T05:00:50.885628"
+          },
+          "completed_at": {
+            "key": "$.completed_at",
+            "present": true,
+            "value": "2026-07-16T05:11:59.677571"
+          }
+        },
+        "token_snapshot": {
+          "path": "backend/uploads/simulations/sim_9fc88d28ccb1/sim_llm_telemetry.json",
+          "exists": false,
+          "sha256": null,
+          "recorded_total_tokens": null,
+          "physical_attempt_count": null
+        }
+      }
+    }
+  ],
+  "implementation_snapshot": [
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "revision": "b9a9f7981f92b13100140570ea160d29ab950517",
+      "sha256": "65af03c98af0ad6d3cc7f19718893b7f34ab42ac83e2bf42d9c8765e1be30fcb",
+      "anchors": {
+        "def _wrap_llm_client_usage": 2103,
+        "def _write_sim_llm_telemetry": 2174,
+        "def _wrap_model_llm_counter": 2226
+      }
+    },
+    {
+      "path": "backend/app/services/pipeline_orchestrator.py",
+      "revision": "b9a9f7981f92b13100140570ea160d29ab950517",
+      "sha256": "163ff9759a3048f22d5fc3f564bc63568d3c562550e501599d8fef95c00df71e",
+      "anchors": {
+        "def _record_durable_sim_usage": 10537,
+        "def _record_sim_run_telemetry": 10592
+      }
+    },
+    {
+      "path": "backend/app/utils/llm_client.py",
+      "revision": "b9a9f7981f92b13100140570ea160d29ab950517",
+      "sha256": "0bddc767931df4ed3637ee52710c4079db7b60b769c6c1d12cc6feeb81b3f643",
+      "anchors": {
+        "def _create_openai_completion": 442
+      }
+    }
+  ],
+  "current_source_findings": [
+    "At the pinned pre-04b4 revision, the direct simulation LLMClient wrapper records one final _last_usage result or text estimate per logical chat; inner JSON repair calls avoid duplicate recording. Earlier empty/retried API responses already visible to the child-local LLMMeter do not enter this wrapper aggregate.",
+    "The Camel model wrapper observes model-boundary response usage and errors; those counters do not prove exact physical attempts when fallback or SDK retry work occurs underneath it.",
+    "The existing durable parent importer reconciles high-water snapshots by simulation ID and meter_run_token. It cannot import absent snapshots or reconstruct physical operations omitted by a child aggregate; no current parent import replay defect is inferred from historical missing files."
+  ],
+  "interpretation": [
+    "All four selected pipelines have nonzero saved health calls, absent sim_llm_telemetry.json, and absent parent $.by_stage.run entries. This is missing token coverage, not measured zero consumption.",
+    "The selected child llm_health platform counters exactly match the embedded parent sim_llm_health.platforms; these are overlapping representations and must not be added together.",
+    "Saved zero health error counters describe that model-boundary health measurement. They do not establish zero underlying retries, empty responses, fallback attempts, unknown outcomes, or billed failures. Historical physical attempt counts and token losses remain null/unquantified.",
+    "Current, previous and cumulative pipeline totals are not additive. Expensive selection is by recorded totals that may include historical research replay overcount; it is not actual invoiced cost ranking.",
+    "Child health/run timestamps are timezone-naive; parent pipeline timestamps contain offsets. This receipt does not derive cross-clock critical-path durations or treat recovery intervals as waste.",
+    "No changed saved inventory or bounded logs supports a post-fix production benchmark. Validate the 04b4 child-to-parent accounting mechanism with deterministic offline physical-attempt, fallback, concurrency, replay and failure cases."
+  ]
+}

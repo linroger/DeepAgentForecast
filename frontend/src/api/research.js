@@ -19,17 +19,36 @@ export function researchChartUrl(pipelineId, rel) {
 /**
  * 启动统一研究→预测管线（Step 0）
  *
- * 注意：此请求 **非幂等** —— 每次 /run 都会新建一条 pipeline 并拉起一个 DeerFlow 子进程
- * 与一整轮 OASIS 模拟。因此绝不能用 requestWithRetry 包裹：一次因超时/网络抖动而丢失响应的
- * 重试会启动第二条不可见的管线，白白消耗 Claude 额度与算力。改用单次 service() 调用。
+ * The caller persists an immutable launch intent before admission. Keep this
+ * transport one-shot: recovery checks use GET, and only an explicit retry
+ * sends the same saved key and payload again.
  * @param {Object} data { prompt, mode, project_name, depth, max_rounds }
+ * @param {String} intentId Persisted launch-intent identity
  * @returns {Promise}
  */
-export function runPipeline(data) {
+export function runPipeline(data, intentId) {
+  if (!intentId) return Promise.reject(new Error('A saved launch identity is required.'))
   return service({
     url: '/api/research/run',
     method: 'post',
+    headers: { 'Idempotency-Key': intentId },
     data
+  })
+}
+
+/** Read admission state without dispatching or resuming a pipeline. */
+export function getLaunchIntent(intentId) {
+  return service({
+    url: `/api/research/launch-intents/${encodeURIComponent(intentId)}`,
+    method: 'get'
+  })
+}
+
+/** Retire an unadmitted key; an existing pipeline is returned and preserved. */
+export function abandonLaunchIntent(intentId) {
+  return service({
+    url: `/api/research/launch-intents/${encodeURIComponent(intentId)}/abandon`,
+    method: 'post'
   })
 }
 

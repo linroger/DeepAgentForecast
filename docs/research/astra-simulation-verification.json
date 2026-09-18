@@ -1,0 +1,387 @@
+{
+  "schema": "astra-simulation-verification/v1",
+  "slice": "ASTRA-04b4",
+  "verified_at": "2026-09-07T21:34:32.048925+00:00",
+  "status": "verified_offline",
+  "baseline_commit": "b9a9f7981f92b13100140570ea160d29ab950517",
+  "scope": "Explicitly launched detached simulations join existing parent accounting; native nonstream SDK physical attempts are recorded before parsing; compatibility JSON is diagnostic only for admitted shared launches.",
+  "gates": {
+    "backend": {
+      "passed": 960,
+      "failures": 0,
+      "errors": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_fallback_model.py",
+        "backend/tests/test_graph_cost_containment.py",
+        "backend/tests/test_graph_optimizations.py",
+        "backend/tests/test_wave9_kg.py",
+        "backend/tests/test_report_chart_quality.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py",
+        "backend/tests/test_simulation_shared_usage.py",
+        "backend/tests/test_audit_fixes_runner.py",
+        "backend/tests/test_audit_fixes_runloop.py",
+        "backend/tests/test_simulation_runner_throttle.py",
+        "backend/tests/test_oasis_v1_provenance.py",
+        "backend/tests/test_decision_channel.py",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-simulation-evidence-qb21_rt0/backend.xml",
+        "backend/tests/test_oasis_physical_usage.py"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "lint": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "--output-format=json",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/services/simulation_runner.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_llm.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/run_parallel_simulation.py",
+        "backend/scripts/run_reddit_simulation.py",
+        "backend/scripts/run_twitter_simulation.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/simulation_usage.py",
+        "backend/scripts/benchmark_simulation_usage.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_simulation_shared_usage.py"
+      ],
+      "python_files": [
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/services/simulation_runner.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_llm.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/run_parallel_simulation.py",
+        "backend/scripts/run_reddit_simulation.py",
+        "backend/scripts/run_twitter_simulation.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/simulation_usage.py",
+        "backend/scripts/benchmark_simulation_usage.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_simulation_shared_usage.py"
+      ],
+      "new_findings": 0,
+      "matched_preexisting_findings": [
+        {
+          "file": "backend/app/utils/oasis_llm.py",
+          "code": "B904",
+          "line": 348,
+          "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+        },
+        {
+          "file": "backend/app/utils/oasis_llm.py",
+          "code": "C408",
+          "line": 550,
+          "message": "Unnecessary `dict()` call (rewrite as a literal)"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "B905",
+          "line": 1049,
+          "message": "`zip()` without an explicit `strict=` parameter"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "C420",
+          "line": 2798,
+          "message": "Unnecessary dict comprehension for iterable; use `dict.fromkeys` instead"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "B007",
+          "line": 2978,
+          "message": "Loop control variable `idx` not used within loop body"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "B007",
+          "line": 3046,
+          "message": "Loop control variable `num_shares` not used within loop body"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "B904",
+          "line": 4403,
+          "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "B904",
+          "line": 4922,
+          "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "F541",
+          "line": 5121,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "F541",
+          "line": 5147,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "F541",
+          "line": 5148,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "F541",
+          "line": 5149,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "F541",
+          "line": 5334,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_parallel_simulation.py",
+          "code": "F541",
+          "line": 5335,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_reddit_simulation.py",
+          "code": "F541",
+          "line": 829,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_reddit_simulation.py",
+          "code": "F541",
+          "line": 993,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_twitter_simulation.py",
+          "code": "F541",
+          "line": 839,
+          "message": "f-string without any placeholders"
+        },
+        {
+          "file": "backend/scripts/run_twitter_simulation.py",
+          "code": "F541",
+          "line": 1003,
+          "message": "f-string without any placeholders"
+        }
+      ],
+      "parse": "all_passed"
+    }
+  },
+  "independent_review": {
+    "status": "no_remaining_blocking_findings",
+    "focused_tests_passed": 69,
+    "native_tests": 38,
+    "detached_tests": 31
+  },
+  "source_sha256": {
+    "backend/app/services/pipeline_orchestrator.py": "e0c2ed1a451c6b1854a12a95a15497b1e2e1a6917374794a66b8137f8f3ddce4",
+    "backend/app/services/simulation_runner.py": "3ae8103d02244a1c07085d678066d464a5ec4ee5409bc3ccfaea066210ae6dfe",
+    "backend/app/utils/llm_client.py": "70c44e2e46f71a7ad8cc9c27fe00efb9c32927abaa370d4e575be427891060d1",
+    "backend/app/utils/oasis_llm.py": "51271cfe0692dfd1352a0ff1c01c1785fc2b2b00d30d2bc6ed944f76c7e66092",
+    "backend/app/utils/telemetry.py": "9db5c875efd26f2e8f65a4f85fccadb8113c637dfbcd9d75accb53fea5e3d490",
+    "backend/app/utils/usage_ledger.py": "84fe326f916241093cb6fcbf4cf9da15dcf7e2737f1a74399ae8645416476765",
+    "backend/scripts/run_parallel_simulation.py": "01fcb83305e9b5e883d59ffaf422bea0f6e1e38f9f9d0b417740aea76ee403de",
+    "backend/scripts/run_reddit_simulation.py": "de6c13a5fc54923fb57ecddc630b4be0b0fa071735e53dd6c4dde04514e0aff1",
+    "backend/scripts/run_twitter_simulation.py": "9d36382a4c9944741d63cc188fdd913779cb1158d8726d49a48ac6a0fb5e8360",
+    "backend/tests/test_durable_pipeline_usage.py": "07c3299f76cad22d9ac4170865823c4c971f002a75d026753b4e39d9230af753",
+    "backend/app/utils/oasis_usage.py": "614cd62fba35cd190d56c97d4fcc849297d601b5a91e9bd120dd8f85fc840fc2",
+    "backend/app/utils/simulation_usage.py": "ff4aeb6b40bc78c31dfe77cd9598e51bf5944086fd268c26e8739a25617c5a0a",
+    "backend/scripts/benchmark_simulation_usage.py": "aeb9220ca2b08c4c128ab8637dbf5b70ab1b0652e6c5e33aa9f8b4559ee2b983",
+    "backend/tests/test_oasis_physical_usage.py": "88edc1cc19758bb7565f1372ad14e9a9e9e978c90994ec59a2cbede34ad45256",
+    "backend/tests/test_simulation_shared_usage.py": "2ee6c91af9f874833ae174a2f6c868fa78e9c6959c06b043b2814d612e11a9f4"
+  },
+  "comparison": {
+    "path": "docs/research/astra-simulation-comparison.json",
+    "sha256": "c0796ed82830bc946ccf457804d61cfb92e88f373164140aa855cfeb0dd821b6",
+    "command": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "backend/scripts/benchmark_simulation_usage.py",
+        "--output",
+        "docs/research/astra-simulation-comparison.json"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "cases": {
+      "rate_limit_then_success": {
+        "before": {
+          "mock_transport_requests": 2,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "unknown_operations": 0,
+          "outcome": "success",
+          "median_local_elapsed_ms": null,
+          "samples": 1
+        },
+        "after": {
+          "mock_transport_requests": 2,
+          "recorded_calls": 2,
+          "recorded_tokens": 15,
+          "unknown_operations": 1,
+          "outcome": "success",
+          "median_local_elapsed_ms": null,
+          "samples": 1
+        }
+      },
+      "empty_response": {
+        "before": {
+          "mock_transport_requests": 1,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "unknown_operations": 0,
+          "outcome": "success",
+          "median_local_elapsed_ms": null,
+          "samples": 1
+        },
+        "after": {
+          "mock_transport_requests": 1,
+          "recorded_calls": 1,
+          "recorded_tokens": 15,
+          "unknown_operations": 0,
+          "outcome": "success",
+          "median_local_elapsed_ms": null,
+          "samples": 1
+        }
+      },
+      "parse_failure": {
+        "before": {
+          "mock_transport_requests": 1,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "unknown_operations": 0,
+          "outcome": "ValidationError",
+          "median_local_elapsed_ms": null,
+          "samples": 1
+        },
+        "after": {
+          "mock_transport_requests": 1,
+          "recorded_calls": 1,
+          "recorded_tokens": 15,
+          "unknown_operations": 0,
+          "outcome": "ValidationError",
+          "median_local_elapsed_ms": null,
+          "samples": 1
+        }
+      },
+      "successful_request_overhead": {
+        "before": {
+          "mock_transport_requests": 30,
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "unknown_operations": 0,
+          "outcome": "success",
+          "median_local_elapsed_ms": 0.1847,
+          "samples": 30
+        },
+        "after": {
+          "mock_transport_requests": 30,
+          "recorded_calls": 30,
+          "recorded_tokens": 450,
+          "unknown_operations": 0,
+          "outcome": "success",
+          "median_local_elapsed_ms": 1.26,
+          "samples": 30
+        }
+      }
+    }
+  },
+  "saved_run_evidence": {
+    "path": "docs/research/astra-simulation-run-evidence.json",
+    "sha256": "ce479031708da725d197919d635f0b82e2a3438dbed94eb40f77e742ced86037",
+    "saved_hashes_unchanged": 77,
+    "pipeline_states_unchanged": 32,
+    "bounded_logs_unchanged": 12,
+    "simulation_directories_without_token_telemetry": 43,
+    "selected_saved_health_calls": [
+      221,
+      456,
+      648,
+      212
+    ],
+    "parent_run_entries": "absent, not measured zero"
+  },
+  "process_acceptance": {
+    "actual_mock_transports_429_empty_success": 3,
+    "recorded_tokens_before_child_json": 180,
+    "crash_exit_code": 23,
+    "compatibility_replay_added_tokens": 0,
+    "parent_budget_observed_before_child_dispatch": true,
+    "source": "backend/tests/test_simulation_shared_usage.py",
+    "next_parent_admission_after_crash": "UsageLedgerUnresolvedError"
+  },
+  "raw_evidence_directory": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-simulation-evidence-qb21_rt0",
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE",
+    "cadence": "hourly",
+    "verified_at": "2026-09-07T21:34:32.048925+00:00"
+  },
+  "limits": [
+    "Full ASTRA-04 remains open: concurrent reservations and CLI physical failure/retry provenance are incomplete.",
+    "CLI successful logical text estimates are retained but do not establish physical or invoice coverage.",
+    "Native instrumentation supports factory-installed SDK clients with nonstreaming chat/tools/structured parse; unsupported streaming fails before send. Externally copied/replaced clients require separate validation.",
+    "Existing platform completion events precede posthoc work; child-scoped checks and final parent unresolved checks do not redesign simulation lifecycle.",
+    "A shared parent attempt does not prove child liveness, and same-parent child replacement is not fenced by a lease.",
+    "Historical token loss cannot be quantified from aggregate health counters.",
+    "Added local mock latency is overhead, not production performance. No runtime deployment/provider requests or saved-artifact changes.",
+    "18 matched pre-existing Ruff findings remain in three legacy simulation scripts and oasis_llm.py; no new lint findings."
+  ]
+}

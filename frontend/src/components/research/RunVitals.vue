@@ -28,11 +28,11 @@
       {{ livenessLabel }}
     </span>
 
-    <!-- Spend (in-process metered tokens / cost) -->
+    <!-- Spend (cumulative recorded tokens / cost, possibly incomplete) -->
     <span
       v-if="spendTokensText || spendCostText"
       class="rv-item"
-      :title="L('本进程实测的 LLM 消耗', 'LLM spend metered in this backend process')"
+      :title="spendTitle"
     >
       <span class="rv-k">{{ L('已消耗', 'spend') }}</span>
       <span v-if="spendTokensText" class="rv-v">{{ spendTokensText }} tok</span>
@@ -43,7 +43,7 @@
     <span v-if="model.budget" class="rv-item rv-budget" :title="budgetTitle">
       <span class="rv-k">{{ L('预算', 'budget') }}</span>
       <span class="rv-budget-track" :class="{ 'is-critical': model.budget.critical }">
-        <span class="rv-budget-fill" :style="{ width: model.budget.pctUsed + '%' }"></span>
+        <span v-show="model.budget.pctUsed !== null" class="rv-budget-fill" :style="{ width: model.budget.pctUsed === null ? '' : model.budget.pctUsed + '%' }"></span>
       </span>
       <span class="rv-v" :class="{ 'rv-v--err': model.budget.critical }">{{ budgetRemainingText }}</span>
       <span class="rv-k">{{ L('剩余', 'left') }}</span>
@@ -145,7 +145,13 @@ const livenessTitle = computed(() => {
 // —— Spend / budget ——
 const spendTokensText = computed(() => {
   const m = model.value
-  return m ? formatTokensCompact(m.spendTokens) : null
+  return m ? (m.spendUnknown ? L('未知', 'unknown') : formatTokensCompact(m.spendTokens)) : null
+})
+const spendTitle = computed(() => {
+  const m = model.value
+  if (m?.spendUnknown) return L('消耗记录不可用，不能视为零消耗', 'Usage records are unavailable; spend is unknown')
+  if (m?.usageComplete === false) return L('已记录的累计消耗；计量覆盖不完整，实际消耗可能更高', 'Cumulative recorded usage; coverage is incomplete and actual spend may be higher')
+  return L('已记录的累计 LLM 消耗', 'Cumulative recorded LLM usage')
 })
 const spendCostText = computed(() => {
   const m = model.value
@@ -153,14 +159,17 @@ const spendCostText = computed(() => {
 })
 const budgetRemainingText = computed(() => {
   const m = model.value
-  return m && m.budget ? (formatTokensCompact(m.budget.remainingTokens) || '0') : ''
+  return m && m.budget ? (formatTokensCompact(m.budget.remainingTokens) ?? L('未知', 'unknown')) : ''
 })
 const budgetTitle = computed(() => {
   const m = model.value
   if (!m || !m.budget) return ''
-  const spent = formatTokensCompact(m.budget.spentTokens) || '0'
-  const limit = formatTokensCompact(m.budget.limitTokens) || '0'
-  return `${spent} / ${limit} tokens · ${m.budget.pctUsed}%`
+  const spent = formatTokensCompact(m.budget.spentTokens) ?? L('未知', 'unknown')
+  const limit = formatTokensCompact(m.budget.limitTokens)
+  const percentage = m.budget.pctUsed === null ? '' : ` · ${m.budget.pctUsed}%`
+  const coverage = props.live?.budget?.usage_complete === false
+    ? L(' · 仅基于已记录消耗，计量覆盖不完整', ' · based on recorded usage only; coverage is incomplete') : ''
+  return `${spent} / ${limit} tokens${percentage}${coverage}`
 })
 </script>
 

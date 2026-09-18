@@ -1,0 +1,700 @@
+{
+  "schema": "astra-api-run-evidence/v1",
+  "generated_at": "2026-09-07T19:19:15.427174+00:00",
+  "scope": "Read-only saved-artifact refresh for ASTRA-04b2. Historical observations, not a post-change production benchmark or an estimate of billing. No providers, settings, pipeline state, or original runtime files were changed.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipt": {
+    "path": "docs/research/astra-iteration-04-run-evidence.json",
+    "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264",
+    "historical_implementation_head": "38c857e67463fac6fd86d030d210676b238cd589"
+  },
+  "saved_hash_validation": {
+    "expected_saved_sources": 77,
+    "checked": 77,
+    "matched": 77,
+    "changed": [],
+    "missing": [],
+    "all_match": true,
+    "source_inventory": "prior_receipt.source_files entries with saved: prefix; six code: entries are excluded because they describe earlier implementation source"
+  },
+  "pipeline_inventory": {
+    "count": 32,
+    "earliest_created_at": "2026-06-08T18:23:22.499025+00:00",
+    "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+    "status_counts": {
+      "cancelled": 3,
+      "completed": 26,
+      "failed": 3
+    },
+    "new_pipeline_ids_since_prior_receipt": [],
+    "runs": [
+      {
+        "pipeline_id": "pipe_0e1b84d2682a",
+        "created_at": "2026-07-15T14:15:27.286816+00:00",
+        "status": "completed",
+        "state_sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      {
+        "pipeline_id": "pipe_0f2bee7bd649",
+        "created_at": "2026-07-08T10:55:36.331602+00:00",
+        "status": "completed",
+        "state_sha256": "13ce1061298168da98ba0b99928e1dc82271bb51988de7901053f0d483b71c80"
+      },
+      {
+        "pipeline_id": "pipe_12251c96e78d",
+        "created_at": "2026-07-05T20:41:02.494543+00:00",
+        "status": "completed",
+        "state_sha256": "49063d2fe938fcff34c923745d7eb8b8e58ca903a78ea6b0a0e2948b070899a9"
+      },
+      {
+        "pipeline_id": "pipe_2a5b07f9f8c1",
+        "created_at": "2026-06-09T12:52:27.965574+00:00",
+        "status": "completed",
+        "state_sha256": "09be1309777af1f2b036f295534d0222a988e29453dd69f2e9a26c0207e3d34a"
+      },
+      {
+        "pipeline_id": "pipe_3272477a8dc1",
+        "created_at": "2026-06-27T08:22:45.690436+00:00",
+        "status": "completed",
+        "state_sha256": "be7fb8c8736debb4d5b0ca786ec3bef3ddf1d078517b9820dc5a367a4710b173"
+      },
+      {
+        "pipeline_id": "pipe_33f54602f2a0",
+        "created_at": "2026-07-13T17:31:40.788907+00:00",
+        "status": "failed",
+        "state_sha256": "4312bc32ce9bdd444d62e1ce3fe1bf47e5ec8a2bafa93201edf129db540abfc5"
+      },
+      {
+        "pipeline_id": "pipe_41522d5d9790",
+        "created_at": "2026-06-20T19:34:51.783165+00:00",
+        "status": "completed",
+        "state_sha256": "2fb7c908f1159fc3ee60914fc66261480e9b5eb46d112385954f0800975f2660"
+      },
+      {
+        "pipeline_id": "pipe_5985916eb3be",
+        "created_at": "2026-06-10T08:56:02.874621+00:00",
+        "status": "completed",
+        "state_sha256": "37a3b41a4f0abe2a31d67cd00c77d78a615b6015f14f169418a481f68533c14a"
+      },
+      {
+        "pipeline_id": "pipe_66838c1c67de",
+        "created_at": "2026-06-09T12:37:50.585326+00:00",
+        "status": "completed",
+        "state_sha256": "a073d17441bb263d52d4d4b31e2129881001211ced347eacbfacd5e29c72a746"
+      },
+      {
+        "pipeline_id": "pipe_68a0a2365670",
+        "created_at": "2026-07-13T17:31:40.789278+00:00",
+        "status": "failed",
+        "state_sha256": "d2899d3e8fde724b6487406e8899ae0035f882ef6034bb4a2b87ded56006ccdb"
+      },
+      {
+        "pipeline_id": "pipe_69f88f22ed30",
+        "created_at": "2026-06-28T22:00:02.918498+00:00",
+        "status": "completed",
+        "state_sha256": "445262ec23947a42e13d599a0af2c1e4c9c2a608344b3dd58ecd1fc9f0270e3a"
+      },
+      {
+        "pipeline_id": "pipe_750d99882585",
+        "created_at": "2026-07-14T14:24:51.953989+00:00",
+        "status": "cancelled",
+        "state_sha256": "1fa6e74448c45237c0cd8ea298539bcc0408e6bbf5c11e1ee95644bad7d14906"
+      },
+      {
+        "pipeline_id": "pipe_764249df9c38",
+        "created_at": "2026-06-10T18:06:20.410556+00:00",
+        "status": "completed",
+        "state_sha256": "64a2d547911e90a0ca1438674ffb19b2d85907f1cda2384a5341c29f23719680"
+      },
+      {
+        "pipeline_id": "pipe_7ef597666938",
+        "created_at": "2026-07-05T20:40:51.138907+00:00",
+        "status": "completed",
+        "state_sha256": "d9d884c0961420cf0370f06095c3e30b258a46349eb68d725e0edca1b714966a"
+      },
+      {
+        "pipeline_id": "pipe_8118312f7b79",
+        "created_at": "2026-06-11T10:11:34.799395+00:00",
+        "status": "completed",
+        "state_sha256": "532bc4a641541792ede712b3436c555d10eabfc37e0f0b7fe2bf8867af47d0fa"
+      },
+      {
+        "pipeline_id": "pipe_8b47373016f1",
+        "created_at": "2026-06-08T18:23:22.499025+00:00",
+        "status": "completed",
+        "state_sha256": "2384af49e7f35ac17a95eab11b94a4d95d37ce014e911c06d70cfb27929e949a"
+      },
+      {
+        "pipeline_id": "pipe_8bbc44016735",
+        "created_at": "2026-06-27T17:49:55.810281+00:00",
+        "status": "completed",
+        "state_sha256": "09ee6469ffc8a4d744c488b42fa42db920995560ae5cdc70fb475ec845c6f30f"
+      },
+      {
+        "pipeline_id": "pipe_8bd4981639ac",
+        "created_at": "2026-06-08T21:23:22.754757+00:00",
+        "status": "completed",
+        "state_sha256": "df60f12889e7be918f3885b79da0f691406646e4c78d530531f0b7c5aaedfaa5"
+      },
+      {
+        "pipeline_id": "pipe_91aaf91f6392",
+        "created_at": "2026-07-12T14:18:53.207724+00:00",
+        "status": "completed",
+        "state_sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436"
+      },
+      {
+        "pipeline_id": "pipe_a335177097fb",
+        "created_at": "2026-07-01T01:17:40.425562+00:00",
+        "status": "completed",
+        "state_sha256": "feddda1aa239746cdd3901df8dcf089348f49c31285361db9a5133f6086f1b2f"
+      },
+      {
+        "pipeline_id": "pipe_a8986bffd918",
+        "created_at": "2026-07-07T18:36:17.261105+00:00",
+        "status": "completed",
+        "state_sha256": "c5f423f86610c238d08d361c65bdb12cdf0702c759d9ffb88487516d7b10eb60"
+      },
+      {
+        "pipeline_id": "pipe_a90b338fdfa0",
+        "created_at": "2026-06-11T19:22:03.541561+00:00",
+        "status": "completed",
+        "state_sha256": "35bb9f324404951c76a4871c40d5b7ca39b8896857754840a60ee96a771dfe19"
+      },
+      {
+        "pipeline_id": "pipe_aa0fb94abe92",
+        "created_at": "2026-07-03T06:25:08.429052+00:00",
+        "status": "completed",
+        "state_sha256": "0a24b8f2b60f6202b911b1b59eeda97fee15a2db39c309dd830fdf0a1f6a3743"
+      },
+      {
+        "pipeline_id": "pipe_bef6879b2e94",
+        "created_at": "2026-07-14T21:20:23.971987+00:00",
+        "status": "completed",
+        "state_sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      {
+        "pipeline_id": "pipe_bf2bb3095d11",
+        "created_at": "2026-07-02T18:50:02.567717+00:00",
+        "status": "completed",
+        "state_sha256": "ae62add8d03461a091016d24536c1be8af91fc74d0dcb0e2903add7b8e9c7e0d"
+      },
+      {
+        "pipeline_id": "pipe_cbbd2d4fe2fa",
+        "created_at": "2026-06-20T16:04:38.776209+00:00",
+        "status": "completed",
+        "state_sha256": "9ccc94be152f06c104baf74bde261c9c1ed32c7d9502e58140835557b13a569e"
+      },
+      {
+        "pipeline_id": "pipe_dbeb8c3a4663",
+        "created_at": "2026-07-14T11:51:21.019128+00:00",
+        "status": "cancelled",
+        "state_sha256": "f33617aa824274c48d4f9401ff41bb2f1312a7e702f4084bafa4935d0e2b4b78"
+      },
+      {
+        "pipeline_id": "pipe_e2egold02",
+        "created_at": "2026-06-13T20:36:05.149934+00:00",
+        "status": "completed",
+        "state_sha256": "78195344ace339609a828a1d9b68635d97a49d9bde293c32202c467d956c96b3"
+      },
+      {
+        "pipeline_id": "pipe_ef32d3d420f4",
+        "created_at": "2026-07-13T17:31:40.788999+00:00",
+        "status": "failed",
+        "state_sha256": "949e68a1959d6b42052e314f8951ce256edaf47a71fe46274182a1a911b79091"
+      },
+      {
+        "pipeline_id": "pipe_f01ed9fe06de",
+        "created_at": "2026-06-10T10:13:32.427949+00:00",
+        "status": "completed",
+        "state_sha256": "fb5696a8d349b1e97031231e5b170522d5c2f58de2e9d9c6db27434bcc40c181"
+      },
+      {
+        "pipeline_id": "pipe_f23527f7d903",
+        "created_at": "2026-07-09T08:12:33.491844+00:00",
+        "status": "completed",
+        "state_sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      {
+        "pipeline_id": "pipe_f538c1371a96",
+        "created_at": "2026-07-15T11:46:28.939722+00:00",
+        "status": "cancelled",
+        "state_sha256": "5f037a933cace7df2f957492fb4043447b003c87c2a4ae4ae11f58d4bfc97564"
+      }
+    ]
+  },
+  "implementation_snapshot": {
+    "revision": "a1180cc135f1cd2ccdcbf4899437b4288d4c87e1",
+    "path": "backend/app/utils/llm_client.py",
+    "sha256": "910a6b24ce582453defd1229db06a1501b16c5fdf5d50f73294df60309c8aa8c",
+    "read_method": "git show a1180cc135f1cd2ccdcbf4899437b4288d4c87e1:backend/app/utils/llm_client.py",
+    "scope": "Pinned historical source before ASTRA-04b2 edits; not a hash of the concurrently edited working file."
+  },
+  "log_matching": {
+    "regex_patterns": {
+      "exact_429": "Error code: 429",
+      "app_retry_schedule": "LLM 调用失败 \\(第 \\d+/\\d+ 次\\)|chat_with_tools 调用失败 \\(第 \\d+/\\d+ 次\\)",
+      "retry_mentions": "retry|retrying|重试",
+      "empty_api_content": "返回空 content|empty content",
+      "empty_claude_result": "Claude CLI returned empty result",
+      "empty_codex_result": "Codex CLI 返回空结果",
+      "empty_response_broad": "(?:空(?:的)?(?:响应|内容|结果|回复|content)|(?:响应|内容|结果|回复|content)(?:为|是)空|(?:empty|blank)[ _-]?(?:response|content|result|reply))",
+      "legacy_claude_failure": "Claude CLI failed:",
+      "sdk_retry_message": "Retrying request to"
+    },
+    "regex_flags": [
+      "IGNORECASE"
+    ],
+    "unit": "Number of splitlines() physical lines containing a matching regex; each line counted once per pattern. Patterns overlap.",
+    "decode": "UTF-8 with replacement; replacement counts reported per file",
+    "logger_method": "mirofish.[A-Za-z0-9_.]+ with trailing numeric source-line suffix removed; logger names only, no message text exported.",
+    "timestamp_method": "Only anchored [YYYY-MM-DD HH:MM:SS] event prefixes; timezone absent. Rotated filename dates do not bound the actual event timestamp range."
+  },
+  "selected_application_logs": [
+    {
+      "path": "backend/logs/mirofish.log.2026-07-09",
+      "sha256": "255a5c3108e98652812af5ad00dc2e680bdf137151ebec15adba0699d7f97076",
+      "bytes": 2856684,
+      "line_count": 9437,
+      "unit": "literal_log_lines",
+      "unicode_replacement_count": 1,
+      "counts": {
+        "exact_429": 1001,
+        "app_retry_schedule": 2287,
+        "retry_mentions": 2676,
+        "empty_api_content": 0,
+        "empty_claude_result": 0,
+        "empty_codex_result": 0,
+        "empty_response_broad": 0,
+        "legacy_claude_failure": 0,
+        "sdk_retry_message": 0
+      },
+      "overlaps": {
+        "exact_429_and_app_retry_schedule": 671,
+        "empty_api_content_and_app_retry_schedule": 0
+      },
+      "exact_429_by_logger": {
+        "mirofish.llm_client._try_fallback": 315,
+        "mirofish.llm_client.chat": 671,
+        "mirofish.oasis_llm._fallback_completion": 15
+      },
+      "app_retry_schedule_by_logger": {
+        "mirofish.llm_client.chat": 2287
+      },
+      "event_prefix_naive_time_range": [
+        "2026-07-09 00:30:20",
+        "2026-07-10 15:14:32"
+      ],
+      "exact_429_event_prefix_naive_time_range": [
+        "2026-07-09 02:34:54",
+        "2026-07-09 23:59:15"
+      ]
+    },
+    {
+      "path": "backend/logs/mirofish.log.2026-07-15",
+      "sha256": "d2a6dc7aeae69e19dc71c56b5cc554309cf3975af784f66f29a02277dc6756e5",
+      "bytes": 7455128,
+      "line_count": 36569,
+      "unit": "literal_log_lines",
+      "unicode_replacement_count": 0,
+      "counts": {
+        "exact_429": 8906,
+        "app_retry_schedule": 14039,
+        "retry_mentions": 14826,
+        "empty_api_content": 0,
+        "empty_claude_result": 0,
+        "empty_codex_result": 0,
+        "empty_response_broad": 0,
+        "legacy_claude_failure": 5,
+        "sdk_retry_message": 0
+      },
+      "overlaps": {
+        "exact_429_and_app_retry_schedule": 4555,
+        "empty_api_content_and_app_retry_schedule": 0
+      },
+      "exact_429_by_logger": {
+        "mirofish.api.settings._test_openai_compat_provider": 18,
+        "mirofish.llm_client._try_fallback": 2056,
+        "mirofish.llm_client.chat": 4555,
+        "mirofish.oasis_llm._fallback_completion": 2262,
+        "mirofish.pipeline._run": 1,
+        "mirofish.simulation_config._call_llm_with_retry": 9,
+        "mirofish.simulation_config._generate_agent_configs_batch": 2,
+        "mirofish.simulation_config._generate_event_config": 1,
+        "unclassified": 2
+      },
+      "app_retry_schedule_by_logger": {
+        "mirofish.llm_client.chat": 14029,
+        "mirofish.llm_client.chat_with_tools": 10
+      },
+      "event_prefix_naive_time_range": [
+        "2026-07-15 01:57:26",
+        "2026-07-16 00:26:04"
+      ],
+      "exact_429_event_prefix_naive_time_range": [
+        "2026-07-15 07:04:00",
+        "2026-07-15 23:58:09"
+      ]
+    },
+    {
+      "path": "backend/logs/mirofish.log.2026-07-16",
+      "sha256": "c9162222567c593b472823d492c46ddd61fa9893f5b6f1f2cd4deb661d109265",
+      "bytes": 1621187,
+      "line_count": 9680,
+      "unit": "literal_log_lines",
+      "unicode_replacement_count": 0,
+      "counts": {
+        "exact_429": 437,
+        "app_retry_schedule": 413,
+        "retry_mentions": 805,
+        "empty_api_content": 0,
+        "empty_claude_result": 0,
+        "empty_codex_result": 0,
+        "empty_response_broad": 0,
+        "legacy_claude_failure": 16,
+        "sdk_retry_message": 0
+      },
+      "overlaps": {
+        "exact_429_and_app_retry_schedule": 263,
+        "empty_api_content_and_app_retry_schedule": 0
+      },
+      "exact_429_by_logger": {
+        "mirofish.api.settings._test_openai_compat_provider": 44,
+        "mirofish.llm_client._try_fallback": 93,
+        "mirofish.llm_client.chat": 263,
+        "mirofish.oasis_llm._fallback_completion": 37
+      },
+      "app_retry_schedule_by_logger": {
+        "mirofish.llm_client.chat": 381,
+        "mirofish.llm_client.chat_with_tools": 32
+      },
+      "event_prefix_naive_time_range": [
+        "2026-07-16 00:00:29",
+        "2026-07-17 04:43:59"
+      ],
+      "exact_429_event_prefix_naive_time_range": [
+        "2026-07-16 01:14:12",
+        "2026-07-16 04:58:49"
+      ]
+    }
+  ],
+  "later_application_logs": {
+    "selection": "All existing backend/logs/mirofish.log.* files whose filename sorts after mirofish.log.2026-07-16, plus active mirofish.log, at refresh time.",
+    "file_count": 8,
+    "logs": [
+      {
+        "path": "backend/logs/mirofish.log",
+        "sha256": "e7da2a06c55dc6a4616ae852dbb272ebafc19de48e15b27e3ef248c5f5b68b56",
+        "bytes": 5333,
+        "line_count": 46,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 0,
+          "retry_mentions": 0,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 0,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {},
+        "event_prefix_naive_time_range": [
+          "2026-08-18 05:10:04",
+          "2026-08-18 18:28:39"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-17",
+        "sha256": "7c17e8cb1963a683bfe8fffe7b10f798a035b7776d4335f7c869d841a4131ad3",
+        "bytes": 274838,
+        "line_count": 1765,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 16,
+          "retry_mentions": 80,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 3,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {
+          "mirofish.llm_client.chat": 10,
+          "mirofish.llm_client.chat_with_tools": 6
+        },
+        "event_prefix_naive_time_range": [
+          "2026-07-17 04:43:57",
+          "2026-07-19 00:11:49"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-18",
+        "sha256": "906e3c161960695a14e65f585de9149860654894685d6aa8032a4dd6a9d6bafc",
+        "bytes": 94090,
+        "line_count": 374,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 0,
+          "retry_mentions": 3,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 0,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {},
+        "event_prefix_naive_time_range": [
+          "2026-07-18 20:23:53",
+          "2026-07-21 00:03:30"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-21",
+        "sha256": "5499193737513da4e19817e644d5f18805b75b89b4ea37d9b7f254423d33f549",
+        "bytes": 47796,
+        "line_count": 366,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 0,
+          "retry_mentions": 0,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 0,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {},
+        "event_prefix_naive_time_range": [
+          "2026-07-21 00:03:30",
+          "2026-07-22 04:33:02"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-22",
+        "sha256": "b518e97894d9e44c6b11767158fdb3adf3235d45e8c76ed4c449bb83612d8153",
+        "bytes": 3175066,
+        "line_count": 18100,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 48,
+          "retry_mentions": 369,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 12,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {
+          "mirofish.llm_client.chat": 24,
+          "mirofish.llm_client.chat_with_tools": 24
+        },
+        "event_prefix_naive_time_range": [
+          "2026-07-22 04:33:02",
+          "2026-07-22 09:59:54"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-07-29",
+        "sha256": "b6bdbad0906bf383b00d9877ed634c3f3d48d10daa83ec5e3cb9109697a6afd3",
+        "bytes": 1175,
+        "line_count": 10,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 0,
+          "retry_mentions": 0,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 0,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {},
+        "event_prefix_naive_time_range": [
+          "2026-07-29 20:02:13",
+          "2026-07-29 20:02:17"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-08-13",
+        "sha256": "cf4cae87cd808010a67a00bf9874946f9f844c52e400fcbdbbefae3ccd0e1779",
+        "bytes": 1175,
+        "line_count": 10,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 0,
+          "retry_mentions": 0,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 0,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {},
+        "event_prefix_naive_time_range": [
+          "2026-08-13 20:04:00",
+          "2026-08-13 20:04:07"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      },
+      {
+        "path": "backend/logs/mirofish.log.2026-08-17",
+        "sha256": "d515cc55b42a0d52154868a64be0aae28e8e43b7a6a4b1f80fab2780b0c95cb2",
+        "bytes": 17192,
+        "line_count": 129,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 0,
+        "counts": {
+          "exact_429": 0,
+          "app_retry_schedule": 10,
+          "retry_mentions": 11,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 2,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 0,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {},
+        "app_retry_schedule_by_logger": {
+          "mirofish.llm_client.chat": 8,
+          "mirofish.llm_client.chat_with_tools": 2
+        },
+        "event_prefix_naive_time_range": [
+          "2026-08-17 01:34:22",
+          "2026-08-17 02:27:25"
+        ],
+        "exact_429_event_prefix_naive_time_range": null
+      }
+    ]
+  },
+  "supplemental_historical_logs": {
+    "reason": "Bounded July 8 check of historical retry/CLI-empty-error claims referenced by current source comments; no raw error payloads exported.",
+    "logs": [
+      {
+        "path": "backend/logs/mirofish.log.2026-07-08",
+        "sha256": "439a6ddcae7990335fc75a8f999a467beb55494e985a9082fe85fdd35f4778ff",
+        "bytes": 8915706,
+        "line_count": 28288,
+        "unit": "literal_log_lines",
+        "unicode_replacement_count": 2,
+        "counts": {
+          "exact_429": 2738,
+          "app_retry_schedule": 7372,
+          "retry_mentions": 8066,
+          "empty_api_content": 0,
+          "empty_claude_result": 0,
+          "empty_codex_result": 0,
+          "empty_response_broad": 0,
+          "legacy_claude_failure": 0,
+          "sdk_retry_message": 0
+        },
+        "overlaps": {
+          "exact_429_and_app_retry_schedule": 1896,
+          "empty_api_content_and_app_retry_schedule": 0
+        },
+        "exact_429_by_logger": {
+          "mirofish.graphiti_runtime._add_episodes_concurrent": 66,
+          "mirofish.llm_client._try_fallback": 776,
+          "mirofish.llm_client.chat": 1896
+        },
+        "app_retry_schedule_by_logger": {
+          "mirofish.llm_client.chat": 7368,
+          "mirofish.llm_client.chat_with_tools": 4
+        },
+        "event_prefix_naive_time_range": [
+          "2026-07-08 01:11:09",
+          "2026-07-09 03:07:41"
+        ],
+        "exact_429_event_prefix_naive_time_range": [
+          "2026-07-08 06:52:42",
+          "2026-07-09 03:06:48"
+        ]
+      }
+    ]
+  },
+  "validation": {
+    "selected_429_counts_match_prior": true,
+    "selected_line_counts_match_prior": true,
+    "selected_429_logger_breakdowns_match_prior": true,
+    "selected_429_ranges_match_prior": true,
+    "empty_marker_matches_in_bounded_logs": {
+      "empty_api_content": 0,
+      "empty_claude_result": 0,
+      "empty_codex_result": 0,
+      "empty_response_broad": 0
+    }
+  },
+  "limitations": [
+    "Log occurrences are not distinct physical API calls. One exception can appear in retry, fallback, upstream failure, and settings-probe logging. Do not sum overlapping patterns or infer billing and critical-path time.",
+    "Retry-scheduling lines express application retry intent; they do not prove that the next transport request occurred. Zero SDK retry-message lines do not prove the SDK performed zero hidden retries.",
+    "The bounded files contain no selected empty-response markers. This does not prove responses were nonempty or that failed usage was fully metered. Historical token loss from empty-content validation cannot be quantified from these records; use a current-source offline reproduction.",
+    "Later shared application logs coexist with no newer persisted pipeline IDs. They do not establish newer completed production runs or post-change performance.",
+    "The historical parent research aggregate overlaps options.research_telemetry and must not be added again. Failed-attempt gaps and aggregate overcount may coexist; recorded usage is neither actual billing nor a proven lower bound.",
+    "ASTRA-04a/04b1 fixes were verified offline after the historical runs. Those fixes do not retroactively repair old logs or prove full physical-request coverage."
+  ]
+}

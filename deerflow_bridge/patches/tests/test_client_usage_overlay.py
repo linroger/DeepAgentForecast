@@ -34,9 +34,12 @@ OV = _load_overlay()
 # 合成 client.py：把两个 OLD 块嵌进受控脚手架（缩进与真文件逐字节一致：
 # 声明块 8 空格、闭包体 12 空格），并携带 context 子 overlay 的 marker 让其跳过。
 _SYNTHETIC_CLIENT = (
-    "# marker: task subagents must receive the exact per-client config\n"
+    "import uuid\nfrom typing import Literal\n"
+    'StreamEventType = Literal["values", "messages-tuple", "custom", "end"]\n'
     "class _Streamer:\n"
-    "    def make_accounter(self):\n"
+    "    _app_config = None\n"
+    "    def make_accounter(self, thread_id='offline'):\n"
+    + OV._CLIENT_CONTEXT_ORIGINAL
     + OV._CLIENT_USAGE_DECL_ORIGINAL
     + "        cumulative_usage = {\"input_tokens\": 0, \"output_tokens\": 0, "
       "\"total_tokens\": 0}\n"
@@ -46,6 +49,27 @@ _SYNTHETIC_CLIENT = (
     + "\n"
     + "        return _account_usage, cumulative_usage\n"
 )
+
+# Migration-anchor fixture only; the companion complete-client suite executes
+# the actual vendor stream generator with real LangChain message objects.
+_SYNTHETIC_CLIENT += '''
+    def stream(self):
+        for item in self._agent.stream(
+            {}):
+            if item:
+                if item:
+                    counted_usage = _account_usage(msg_id, msg_chunk.usage_metadata)
+            for msg in messages:
+                msg_id = getattr(msg, "id", None)
+                if msg_id in streamed_ids:
+                    if msg:
+                        _account_usage(msg_id, getattr(msg, "usage_metadata", None))
+                        pass
+                if msg:
+                    counted_usage = _account_usage(msg_id, msg.usage_metadata)
+                    pass
+        yield StreamEvent(type="end", data={"usage": cumulative_usage})
+'''
 
 _SYNTHETIC_TASK = "# marker: embedded clients carry the active model under\n"
 _SYNTHETIC_EXECUTOR = (
@@ -135,3 +159,25 @@ def test_deployed_client_carries_the_overlay():
     src = deployed.read_text(encoding="utf-8")
     assert "counted_usage_by_id" in src
     assert "counted_usage_ids" not in src
+
+
+def test_existing_highwater_overlay_upgrades_to_whole_stream_contract(tmp_path):
+    existing = _SYNTHETIC_CLIENT.replace(OV._CLIENT_CONTEXT_ORIGINAL, OV._CLIENT_CONTEXT_PATCHED)
+    existing = existing.replace(OV._CLIENT_USAGE_DECL_ORIGINAL, OV._CLIENT_USAGE_DECL_PATCHED)
+    existing = existing.replace(OV._CLIENT_USAGE_BODY_ORIGINAL, OV._CLIENT_USAGE_BODY_PATCHED)
+    root = _make_tree(tmp_path, existing)
+    assert OV.apply(root) == "applied"
+    source = (root / OV.CLIENT_PATH).read_text()
+    assert OV._CLIENT_STREAM_USAGE_MARKER in source
+    assert OV._CLIENT_STREAM_BASELINE in source
+    assert OV._CLIENT_VALUES_USAGE in source
+    assert OV.apply(root) == "already_applied"
+
+
+def test_partial_stream_overlay_marker_cannot_hide_drift(tmp_path):
+    root = _make_tree(tmp_path)
+    OV.apply(root)
+    path = root / OV.CLIENT_PATH
+    path.write_text(path.read_text().replace(OV._CLIENT_VALUES_USAGE, "", 1))
+    with pytest.raises(RuntimeError, match="partial or drifted"):
+        OV.apply(root)

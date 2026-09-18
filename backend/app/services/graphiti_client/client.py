@@ -161,8 +161,8 @@ class _GraphNamespace:
             }
             for i, ep in enumerate(episodes or [])
         ]
-        # T2.5: opt-in concurrent ingest (GRAPH_BUILD_CONCURRENCY>1). Default 1 → the
-        # serial path below, byte-identical to add_episode-in-a-loop.
+        # T2.5: configured concurrent ingest (GRAPH_BUILD_CONCURRENCY defaults to 4).
+        # Values <=1 select the serial add_episode-in-a-loop fallback below.
         try:
             from ...config import Config
 

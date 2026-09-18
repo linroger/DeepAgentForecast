@@ -62,8 +62,10 @@ class Config:
     # 而非对已死提供方持续空转（2026-07-08 曾以 231 错误/分钟磨了 ~26 小时）。≤0 关闭。
     LLM_OUTAGE_HALT_CONSECUTIVE = int(os.environ.get('LLM_OUTAGE_HALT_CONSECUTIVE', '10') or '10')
     # ITEM-18：每个 provider 的 $/Mtok 成本覆盖表（JSON），形如 {"openai":[5.0,15.0],"myprov":[0.5,1.5]}
-    # （每百万 token 的 [输入, 输出] 美元价）。叠加在 telemetry._COST_PER_1K 的保守内建默认之上（同名覆盖、
-    # 新名新增）。留空=纯用内建默认；解析失败=退回无覆盖（degrade-safe，见 telemetry._cost_overrides）。
+    # （每百万 token 的 [输入, 输出] 美元价）。Native/shared API quotes also accept
+    # exact provider:model keys before provider defaults, capture rates before
+    # dispatch, and reject malformed rates. Empty uses rough built-in estimates.
+    # Historical/non-API estimate_cost callers retain their legacy fallback parser.
     LLM_COST_PER_MTOK = os.environ.get('LLM_COST_PER_MTOK', '').strip()
 
     # —— 调优后的 LLM HTTP 客户端（R2-EXEC-6）——
@@ -1047,6 +1049,10 @@ class Config:
     # OpenAI 兼容提供方：纯 HTTP 并发。SIM-3：默认 24（在飞 agent LLM 调用数，//platforms 分摊）；
     # 从保守值 16→24→32 逐档 ramp 盯 p95，而非一步到 64。
     OASIS_SEMAPHORE = int(os.environ.get('OASIS_SEMAPHORE', '24') or '24')
+    # Native OASIS output cap. Zero leaves the SDK field omitted, preserving
+    # existing requests. Select the field supported by the configured endpoint.
+    OASIS_MAX_OUTPUT_TOKENS = int(os.environ.get('OASIS_MAX_OUTPUT_TOKENS', '0') or '0')
+    OASIS_OUTPUT_TOKEN_PARAMETER = os.environ.get('OASIS_OUTPUT_TOKEN_PARAMETER', 'max_tokens').strip()
     
     # OASIS平台可用动作配置
     OASIS_TWITTER_ACTIONS = [
@@ -1290,9 +1296,12 @@ class Config:
     GRAPHITI_REMOTE = os.environ.get('GRAPHITI_REMOTE', 'false').strip().lower() == 'true'
     # 每个 Graphiti 操作（add_episode/search/list…）的挂钟上限（秒）。sync→async 桥兜底，
     # 避免某次 LLM/DB 调用卡死时永久阻塞调用它的 Flask 线程。0=不设上限（旧行为）。
-    # GRAPH-9：1800→900。fast-tier 路由 + ~5x 更少 episode 让单批远低于 15 分钟；降到 900 让卡死的
-    # 读取快速失败而不是干等 30 分钟。
+    # Concurrent batch deadlines cover graph setup, lock/semaphore queues, ingestion,
+    # rate-limit cooldown and replay; they are not a per-chunk allowance.
     GRAPHITI_OP_TIMEOUT_S = float(os.environ.get('GRAPHITI_OP_TIMEOUT_S', '900') or '900')
+    # Kept raw so the runtime can safely default invalid/non-finite values without
+    # breaking Config import. Runtime bounds this cancellation cleanup wait to 0..30s.
+    GRAPHITI_BATCH_CANCEL_GRACE_S = os.environ.get('GRAPHITI_BATCH_CANCEL_GRACE_S', '2')
 
     # --- 模拟（Phase 3）---
     # 智能体数量上限；超过则按 (是否匹配 actor, 影响力, 邻边数) 排序保留，始终保留研究 actor（T3.13）
@@ -1580,6 +1589,12 @@ class Config:
             _sem_val = getattr(cls, _sem_name, None)
             if not isinstance(_sem_val, int) or _sem_val < 1:
                 errors.append(f"{_sem_name} 必须是 >=1 的整数，当前为 '{_sem_val}'")
+        from .utils.oasis_output_policy import SCHEMA, validate_output_policy
+        try:
+            validate_output_policy({"schema": SCHEMA, "max_output_tokens": cls.OASIS_MAX_OUTPUT_TOKENS,
+                                    "parameter": cls.OASIS_OUTPUT_TOKEN_PARAMETER})
+        except ValueError as exc:
+            errors.append(str(exc))
         return errors
 
 

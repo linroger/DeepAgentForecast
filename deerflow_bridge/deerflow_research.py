@@ -32,6 +32,8 @@ Exit codes:
         runtime, import, extraction/finalization, and unexpected caught errors.
     3 = usage/config error before research starts — empty question, or a missing/expired
         Claude credential caught by the pre-flight check.
+    4 = compaction stopped safely; no automatic retry/salvage. This reserved
+        status reaches the parent even when the failure metadata cannot be saved.
 """
 
 from __future__ import annotations
@@ -63,6 +65,31 @@ except ImportError:  # package import path used by backend unit tests
         from deerflow_bridge import research_budget as _research_budget
     except ImportError:  # deployed bridge without optional control module
         _research_budget = None  # type: ignore[assignment]
+
+try:
+    import research_compaction as _research_compaction
+except ImportError:  # package import path used by backend unit tests
+    from deerflow_bridge import research_compaction as _research_compaction
+
+
+# Share the stop with the harness's exact provider-admission boundary so a
+# sibling already inside client.stream cannot keep spending after failure.
+ResearchCompactionError = _research_compaction.ResearchCompactionError
+validate_compaction = _research_compaction.validate_compaction
+_raise_if_compaction_stopped = _research_compaction.raise_if_compaction_stopped
+_stop_after_compaction_failure = _research_compaction.stop_after_compaction_failure
+_reset_compaction_stop = _research_compaction.reset_compaction_stop
+
+
+def _compaction_boundary(function):
+    """Do not let optional fallbacks turn a stopped lane into a successful stage."""
+    @functools.wraps(function)
+    def guarded(*args, **kwargs):
+        _raise_if_compaction_stopped()
+        result = function(*args, **kwargs)
+        _raise_if_compaction_stopped()
+        return result
+    return guarded
 
 
 def _atomic_write_text(path: Path, text: str) -> None:
@@ -1094,7 +1121,7 @@ class ResearchCheckpointer:
                 if pid and pid not in self.completed_passes:
                     self.completed_passes.append(pid)
 
-    def _flush_locked(self) -> None:
+    def _flush_locked(self, *, strict: bool = False) -> None:
         if not self.enabled:
             return
         try:
@@ -1111,6 +1138,11 @@ class ResearchCheckpointer:
                 lane_id=self.lane_id,
             )
         except Exception:  # noqa: BLE001 — 断点记录纯增益，绝不阻断研究
+            if strict:
+                error = ResearchCompactionError(
+                    "checkpoint_persistence_failed", self.thread_id)
+                _stop_after_compaction_failure(error)
+                raise error from None
             pass
 
     def _refresh_fetched_locked(self, fetched_source_count) -> None:
@@ -1124,6 +1156,7 @@ class ResearchCheckpointer:
 
     def record_pass(self, pass_id: str, *, gaps=None, fetched_source_count=None) -> None:
         """记录一个已完成 pass（其笔记确已落在复用线程的 checkpoint 里）+ 刷新进度落盘。"""
+        _raise_if_compaction_stopped()
         if not self.enabled or not pass_id:
             return
         with self._lock:
@@ -1134,7 +1167,8 @@ class ResearchCheckpointer:
             self._refresh_fetched_locked(fetched_source_count)
             self._flush_locked()
 
-    def update_progress(self, *, gaps=None, fetched_source_count=None) -> None:
+    def update_progress(self, *, gaps=None, fetched_source_count=None,
+                        strict: bool = False) -> None:
         """只刷新进度（gaps/来源数），不新增 completed pass（覆盖门/自适应轮用）。"""
         if not self.enabled:
             return
@@ -1142,7 +1176,7 @@ class ResearchCheckpointer:
             if gaps is not None:
                 self.gaps = list(gaps)
             self._refresh_fetched_locked(fetched_source_count)
-            self._flush_locked()
+            self._flush_locked(strict=strict)
 
 # ---------------------------------------------------------------------------
 # #1 STRUCTURAL SOURCE CAPTURE — collect URLs the agent ACTUALLY FETCHED.
@@ -4371,6 +4405,9 @@ class ProgressLog:
         self._lock = threading.Lock()
 
     def write(self, kind: str, message: str) -> None:
+        # Each stdout line is one parent-consumed event. Source/tool text must
+        # never manufacture another event by embedding a newline and a tag.
+        message = message.replace("\r", r"\r").replace("\n", r"\n")
         line = f"{_utcnow()} [{kind}] {message}".rstrip()
         with self._lock:
             self._fh.write(line + "\n")
@@ -4455,8 +4492,17 @@ def _model_call_lease(weight: int = 1):
 
 def _invoke_model(model, messages):
     """Invoke any bare model under the same cross-process provider envelope."""
+    _raise_if_compaction_stopped()
     with _model_call_lease(1):
-        return model.invoke(messages)
+        # A sibling can stop while this call waits for a provider permit.
+        _raise_if_compaction_stopped()
+        try:
+            result = model.invoke(messages)
+        except ResearchCompactionError as exc:
+            _stop_after_compaction_failure(exc)
+            raise
+    _raise_if_compaction_stopped()
+    return result
 
 
 def _leased_client_stream(client, message: str, *, thread_id: str, recursion_limit: int):
@@ -4466,8 +4512,16 @@ def _leased_client_stream(client, message: str, *, thread_id: str, recursion_lim
     web/tool intervals and would serialize tool-bound research while the model
     is idle. Bare bridge model calls still use :func:`_invoke_model`.
     """
-    yield from client.stream(
-        message, thread_id=thread_id, recursion_limit=recursion_limit)
+    _raise_if_compaction_stopped()
+    try:
+        for event in client.stream(
+                message, thread_id=thread_id, recursion_limit=recursion_limit):
+            _raise_if_compaction_stopped()
+            yield event
+    except ResearchCompactionError as exc:
+        _stop_after_compaction_failure(exc)
+        raise
+    _raise_if_compaction_stopped()
 
 
 def _bridge_fanout_enabled() -> bool:
@@ -6802,7 +6856,8 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
 
 
 def collect_synthesis_message_parts(
-        messages: list) -> "tuple[list[str], list[str]]":
+        messages: list, *, required_thread_id: str = ""
+        ) -> "tuple[list[str], list[str]]":
     """Collect durable evidence while excluding arbitrary human prompts.
 
     Parallel worker notes are injected as typed human messages to avoid a
@@ -6825,6 +6880,22 @@ def collect_synthesis_message_parts(
         elif message_type == "ai":
             parts.append(text)
             ai_parts.append(text)
+        elif (message_type in {"human", "user"}
+              and isinstance(message.get("additional_kwargs"), dict)
+              and "drf_compaction" in message["additional_kwargs"]):
+            # Invalid typed summaries must not fall through to the legacy
+            # worker-note prefix, even if their content imitates that prefix.
+            if not validate_compaction(message, required_thread_id):
+                continue
+            envelope = message["additional_kwargs"]["drf_compaction"]
+            evidence = (
+                "[Derived conversation summary; compaction receipt "
+                f"{envelope['message_id']}; original thread "
+                f"{required_thread_id}. This receipt attests derivation, "
+                "not independent source retrieval.]\n" + text
+            )
+            parts.append(evidence)
+            ai_parts.append(evidence)
         elif (message_type in {"human", "user"}
               and text.startswith(_PARALLEL_EVIDENCE_PREFIX)):
             evidence = text[len(_PARALLEL_EVIDENCE_PREFIX):].lstrip()
@@ -6878,7 +6949,8 @@ def collect_thread_evidence_parts(
     if not messages:
         plog.write("warn", "synthesize: no messages found in thread checkpoints")
         return [], []
-    parts, ai_parts = collect_synthesis_message_parts(messages)
+    parts, ai_parts = collect_synthesis_message_parts(
+        messages, required_thread_id=thread_id)
     append_uncheckpointed_worker_notes(
         parts, ai_parts, _collected_worker_notes())
     return parts, ai_parts
@@ -7883,6 +7955,7 @@ def synthesize_from_evidence_parts(
         return ""
 
 
+@_compaction_boundary
 def synthesize_from_thread(client, thread_id: str, question: str, target_language: str | None, model_name: str, plog: "ProgressLog", depth: str = "standard") -> str:
     """Tool-free report synthesis from a thread's already-gathered research.
 
@@ -9726,6 +9799,99 @@ def _budget_denial_break_at() -> int:
         return 3
 
 
+class _ResearchStreamUsage:
+    """Validate and log observed stream deltas before a turn can be interrupted.
+
+    Stream identity and sequence protect transport replay, not provider request
+    identity. Coverage and cache partition remain unknown even for a clean end.
+    Legacy clients retain their end-only aggregate contract.
+    """
+
+    schema = "research-stream-usage/v1"
+
+    def __init__(self, plog: ProgressLog, thread_id: str, used_stream_ids: set[str]):
+        self.plog = plog
+        self.thread_id = thread_id
+        self.used_stream_ids = used_stream_ids
+        self.stream_id = None
+        self.observations: dict[int, tuple] = {}
+        self.total = (0, 0, 0, 0, 0)
+        self.ended = False
+
+    @staticmethod
+    def counters(usage: dict) -> tuple[int, int, int, int, int]:
+        if not isinstance(usage, dict):
+            raise RuntimeError("Research stream usage is not an object")
+
+        def number(value):
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 2**53:
+                raise RuntimeError("Invalid research stream usage counter")
+            return value
+
+        inputs = number(usage.get("input_tokens"))
+        outputs = number(usage.get("output_tokens"))
+        total = number(usage.get("total_tokens"))
+        if total != inputs + outputs:
+            raise RuntimeError("Inconsistent research stream usage total")
+        details = usage.get("input_token_details", {})
+        if not isinstance(details, dict):
+            raise RuntimeError("Invalid research stream cache observations")
+        # Cache observations can arrive after the inclusive input delta. They
+        # must not be added to input or interpreted as a complete partition.
+        return inputs, outputs, total, number(details.get("cache_read", 0)), number(details.get("cache_creation", 0))
+
+    def observe(self, data: dict) -> None:
+        if not isinstance(data, dict) or data.get("schema") != self.schema:
+            raise RuntimeError("Unsupported research stream usage schema")
+        stream_id, sequence = data.get("stream_id"), data.get("sequence")
+        if (not isinstance(stream_id, str) or not stream_id or len(stream_id) > 128
+                or isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0
+                or data.get("thread_id") != self.thread_id):
+            raise RuntimeError("Invalid research stream usage identity")
+        if data.get("usage_complete") is not False or data.get("cache_partition_known") is not False:
+            raise RuntimeError("Unsupported research stream usage completeness claim")
+        counts = self.counters(data.get("usage"))
+        identity_stable = data.get("identity_stable")
+        message_id = data.get("message_id")
+        if (not isinstance(identity_stable, bool)
+                or (sequence > 0 and identity_stable and (not isinstance(message_id, str) or not message_id))):
+            raise RuntimeError("Invalid research usage message identity")
+        signature = (counts, data.get("kind"), message_id, identity_stable, data.get("baseline"))
+        if self.stream_id is None:
+            if sequence != 0 or data.get("kind") != "start" or any(counts) or stream_id in self.used_stream_ids:
+                raise RuntimeError("Missing or reused research stream usage start")
+            self.stream_id = stream_id
+            self.used_stream_ids.add(stream_id)
+        if stream_id != self.stream_id:
+            raise RuntimeError("Research usage changed stream identity")
+        if sequence in self.observations:
+            if self.observations[sequence] != signature:
+                raise RuntimeError("Conflicting research stream usage replay")
+            return
+        if self.ended or sequence != len(self.observations) or (sequence > 0 and data.get("kind") != "delta"):
+            raise RuntimeError("Research stream usage sequence gap")
+        self.observations[sequence] = signature
+        self.total = tuple(a + b for a, b in zip(self.total, counts, strict=True))
+        inputs, outputs, total, cache_read, cache_write = counts
+        self.plog.write("usage", f"tokens in={inputs} out={outputs} total={total} "
+                        f"cache_read={cache_read} cache_write={cache_write} cache_partition=unknown "
+                        f"identity={'stable' if identity_stable else 'unknown'}")
+        if not identity_stable:
+            self.plog.write("warn", "Research usage message identity is unavailable; observations may overlap")
+
+    def finish(self, data: dict) -> None:
+        if self.stream_id is None and not data.get("usage_schema"):
+            usage = data.get("usage", {})
+            self.plog.write("usage", f"tokens in={usage.get('input_tokens')} out={usage.get('output_tokens')} total={usage.get('total_tokens')}")
+            return
+        if (self.stream_id is None or data.get("usage_schema") != self.schema
+                or data.get("stream_id") != self.stream_id):
+            raise RuntimeError("Research stream usage end has no matching start")
+        if self.counters(data.get("usage")) != self.total:
+            raise RuntimeError("Research stream usage end disagrees with observed deltas")
+        self.ended = True  # The final aggregate is a reconciliation, never new usage.
+
+
 def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str) -> str:
     """Run one agent turn, logging tool activity, returning the final AI text.
 
@@ -9752,17 +9918,20 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
     _corrective_sent = False     # 纠偏消息只注入一次
     _next_message = message
     _next_limit = recursion_limit
+    _usage_stream_ids: set[str] = set()
     plog.write("stage", f"{label}: starting agent turn (recursion_limit={recursion_limit})")
 
     try:
         while True:
+            _stream_usage = _ResearchStreamUsage(plog, thread_id, _usage_stream_ids)
             for event in _leased_client_stream(
                     client, _next_message, thread_id=thread_id,
                     recursion_limit=_next_limit):
-                if _corrective_pending:
-                    break  # 触发事件已完整处理；结束本流段去注入纠偏消息（生成器随 break 关闭）
                 etype = event.type
                 data = event.data or {}
+                if etype == "usage":
+                    _stream_usage.observe(data)
+                    continue
                 if etype == "messages-tuple":
                     mtype = data.get("type")
                     if mtype == "ai":
@@ -9837,8 +10006,11 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
                 elif etype == "custom":
                     plog.write("custom", _truncate(json.dumps(data, ensure_ascii=False)))
                 elif etype == "end":
-                    usage = data.get("usage", {})
-                    plog.write("usage", f"tokens in={usage.get('input_tokens')} out={usage.get('output_tokens')} total={usage.get('total_tokens')}")
+                    _stream_usage.finish(data)
+                if _corrective_pending:
+                    # The producer emitted usage before this display event.
+                    # Do not advance the generator into another provider step.
+                    break
             if _corrective_pending and not _corrective_sent:
                 _corrective_pending = False
                 _corrective_sent = True
@@ -9848,7 +10020,16 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
                 _next_limit = max(32, int(recursion_limit) - tool_calls)  # 续跑段用剩余预算的近似值
                 continue
             break
+    except ResearchCompactionError as exc:
+        _stop_after_compaction_failure(exc)
+        if _v2:
+            # Retain already-confirmed source receipts, but do not start a
+            # network retry after the workflow has stopped.
+            _merge_pending_fetches(_pending_fetches)
+        plog.write("error", f"{label}: {exc}; conversation retained; research stopped")
+        raise
     except Exception as exc:  # noqa: BLE001 — salvage partial output; never discard accumulated report text
+        _raise_if_compaction_stopped()
         # LangGraph raises GraphRecursionError when the step budget (recursion_limit)
         # is exhausted; other transient errors can also break the stream mid-turn.
         # Whatever text was accumulated so far is still useful, so we fall through to
@@ -9865,6 +10046,7 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
         plog.write("warn", f"{label}: stream ended early ({kind}: {exc}); salvaging {salvaged_len} chars")
         _flag_research_degradation(f"{label}: {kind} (salvaged {salvaged_len} chars)")  # S10
 
+    _raise_if_compaction_stopped()
     if _v2:
         _retry_dead_fetches(_pending_fetches, plog)  # R2: 死抓取丢弃前程序化重试一次（~8s 退避）
         _merge_pending_fetches(_pending_fetches)  # RES-2: 锁内合并本回合确认成功的抓取
@@ -11867,6 +12049,7 @@ def _prompt_with_compact_prior_notes(prompt: str, reports: list[str]) -> str:
     )
 
 
+@_compaction_boundary
 def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None, resume_evidence_pack: str = "") -> str:
     """Run the research stage.
 
@@ -11887,7 +12070,31 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     _resume = bool(_resume_done)
     _evidence_only = _env_flag("RESEARCH_EVIDENCE_ONLY", False)
     ckpt = ResearchCheckpointer(out_dir, thread_id, depth, question, enabled=_checkpoint_enabled())
-    ckpt.seed_completed(_resume_done)
+    existing_checkpoint = load_research_checkpoint(out_dir)
+    existing_plan = plan_research_resume(
+        existing_checkpoint, question, depth,
+        expected_run_id=ckpt.run_id,
+        expected_attempt_id=ckpt.attempt_id,
+        expected_lane_id=ckpt.lane_id,
+    )
+    admitted_checkpoint = (
+        resume_completed is not None and existing_plan.get("resume")
+        and existing_plan.get("thread_id") == thread_id
+        and set(existing_plan.get("completed_passes") or []) == _resume_done
+    )
+    if admitted_checkpoint:
+        # Preserve the admitted checkpoint's ordering and progress. Do not
+        # reseal it as an empty discovery record before resumed work begins.
+        ckpt.seed_completed(existing_plan["completed_passes"])
+        ckpt.gaps = list(existing_checkpoint.get("gaps") or [])
+        ckpt.fetched_source_count = int(
+            existing_checkpoint.get("fetched_source_count") or 0)
+    else:
+        ckpt.seed_completed(_resume_done)
+    # Persist thread discovery even when the very first pass stops before it
+    # can record a completion. LangGraph retains that pass's message state.
+    if not admitted_checkpoint:
+        ckpt.update_progress(strict=True)
     if depth != "deep":
         if should_run_pass("standard", _resume_done, _resume):
             text = run_streamed_turn(
@@ -13668,6 +13875,7 @@ def judge_dossier(dossier: str, question: str, target_language: str | None,
         return None
 
 
+@_compaction_boundary
 def run_actor_ontology_stage(client, question: str, depth: str, target_language: str | None,
                              model_name: str, thread_id: str, plog: "ProgressLog",
                              out_dir=None) -> str:
@@ -13764,19 +13972,10 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
         if not messages:
             plog.write("warn", "actor-ontology synthesize: no messages in thread; using research-turn text")
             return research_text
-        parts: list[str] = []
-        for m in messages:
-            if not isinstance(m, dict):
-                continue
-            mtype = m.get("type")
-            text = _message_text(m.get("content"))
-            if not text:
-                continue
-            if mtype == "tool":
-                name = m.get("name") or "source"
-                parts.append(f"[{name}] {text}")
-            elif mtype == "ai":
-                parts.append(text)
+        # Share the validated projection, without importing global Track-A
+        # worker-note fallback into this actor thread.
+        parts, _ = collect_synthesis_message_parts(
+            messages, required_thread_id=thread_id)
         result_receipts = _track_b_search_result_receipts(thread_id)
         if result_receipts:
             parts.append(
@@ -15543,12 +15742,10 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
     report = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
     dossier_path = out_dir / ACTOR_DOSSIER_FILENAME
     dossier = dossier_path.read_text(encoding="utf-8") if dossier_path.exists() else ""
-    if not args.no_actors and (out_dir / ACTOR_INTELLIGENCE_LINEAGE_FILENAME).is_file():
-        # LINEAR-RESEARCH 2026-09-18: the lineage file exists only after a
-        # previous extraction recorded it. A FIRST extraction has nothing to
-        # reuse and nothing to go stale — validating (and failing) here made
-        # every dossier-less extract-only run unreachable. Validate only when
-        # there is actually a lineage to check.
+    if not args.no_actors:
+        # Extract-only reuses a prior producer's artifacts. Missing lineage is
+        # not permission to promote report citations into an actor evidence
+        # plane. Fresh research must produce its own validated actor inputs.
         try:
             validate_actor_artifact_lineage(
                 out_dir,
@@ -15565,12 +15762,6 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
             plog.write("error", str(exc))
             plog.close()
             return 2
-    elif not args.no_actors:
-        plog.write(
-            "stage",
-            "extract-only: no prior actor-artifact lineage (fresh extraction); "
-            "nothing to validate for reuse",
-        )
     # Extract-only performs no web fetches.  It may reuse producer-owned fetched
     # provenance already sealed in this output directory, but it must never
     # promote model-reconstructed citations from the report into fetched facts.
@@ -15610,39 +15801,16 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
                     plog,
                 )
             )
-            # LINEAR-RESEARCH 2026-09-18: the extraction prompt tells the model
-            # to emit a bare ``actor_intelligence_contract`` marker, but the
-            # contract is only real once the dossier-bound sealing writes the
-            # full hashed version. An unsealed actors.json carrying the marker
-            # makes the parent's graph stage treat it as sealed v1 and fail
-            # closed on a projection that does not exist. Withhold the marker
-            # until sealing actually happens (persist_final_actor_intelligence_
-            # contract re-adds the complete contract when a dossier is sealed).
+            # Only the deterministic finalizer may seal the contract. Preserve
+            # per-actor proposed claims for source/permission validation there;
+            # stripping them would destroy the dossier's behavioral projection.
             if isinstance(obj, dict) and "actor_intelligence_contract" in obj:
                 obj.pop("actor_intelligence_contract", None)
                 plog.write(
                     "stage",
                     "extract-only: withholding model-emitted actor-intelligence "
-                    "marker (not sealed; report-only cast)",
+                    "marker until deterministic finalization",
                 )
-            if isinstance(obj, dict):
-                # Same false-claim problem one level down: per-actor
-                # ``intelligence: {schema_version: v1}`` blocks emitted per the
-                # extraction prompt make the parent's prepare stage demand a
-                # sealed top-level contract. Without dossier-bound sealing there
-                # is none, so the rows must ship in the legacy cast shape.
-                _stripped_rows = 0
-                for _row in (obj.get("actors") or []):
-                    if (isinstance(_row, dict)
-                            and isinstance(_row.get("intelligence"), dict)):
-                        _row.pop("intelligence", None)
-                        _stripped_rows += 1
-                if _stripped_rows:
-                    plog.write(
-                        "stage",
-                        f"extract-only: withheld unsealed per-actor "
-                        f"intelligence payloads from {_stripped_rows} rows",
-                    )
             persisted_failures = persist_structured_extraction_failures(
                 out_dir, failed_candidates, meta, write_meta)
             if persisted_failures:
@@ -15757,45 +15925,31 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
         if report_path.is_file() else report
     )
     if not args.no_actors:
-        if not dossier.strip():
-            # LINEAR-RESEARCH 2026-09-18: the sealed actor-intelligence/v1
-            # contract is definitionally dossier-bound (its coverage audit
-            # requires the dossier's ledger). A dossier-less run — e.g. the
-            # linear engine or dual-track disabled — has nothing to seal:
-            # actors/sources/timeline above are still real extractions, so
-            # complete honestly with a report-only contract instead of failing
-            # closed after the artifacts were already written.
-            plog.write(
-                "warn",
-                "extract-only: no actor dossier — skipping dossier-bound "
-                "actor-intelligence sealing (report-only contract)",
+        try:
+            persist_final_actor_intelligence_contract(
+                out_dir,
+                report=final_report,
+                dossier=dossier,
+                meta=meta,
+                plog=plog,
+                required=True,
+                require_current_extraction=True,
+                expected_unsealed_actors_sha256=actor_extraction_sha256,
             )
-        else:
-            try:
-                persist_final_actor_intelligence_contract(
-                    out_dir,
-                    report=final_report,
-                    dossier=dossier,
-                    meta=meta,
-                    plog=plog,
-                    required=True,
-                    require_current_extraction=True,
-                    expected_unsealed_actors_sha256=actor_extraction_sha256,
-                )
-            except ActorIntelligenceFinalizationError as exc:
-                meta.update(
-                    status="failed",
-                    error=str(exc),
-                    finished_at=_utcnow(),
-                )
-                write_meta()
-                plog.write(
-                    "error",
-                    "extract-only actor-enabled run failed closed at the final "
-                    "actor-intelligence boundary",
-                )
-                plog.close()
-                return 2
+        except ActorIntelligenceFinalizationError as exc:
+            meta.update(
+                status="failed",
+                error=str(exc),
+                finished_at=_utcnow(),
+            )
+            write_meta()
+            plog.write(
+                "error",
+                "extract-only actor-enabled run failed closed at the final "
+                "actor-intelligence boundary",
+            )
+            plog.close()
+            return 2
 
     meta.update(status="completed", finished_at=_utcnow())
     write_meta()
@@ -15810,6 +15964,8 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
 
 
 def main() -> int:
+    _reset_compaction_stop()
+    os.environ["RESEARCH_COMPACTION_RUN_SCOPED"] = "true"
     parser = argparse.ArgumentParser(description="DeerFlow deep-research bridge for MiroFish.")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--prompt", help="The research / prediction question (inline).")
@@ -15855,6 +16011,11 @@ def main() -> int:
 
     out_dir = Path(args.out_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Standalone execution has the same durable evidence boundary as an
+    # orchestrated run; disabling tool budgets must not disable this archive.
+    if not os.environ.get("RESEARCH_COMPACTION_DB", "").strip():
+        os.environ["RESEARCH_COMPACTION_DB"] = str(
+            out_dir / "research_compaction.sqlite3")
 
     # Always write the requirement immediately so the contract has it even on failure.
     # RES-10: 走原子写 — 该文件被后续阶段逐字消费（报告背景/预测问题），watchdog SIGKILL
@@ -15997,6 +16158,8 @@ def main() -> int:
     started_at = _utcnow()
     meta: dict[str, Any] = {
         "status": "running",
+        "research_process_attempt_id": os.environ.get(
+            "RESEARCH_PROCESS_ATTEMPT_ID", ""),
         "thread_id": thread_id,
         "model": args.model,
         "depth": args.depth,
@@ -16024,34 +16187,15 @@ def main() -> int:
         ]
 
     def write_meta() -> None:
+        if (meta.get("status") in {"completed", "failed"}
+                and not meta.get("compaction_stop")):
+            # Ordinary early failures must not hide a sibling's typed stop.
+            # The shared exception handler attaches compaction_stop before
+            # writing its terminal metadata, so that path does not recurse.
+            _raise_if_compaction_stopped()
         _atomic_write_text(out_dir / META_FILENAME, json.dumps(meta, ensure_ascii=False, indent=2))
 
     write_meta()
-
-    # LINEAR-ENGINE DISPATCH (2026-09-18 rearchitecture). RESEARCH_ENGINE=linear
-    # replaces the multi-pass agentic loop with a strictly linear, phase-artifact
-    # pipeline (see linear_research.py for the design rationale and budget math:
-    # ~30 stateless LLM calls and a hard prompt-token ledger, vs 46.6M prompt
-    # tokens / 1771 tool calls / 22 from-zero restarts measured on one question).
-    # Interface contract (report/actors/sources/timeline/meta + exit code) is
-    # unchanged, so every downstream stage consumes it unmodified.
-    if (os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "linear"
-            and not getattr(args, "extract_only", False)):
-        try:
-            import linear_research
-            return linear_research.run(question, out_dir, args, meta, plog, write_meta)
-        except Exception as _lin_exc:  # noqa: BLE001
-            meta.update(status="failed",
-                        error=f"linear engine failed: {type(_lin_exc).__name__}: {_lin_exc}",
-                        traceback=traceback.format_exc(),
-                        finished_at=_utcnow())
-            write_meta()
-            try:  # plog may already be closed by a nested helper — never mask the real error
-                plog.write("error", f"linear engine failed: {type(_lin_exc).__name__}: {_lin_exc}")
-                plog.close()
-            except Exception:  # noqa: BLE001
-                pass
-            return 2
 
     # Quiet DeerFlow's verbose import-time logging on stderr; keep warnings.
     logging.basicConfig(level=logging.WARNING)
@@ -16079,6 +16223,31 @@ def main() -> int:
         plog.close()
         print(f"ERROR: {msg}", file=sys.stderr)
         return 3
+
+    linear_requested = (
+        os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "linear"
+    )
+    if linear_requested and not args.extract_only:
+        # The linear engine currently produces only a fresh report-only run.
+        # It cannot honor lane manifests, actor seals, identity-bound resume,
+        # or an explicit config path. Reject those contracts before importing
+        # an engine or spending a call; never silently change the requested mode.
+        unsupported = []
+        if args.evidence_only:
+            unsupported.append("evidence-only")
+        if args.synthesis_manifest:
+            unsupported.append("synthesis-manifest")
+        if not args.no_actors:
+            unsupported.append("actor-intelligence (requires explicit --no-actors)")
+        if args.resume:
+            unsupported.append("resume")
+        if args.config:
+            unsupported.append("config")
+        if unsupported:
+            error = "linear engine unsupported contract: " + ", ".join(unsupported)
+            return _preflight_fail(
+                error + "; use RESEARCH_ENGINE=hybrid for this contract.", error
+            )
 
     # ITEM-14 --extract-only 前置门（在凭据校验/客户端构造之前，故 argparse 路由可零 LLM 测）：
     # 既存 research_report.md 必须存在且 ≥ _extract_only_min_chars()，否则诚实非零退出——
@@ -16138,6 +16307,12 @@ def main() -> int:
         if getattr(args, "extract_only", False):
             return run_extract_only(question, out_dir, args, meta, plog, write_meta)
 
+        if linear_requested:
+            # Shared preflight and the outer failure boundary also apply to
+            # linear calls, including the reserved compaction-stop exit code.
+            import linear_research
+            return linear_research.run(question, out_dir, args, meta, plog, write_meta)
+
         plog.write("init", f"importing DeerFlow client (model={args.model})")
         from deerflow.client import DeerFlowClient
 
@@ -16164,12 +16339,20 @@ def main() -> int:
         # passes only when either the live checkpointer can reconstruct evidence
         # or a same-question durable evidence pack exists.  Otherwise replay the
         # passes on a fresh thread instead of exporting an empty 100-byte pack.
-        if resume_completed and not resume_evidence_pack:
+        if resume_info.get("resumed") and not resume_evidence_pack:
             checkpoint_parts, _checkpoint_ai = collect_thread_evidence_parts(
                 client, thread_id, plog)
             if checkpoint_parts:
                 resume_evidence_pack = render_evidence_pack(checkpoint_parts)
             else:
+                if not resume_completed:
+                    # An interrupted first pass has no completed-pass skip
+                    # plan. Do not silently replace its retained thread and
+                    # call that a resume when its evidence cannot be loaded.
+                    error = ResearchCompactionError(
+                        "checkpoint_unavailable", thread_id)
+                    _stop_after_compaction_failure(error)
+                    raise error
                 prior_thread_id = thread_id
                 thread_id = f"research-{uuid.uuid4().hex[:12]}"
                 resume_completed.clear()
@@ -16393,9 +16576,9 @@ def main() -> int:
                 # harness stream worker forever; an unbounded ``.result()``
                 # then strands the whole lane (observed twice with the GLM
                 # coding-plan gateway). Bound both joins by wall clock. On a
-                # Track-B timeout we abandon its worker thread (shutdown
-                # wait=False) and degrade single-track; a Track-A timeout is
-                # a lane failure, re-raised for the standard error path.
+                # Track-B timeout we stop waiting on its ordinary join. Before
+                # foreground finalization, bounded settlement below either
+                # observes all producer outcomes or fences the entire lane.
                 def _dual_wall(env: str, default_s: int) -> float:
                     try:
                         return max(60.0, float(
@@ -16404,9 +16587,12 @@ def main() -> int:
                         return float(default_s)
 
                 _ex = _cf.ThreadPoolExecutor(max_workers=dual_workers)
+                track_futures = {}
                 try:
                     _fut_a = _ex.submit(_run_track_a)
+                    track_futures[_fut_a] = thread_id
                     _fut_b = _ex.submit(_run_track_b)
+                    track_futures[_fut_b] = actor_thread_id
                     report = _fut_a.result(
                         timeout=_dual_wall("RESEARCH_TRACK_A_WALL_SECONDS", 10800))
                     # GLM-run 2026-09-18: publish Track A's evidence durably the
@@ -16443,14 +16629,40 @@ def main() -> int:
                         plog.write(
                             "warn",
                             "dual-track: Track B (actor dossier) exceeded its "
-                            "wall-clock budget; abandoning its worker thread "
-                            "and continuing single-track",
+                            "wall-clock budget; checking bounded worker "
+                            "settlement before finalization",
                         )
                     except Exception as _exc:  # noqa: BLE001 — Track B 失败退回单轨
                         dossier = ""
                         plog.write("warn", f"dual-track: Track B (actor dossier) failed; continuing single-track ({type(_exc).__name__}: {_exc})")
                 finally:
                     _ex.shutdown(wait=False, cancel_futures=True)
+                    pending = {future for future in track_futures if not future.done()}
+                    if pending:
+                        # Do not reintroduce an unbounded interpreter/executor
+                        # join for wedged provider streams. One short grace is
+                        # shared by both workers, including a Track-A timeout.
+                        _, pending = _cf.wait(pending, timeout=1.0)
+                    for future in track_futures:
+                        if future.done() and not future.cancelled():
+                            error = future.exception()
+                            if isinstance(error, ResearchCompactionError):
+                                _stop_after_compaction_failure(error)
+                    _raise_if_compaction_stopped()
+                    if pending:
+                        pending_threads = sorted(track_futures[f] for f in pending)
+                        meta["research_worker_stop"] = {
+                            "reason": "producer_terminal_state_unconfirmed",
+                            "thread_ids": pending_threads,
+                            "settlement_seconds": 1.0,
+                        }
+                        # A still-running producer can no longer attest to a
+                        # stable checkpoint. Fence provider admission and return
+                        # the reserved parent stop, never a disposable exit 2.
+                        error = ResearchCompactionError(
+                            "checkpoint_unavailable", pending_threads[0])
+                        _stop_after_compaction_failure(error)
+                        raise error
             else:
                 plog.write(
                     "stage",
@@ -16486,6 +16698,7 @@ def main() -> int:
                 resume_evidence_pack=resume_evidence_pack,
             )
 
+        _raise_if_compaction_stopped()
         if args.evidence_only:
             evidence_pack = (
                 report if str(report or "").startswith(
@@ -17191,8 +17404,26 @@ def main() -> int:
         return 0
 
     except Exception as e:
+        compaction_stop = _research_compaction.get_compaction_stop()
+        if compaction_stop is None and isinstance(e, ResearchCompactionError):
+            _stop_after_compaction_failure(e)
+            compaction_stop = e
+        if compaction_stop is not None:
+            e = compaction_stop
+            meta["compaction_stop"] = {
+                "code": e.code,
+                "reason": e.reason,
+                "thread_id": e.thread_id,
+                "message_replacement_committed": False,
+                "bridge_automatic_retry": False,
+            }
         meta.update(status="failed", error=str(e), traceback=traceback.format_exc(), finished_at=_utcnow())
-        write_meta()
+        try:
+            write_meta()
+        except Exception:
+            # Disk exhaustion may be the reason compaction stopped. Preserve
+            # its reserved exit status even when this diagnostic cannot write.
+            pass
         try:
             if _research_budget is not None and hasattr(
                     _research_budget, "export_telemetry"):
@@ -17201,6 +17432,12 @@ def main() -> int:
             plog.close()
         except Exception:
             pass
+        if compaction_stop is not None:
+            try:
+                print(f"ERROR: {e}", file=sys.stderr)
+            except (OSError, ValueError):
+                pass
+            return 4
         print(f"ERROR: {e}", file=sys.stderr)
         traceback.print_exc()
         return 2

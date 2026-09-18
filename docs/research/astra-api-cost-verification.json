@@ -1,0 +1,1514 @@
+{
+  "schema": "astra-api-cost-verification/v1",
+  "slice": "ASTRA-04b5b3a",
+  "verified_at": "2026-09-08T01:39:35.371749+00:00",
+  "status": "verified_offline",
+  "baseline_commit": "186af1a6bcd5ec8587365b398dfeb49d98d2ef63",
+  "scope": "Capture an immutable estimated API price before physical dispatch and preserve it through settlement, replay and child recovery. Monetary reservations remain pending.",
+  "source_sha256": {
+    "backend/app/config.py": "a32a47506ee26832087374f91810a45e205661b0c8a689fb470108dc88caaa19",
+    "backend/app/utils/api_cost.py": "e2c1339751791ef4c786b8d72a51763387ae367391adeb36bb7a3b6ebbd8b7d9",
+    "backend/app/utils/llm_client.py": "4671008c116ba0fda78151ab8ed98ec492b8e60961b13c12455f304cf8e1d1cf",
+    "backend/app/utils/oasis_usage.py": "0c3e7788cca6fe5a3ca519e835112294874cf9fc645a37369fc29667c72fd0d5",
+    "backend/app/utils/telemetry.py": "8ee28b27c8951937b5821c9583d62c6b30ec759f537b21a0bf1e3aaf00f17725",
+    "backend/app/utils/usage_ledger.py": "537ca61e6582657f0c5d99f7108af7a4ec60d52d14bb26c881ecc5f3b49250e6",
+    "backend/scripts/benchmark_api_cost_quotes.py": "efd7b6880fdd00738ec5460415d78e26bd293e7d20aa15d7426e44d084870ff5",
+    "backend/tests/test_api_cost_boundary.py": "1903b8d6b20b668a4bd5a6c2f578a759c654f4b3bfa721bcc2506b78669b6e7d",
+    "backend/tests/test_api_cost_child.py": "6380281dc1919be431f6bea687aea587106b55d1ada4a02aa83a867d8690b256",
+    "backend/tests/test_api_cost_ledger.py": "79bb09e05d1b7a97d590fa06d30e9cea10ab3c4566e9befac11c34f0c29d0827",
+    "backend/tests/test_budget_guard_boundary.py": "28656f821e724f4f6580c9c3d8cf3c779ed322fdc11d0d8d1e2306f53fd62fa3",
+    "backend/tests/test_unresolved_usage_ledger.py": "96eb88de21865de834909fa7fa9d12157b1007266b8cf65d315308c689bf177b",
+    "backend/tests/test_unresolved_usage_pipeline.py": "259ef85fee0eae08c4e139f20c1e696ed75bd876e5f91fd066fdf6a30da13bc4",
+    ".env.example": "84a62f9a49ac59d3f39e07ab2aaade0330cfb00d8f1c97665e75bfbea77fb4db"
+  },
+  "gates": {
+    "backend": {
+      "passed": 1266,
+      "skipped": 1,
+      "failures": 0,
+      "skip_details": [
+        {
+          "name": "test_bridge_matches_deployed",
+          "message": "deployed deer-flow checkout absent"
+        }
+      ],
+      "command": {
+        "argv": [
+          "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+          "-m",
+          "pytest",
+          "-o",
+          "addopts=",
+          "-q",
+          "backend/tests/test_usage_ledger.py",
+          "backend/tests/test_durable_telemetry.py",
+          "backend/tests/test_llm_durable_accounting_stop.py",
+          "backend/tests/test_durable_pipeline_usage.py",
+          "backend/tests/test_usage_completion_gate.py",
+          "backend/tests/test_telemetry.py",
+          "backend/tests/test_telemetry_fallback_attribution.py",
+          "backend/tests/test_audit_fixes_infra.py",
+          "backend/tests/test_research_spend_flush.py",
+          "backend/tests/test_wave9_orchestrator.py",
+          "backend/tests/test_orchestrator_research_wiring.py",
+          "backend/tests/test_token_budget.py",
+          "backend/tests/test_seed_ensemble.py",
+          "backend/tests/test_status_live_block.py",
+          "backend/tests/test_launch_intent_api.py",
+          "backend/tests/test_launch_intents.py",
+          "backend/tests/test_sim_meter_persistence.py",
+          "backend/tests/test_persona_meter_context.py",
+          "backend/tests/test_sim_context_persona.py",
+          "backend/tests/test_actor_role_prompt.py",
+          "backend/tests/test_research_stream_usage.py",
+          "backend/tests/test_research_cache_observations.py",
+          "backend/tests/test_wave9_research_speed.py",
+          "backend/tests/test_audit_fixes_research.py",
+          "backend/tests/test_astra_compaction_bridge.py",
+          "backend/tests/test_deerflow_bridge_sync_guard.py",
+          "backend/tests/test_loop010_global_synthesis.py",
+          "--disable-warnings",
+          "--maxfail=3",
+          "backend/tests/test_llm_physical_attempts.py",
+          "backend/tests/test_llm_sdk_attempt_boundary.py",
+          "backend/tests/test_llm_fallback_model.py",
+          "backend/tests/test_graph_cost_containment.py",
+          "backend/tests/test_graph_optimizations.py",
+          "backend/tests/test_wave9_kg.py",
+          "backend/tests/test_report_chart_quality.py",
+          "backend/tests/test_unresolved_usage_ledger.py",
+          "backend/tests/test_unresolved_usage_pipeline.py",
+          "backend/tests/test_simulation_shared_usage.py",
+          "backend/tests/test_audit_fixes_runner.py",
+          "backend/tests/test_audit_fixes_runloop.py",
+          "backend/tests/test_simulation_runner_throttle.py",
+          "backend/tests/test_oasis_v1_provenance.py",
+          "backend/tests/test_decision_channel.py",
+          "backend/tests/test_oasis_physical_usage.py",
+          "backend/tests/test_budget_totals.py",
+          "backend/tests/test_budget_guard_boundary.py",
+          "backend/tests/test_token_reservations.py",
+          "backend/tests/test_api_token_reservations.py",
+          "backend/tests/test_token_reservation_status.py",
+          "--tb=short",
+          "backend/tests/test_native_output_launch.py",
+          "backend/tests/test_oasis_output_policy.py",
+          "backend/tests/test_simulation_config_seal.py",
+          "backend/tests/test_config_optimization_defaults.py",
+          "backend/tests/test_sim_config_v1_provenance.py",
+          "backend/tests/test_sim_config_incentives.py",
+          "backend/tests/test_api_cost_boundary.py",
+          "backend/tests/test_api_cost_ledger.py",
+          "backend/tests/test_api_cost_child.py",
+          "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-cost-evidence-3ln14mrz/backend.xml"
+        ],
+        "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+        "started_at": "2026-09-08T01:37:34.759942+00:00"
+      },
+      "raw_log": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-cost-evidence-3ln14mrz/backend.log",
+      "raw_log_sha256": "ee03c356c1f4a2ae5c70310c8feb2241b507a79965b5ca045dafbdb075127aa0",
+      "junit_xml": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-cost-evidence-3ln14mrz/backend.xml",
+      "junit_xml_sha256": "12a4b39e87e2c6559722d5d5ec5d3667c45b2daa685599b101302f9347fbcc1a",
+      "source_mtimes_precede_final_suite": true
+    },
+    "static": {
+      "python_ast_files": [
+        "backend/app/config.py",
+        "backend/app/utils/api_cost.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/benchmark_api_cost_quotes.py",
+        "backend/tests/test_api_cost_boundary.py",
+        "backend/tests/test_api_cost_child.py",
+        "backend/tests/test_api_cost_ledger.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py"
+      ],
+      "python_ast_passed": 13,
+      "ruff_argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "--config",
+        "backend/pyproject.toml",
+        "--output-format",
+        "json",
+        "backend/app/config.py",
+        "backend/app/utils/api_cost.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/benchmark_api_cost_quotes.py",
+        "backend/tests/test_api_cost_boundary.py",
+        "backend/tests/test_api_cost_child.py",
+        "backend/tests/test_api_cost_ledger.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py"
+      ],
+      "ruff_exit_code": 0,
+      "ruff_findings": []
+    },
+    "diff_check": "passed",
+    "earlier_runs": [
+      {
+        "result": "3 failed, 746 passed, 1 skipped; interrupted at maxfail3",
+        "reason": "Precise-recovery fixtures dropped new captured quote metadata. Fixtures now reload the stored quote; legacy tests remain unchanged.",
+        "raw_log": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-cost-evidence-3ln14mrz/initial-backend.log",
+        "sha256": "e0408ef04d8292bfcdd3d2d3da9298dd8bdf72106860638ff24078f3e747743b"
+      },
+      {
+        "result": "2 failed, 1264 passed, 1 skipped",
+        "reason": "Private-helper process crash fixture omitted its request model. It now sends its existing offline model; exit37 and subsequent-owner rejection remain asserted.",
+        "raw_log": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-api-cost-evidence-3ln14mrz/prefixture-backend.log",
+        "sha256": "cb7b92a60f8e4dd5f54eac2df9e9acab02e5c3e79a50be7d79d4ada6f0c6db49"
+      }
+    ],
+    "smoke": {
+      "shell_syntax": "bash -n init.sh scripts/start.sh scripts/setup.sh passed",
+      "json_documents": [
+        "frontend/package.json",
+        "astra-improvement-state.json",
+        "docs/research/astra-api-cost-verification.json",
+        "docs/research/astra-api-cost-comparison.json",
+        "docs/research/astra-monetary-run-evidence.json"
+      ],
+      "note": "Targeted integration uses the original checkout Python environment; this isolated worktree has no backend/.venv, so init.sh was inspected and syntax-checked rather than reported as executed."
+    }
+  },
+  "independent_review": {
+    "status": "clear",
+    "new_tests_passed": 101,
+    "new_test_modules": {
+      "backend/tests/test_api_cost_ledger.py": 42,
+      "backend/tests/test_api_cost_boundary.py": 57,
+      "backend/tests/test_api_cost_child.py": 2
+    },
+    "resolved_findings": [
+      "Actual baseline writer with unchanged copied quote could store cost0.099 instead of0.003; current replay then created a negative0.096 adjustment. Quoted INSERT/UPDATE formula guards now reject the older wrong-cost write transactionally, and previous-counter validation rejects existing corruption before delta calculation.",
+      "Model attribution must match the private request and forbid extra_body model overrides before quote capture."
+    ],
+    "documentation_precision": "Both quoted insert/update consistency guards plus previous-counter validation are implemented; no singular metadata-only update guard claim."
+  },
+  "comparison": {
+    "path": "docs/research/astra-api-cost-comparison.json",
+    "sha256": "e1c5a63d3c0239f277b5f6eb29d6c7daf8fbae214748512b7b95ec0997e204c4",
+    "method": "Only pinned shared _create_openai_completion and native _Attempt replace baseline dispatch boundaries. Current real SDK clients, native ModelFactory, meter and ledger are shared. MockTransport is installed before instrumentation. Exact replay repeats the terminal observation using the current quote read back from temporary ledger metadata.",
+    "measurement": "Deterministic admission, wire equality, quoted settlement and exact replay. No timing measurement.",
+    "invocations": 18,
+    "mock_transmissions": 15,
+    "same_operation_accounting_replays": 6,
+    "network_connection_attempts": 0,
+    "provider_requests": 0,
+    "cases": {
+      "missing_price": {
+        "shared_sync": {
+          "before": {
+            "provider_attribution": "antigravity",
+            "route": "shared_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model",
+                  "temperature"
+                ],
+                "serialized_body_sha256": "450b1cc893cd49cc3ef2cd2ae24072fcb2900139b44ccc3793b45033eee4e060",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.0,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": null
+          },
+          "after": {
+            "provider_attribution": "antigravity",
+            "route": "shared_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "after_response": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "recorded_cost_usd": 0.0,
+              "cost_estimated": false,
+              "operation_rows": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": []
+            },
+            "exact_replay": null
+          }
+        },
+        "native_sync": {
+          "before": {
+            "provider_attribution": "antigravity",
+            "route": "native_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.0,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": null
+          },
+          "after": {
+            "provider_attribution": "antigravity",
+            "route": "native_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "after_response": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "recorded_cost_usd": 0.0,
+              "cost_estimated": false,
+              "operation_rows": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": []
+            },
+            "exact_replay": null
+          }
+        },
+        "native_async": {
+          "before": {
+            "provider_attribution": "antigravity",
+            "route": "native_async",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.0,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": null
+          },
+          "after": {
+            "provider_attribution": "antigravity",
+            "route": "native_async",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "after_response": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "recorded_cost_usd": 0.0,
+              "cost_estimated": false,
+              "operation_rows": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": []
+            },
+            "exact_replay": null
+          }
+        }
+      },
+      "rate_drift_and_exact_replay": {
+        "shared_sync": {
+          "before": {
+            "provider_attribution": "openai",
+            "route": "shared_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": [
+              1,
+              2
+            ],
+            "rates_during_response_usd_per_million": [
+              2,
+              4
+            ],
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model",
+                  "temperature"
+                ],
+                "serialized_body_sha256": "450b1cc893cd49cc3ef2cd2ae24072fcb2900139b44ccc3793b45033eee4e060",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.006,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": {
+              "same_operation_replayed": true,
+              "quote_reloaded_from_ledger": false,
+              "rates_usd_per_million_at_replay": [
+                3,
+                6
+              ],
+              "added_cost_usd": 0.003,
+              "added_tokens": 0,
+              "added_calls": 0,
+              "after_replay": {
+                "recorded_calls": 1,
+                "recorded_tokens": 2000,
+                "recorded_cost_usd": 0.009,
+                "cost_estimated": true,
+                "operation_rows": 1,
+                "unknown_operations": 0,
+                "in_flight_operations": 0,
+                "stored_cost_quotes": [
+                  {
+                    "present": false,
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "after": {
+            "provider_attribution": "openai",
+            "route": "shared_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": [
+              1,
+              2
+            ],
+            "rates_during_response_usd_per_million": [
+              2,
+              4
+            ],
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model",
+                  "temperature"
+                ],
+                "serialized_body_sha256": "450b1cc893cd49cc3ef2cd2ae24072fcb2900139b44ccc3793b45033eee4e060",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": true,
+                      "value": {
+                        "input_usd_per_1k": 0.001,
+                        "model": "gpt-4o-mini",
+                        "output_usd_per_1k": 0.002,
+                        "provider": "openai",
+                        "rate_key": "openai",
+                        "schema": "api-cost-quote/v1",
+                        "source": "configured_provider"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.003,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": true,
+                  "value": {
+                    "input_usd_per_1k": 0.001,
+                    "model": "gpt-4o-mini",
+                    "output_usd_per_1k": 0.002,
+                    "provider": "openai",
+                    "rate_key": "openai",
+                    "schema": "api-cost-quote/v1",
+                    "source": "configured_provider"
+                  }
+                }
+              ]
+            },
+            "exact_replay": {
+              "same_operation_replayed": true,
+              "quote_reloaded_from_ledger": true,
+              "rates_usd_per_million_at_replay": [
+                3,
+                6
+              ],
+              "added_cost_usd": 0.0,
+              "added_tokens": 0,
+              "added_calls": 0,
+              "after_replay": {
+                "recorded_calls": 1,
+                "recorded_tokens": 2000,
+                "recorded_cost_usd": 0.003,
+                "cost_estimated": true,
+                "operation_rows": 1,
+                "unknown_operations": 0,
+                "in_flight_operations": 0,
+                "stored_cost_quotes": [
+                  {
+                    "present": true,
+                    "value": {
+                      "input_usd_per_1k": 0.001,
+                      "model": "gpt-4o-mini",
+                      "output_usd_per_1k": 0.002,
+                      "provider": "openai",
+                      "rate_key": "openai",
+                      "schema": "api-cost-quote/v1",
+                      "source": "configured_provider"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "native_sync": {
+          "before": {
+            "provider_attribution": "openai",
+            "route": "native_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": [
+              1,
+              2
+            ],
+            "rates_during_response_usd_per_million": [
+              2,
+              4
+            ],
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.006,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": {
+              "same_operation_replayed": true,
+              "quote_reloaded_from_ledger": false,
+              "rates_usd_per_million_at_replay": [
+                3,
+                6
+              ],
+              "added_cost_usd": 0.003,
+              "added_tokens": 0,
+              "added_calls": 0,
+              "after_replay": {
+                "recorded_calls": 1,
+                "recorded_tokens": 2000,
+                "recorded_cost_usd": 0.009,
+                "cost_estimated": true,
+                "operation_rows": 1,
+                "unknown_operations": 0,
+                "in_flight_operations": 0,
+                "stored_cost_quotes": [
+                  {
+                    "present": false,
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "after": {
+            "provider_attribution": "openai",
+            "route": "native_sync",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": [
+              1,
+              2
+            ],
+            "rates_during_response_usd_per_million": [
+              2,
+              4
+            ],
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": true,
+                      "value": {
+                        "input_usd_per_1k": 0.001,
+                        "model": "gpt-4o-mini",
+                        "output_usd_per_1k": 0.002,
+                        "provider": "openai",
+                        "rate_key": "openai",
+                        "schema": "api-cost-quote/v1",
+                        "source": "configured_provider"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.003,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": true,
+                  "value": {
+                    "input_usd_per_1k": 0.001,
+                    "model": "gpt-4o-mini",
+                    "output_usd_per_1k": 0.002,
+                    "provider": "openai",
+                    "rate_key": "openai",
+                    "schema": "api-cost-quote/v1",
+                    "source": "configured_provider"
+                  }
+                }
+              ]
+            },
+            "exact_replay": {
+              "same_operation_replayed": true,
+              "quote_reloaded_from_ledger": true,
+              "rates_usd_per_million_at_replay": [
+                3,
+                6
+              ],
+              "added_cost_usd": 0.0,
+              "added_tokens": 0,
+              "added_calls": 0,
+              "after_replay": {
+                "recorded_calls": 1,
+                "recorded_tokens": 2000,
+                "recorded_cost_usd": 0.003,
+                "cost_estimated": true,
+                "operation_rows": 1,
+                "unknown_operations": 0,
+                "in_flight_operations": 0,
+                "stored_cost_quotes": [
+                  {
+                    "present": true,
+                    "value": {
+                      "input_usd_per_1k": 0.001,
+                      "model": "gpt-4o-mini",
+                      "output_usd_per_1k": 0.002,
+                      "provider": "openai",
+                      "rate_key": "openai",
+                      "schema": "api-cost-quote/v1",
+                      "source": "configured_provider"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "native_async": {
+          "before": {
+            "provider_attribution": "openai",
+            "route": "native_async",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": [
+              1,
+              2
+            ],
+            "rates_during_response_usd_per_million": [
+              2,
+              4
+            ],
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.006,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": {
+              "same_operation_replayed": true,
+              "quote_reloaded_from_ledger": false,
+              "rates_usd_per_million_at_replay": [
+                3,
+                6
+              ],
+              "added_cost_usd": 0.003,
+              "added_tokens": 0,
+              "added_calls": 0,
+              "after_replay": {
+                "recorded_calls": 1,
+                "recorded_tokens": 2000,
+                "recorded_cost_usd": 0.009,
+                "cost_estimated": true,
+                "operation_rows": 1,
+                "unknown_operations": 0,
+                "in_flight_operations": 0,
+                "stored_cost_quotes": [
+                  {
+                    "present": false,
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "after": {
+            "provider_attribution": "openai",
+            "route": "native_async",
+            "usd_budget": 1,
+            "initial_configured_rates_usd_per_million": [
+              1,
+              2
+            ],
+            "rates_during_response_usd_per_million": [
+              2,
+              4
+            ],
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": true,
+                      "value": {
+                        "input_usd_per_1k": 0.001,
+                        "model": "gpt-4o-mini",
+                        "output_usd_per_1k": 0.002,
+                        "provider": "openai",
+                        "rate_key": "openai",
+                        "schema": "api-cost-quote/v1",
+                        "source": "configured_provider"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.003,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": true,
+                  "value": {
+                    "input_usd_per_1k": 0.001,
+                    "model": "gpt-4o-mini",
+                    "output_usd_per_1k": 0.002,
+                    "provider": "openai",
+                    "rate_key": "openai",
+                    "schema": "api-cost-quote/v1",
+                    "source": "configured_provider"
+                  }
+                }
+              ]
+            },
+            "exact_replay": {
+              "same_operation_replayed": true,
+              "quote_reloaded_from_ledger": true,
+              "rates_usd_per_million_at_replay": [
+                3,
+                6
+              ],
+              "added_cost_usd": 0.0,
+              "added_tokens": 0,
+              "added_calls": 0,
+              "after_replay": {
+                "recorded_calls": 1,
+                "recorded_tokens": 2000,
+                "recorded_cost_usd": 0.003,
+                "cost_estimated": true,
+                "operation_rows": 1,
+                "unknown_operations": 0,
+                "in_flight_operations": 0,
+                "stored_cost_quotes": [
+                  {
+                    "present": true,
+                    "value": {
+                      "input_usd_per_1k": 0.001,
+                      "model": "gpt-4o-mini",
+                      "output_usd_per_1k": 0.002,
+                      "provider": "openai",
+                      "rate_key": "openai",
+                      "schema": "api-cost-quote/v1",
+                      "source": "configured_provider"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "defaults_disabled": {
+        "shared_sync": {
+          "before": {
+            "provider_attribution": "openai",
+            "route": "shared_sync",
+            "usd_budget": 0,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model",
+                  "temperature"
+                ],
+                "serialized_body_sha256": "450b1cc893cd49cc3ef2cd2ae24072fcb2900139b44ccc3793b45033eee4e060",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.02,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": null
+          },
+          "after": {
+            "provider_attribution": "openai",
+            "route": "shared_sync",
+            "usd_budget": 0,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model",
+                  "temperature"
+                ],
+                "serialized_body_sha256": "450b1cc893cd49cc3ef2cd2ae24072fcb2900139b44ccc3793b45033eee4e060",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": true,
+                      "value": {
+                        "input_usd_per_1k": 0.005,
+                        "model": "gpt-4o-mini",
+                        "output_usd_per_1k": 0.015,
+                        "provider": "openai",
+                        "rate_key": "openai",
+                        "schema": "api-cost-quote/v1",
+                        "source": "builtin_provider"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.02,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": true,
+                  "value": {
+                    "input_usd_per_1k": 0.005,
+                    "model": "gpt-4o-mini",
+                    "output_usd_per_1k": 0.015,
+                    "provider": "openai",
+                    "rate_key": "openai",
+                    "schema": "api-cost-quote/v1",
+                    "source": "builtin_provider"
+                  }
+                }
+              ]
+            },
+            "exact_replay": null
+          }
+        },
+        "native_sync": {
+          "before": {
+            "provider_attribution": "openai",
+            "route": "native_sync",
+            "usd_budget": 0,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.02,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": null
+          },
+          "after": {
+            "provider_attribution": "openai",
+            "route": "native_sync",
+            "usd_budget": 0,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": true,
+                      "value": {
+                        "input_usd_per_1k": 0.005,
+                        "model": "gpt-4o-mini",
+                        "output_usd_per_1k": 0.015,
+                        "provider": "openai",
+                        "rate_key": "openai",
+                        "schema": "api-cost-quote/v1",
+                        "source": "builtin_provider"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.02,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": true,
+                  "value": {
+                    "input_usd_per_1k": 0.005,
+                    "model": "gpt-4o-mini",
+                    "output_usd_per_1k": 0.015,
+                    "provider": "openai",
+                    "rate_key": "openai",
+                    "schema": "api-cost-quote/v1",
+                    "source": "builtin_provider"
+                  }
+                }
+              ]
+            },
+            "exact_replay": null
+          }
+        },
+        "native_async": {
+          "before": {
+            "provider_attribution": "openai",
+            "route": "native_async",
+            "usd_budget": 0,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": false,
+                      "value": null
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.02,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": false,
+                  "value": null
+                }
+              ]
+            },
+            "exact_replay": null
+          },
+          "after": {
+            "provider_attribution": "openai",
+            "route": "native_async",
+            "usd_budget": 0,
+            "initial_configured_rates_usd_per_million": null,
+            "rates_during_response_usd_per_million": null,
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "c0311176417e2e63cf13f3763f6ca8f827a63d732f684b7e1a1fb727d7943150",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "before_response": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "recorded_cost_usd": 0.0,
+                  "cost_estimated": false,
+                  "operation_rows": 1,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "stored_cost_quotes": [
+                    {
+                      "present": true,
+                      "value": {
+                        "input_usd_per_1k": 0.005,
+                        "model": "gpt-4o-mini",
+                        "output_usd_per_1k": 0.015,
+                        "provider": "openai",
+                        "rate_key": "openai",
+                        "schema": "api-cost-quote/v1",
+                        "source": "builtin_provider"
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "after_response": {
+              "recorded_calls": 1,
+              "recorded_tokens": 2000,
+              "recorded_cost_usd": 0.02,
+              "cost_estimated": true,
+              "operation_rows": 1,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "stored_cost_quotes": [
+                {
+                  "present": true,
+                  "value": {
+                    "input_usd_per_1k": 0.005,
+                    "model": "gpt-4o-mini",
+                    "output_usd_per_1k": 0.015,
+                    "provider": "openai",
+                    "rate_key": "openai",
+                    "schema": "api-cost-quote/v1",
+                    "source": "builtin_provider"
+                  }
+                }
+              ]
+            },
+            "exact_replay": null
+          }
+        }
+      }
+    }
+  },
+  "saved_run_evidence": {
+    "path": "docs/research/astra-monetary-run-evidence.json",
+    "sha256": "7688261c16f49fbd343aa48e1fec07070926655e157f47e43afdea1f188f5fab",
+    "summary": "77 saved artifacts, exact32-state inventory and12 bounded logs unchanged; no unchanged log reparse. Four selected current telemetry costs and three cumulative costs agree with pinned rough MiniMax formula to6decimals. Historical configuration, caps, cache billing and invoice fields are unavailable; raw legacy cost_estimated=false does not prove invoice accuracy."
+  },
+  "quote_contract": {
+    "schema": "api-cost-quote/v1",
+    "fields": [
+      "schema",
+      "provider",
+      "model",
+      "source",
+      "rate_key",
+      "input_usd_per_1k",
+      "output_usd_per_1k"
+    ],
+    "precedence": [
+      "exact provider:model configured rate",
+      "provider configured rate",
+      "positive existing provider builtin",
+      "unpriced null rates"
+    ],
+    "model_key_case": "preserved",
+    "configured_units": "USD per million tokens; persisted quote rates per1000 tokens",
+    "unpriced": "Null rates and numeric0 recorded cost. Positive USD cap rejects a new unpriced API request before transmission. Explicit configured[0,0] is priced zero.",
+    "invalid_configuration": "Malformed JSON, duplicate normalized keys, nonobject, invalid pair length, bool, negative, nonfinite or excessive rate values reject before API dispatch as recoverable BudgetExceeded, including when USDcap0.",
+    "cost_basis": "Captured estimate over inclusive input tokens; no inferred cache discount. Grouped cost summation/round6 unchanged.",
+    "identity": "Quoted operations cannot lose/change their quote; legacy unquoted operations cannot acquire a quote on replay.",
+    "database": "Two additive quoted INSERT/UPDATE consistency guards, installed transactionally at initialization and required for ordinary quoted writes. No new table, column or delta schema. Prior quoted counter formula is checked before highwater."
+  },
+  "acceptance_trace": [
+    {
+      "requirement": "Strict recoverable predispatch pricing",
+      "evidence": "test_invalid_price_fails_before_transmission_and_recovers_without_reset; test_missing_price_stops_dollar_enabled_work_but_explicit_zero_is_priced; three-path comparison"
+    },
+    {
+      "requirement": "Stable per-operation estimate through response and replay",
+      "evidence": "test_rate_drift_during_response_and_restarted_replay_cannot_reprice_usage; test_quote_survives_restart_replay_and_growth_without_repricing"
+    },
+    {
+      "requirement": "Correct model attribution and unchanged defaults",
+      "evidence": "test_actual_shared_plain_and_tools_record_distinct_model_quotes; test_shared_model_attribution_snapshot_ignores_caller_mutation_before_send; default wire hashes in comparison"
+    },
+    {
+      "requirement": "Old writer and corrupted-counter safety",
+      "evidence": "test_actual_older_writer_cannot_reprice_a_copied_quote; test_preexisting_bad_quoted_cost_is_not_corrected_with_negative_delta; quoted database guards"
+    },
+    {
+      "requirement": "Child retry and crash recovery",
+      "evidence": "test_child_price_receipt_survives_retry_or_crash_and_recovery: three attempts180tokens0.00021USD; abrupt child exit23 with durable quote and exact1000+1000 recovery0.003USD"
+    },
+    {
+      "requirement": "Highwater, cache and threshold compatibility",
+      "evidence": "test_crossed_cumulative_snapshots_price_merged_highwater; test_facade_quote_is_copied_and_cost_stays_estimated_without_cache_discount; test_quoted_costs_retain_grouped_rounding_threshold; full affected gate"
+    }
+  ],
+  "limits": [
+    "No monetary reservation or transactional dollar admission is implemented by this slice. Concurrent requests can still share the same dollar remainder. Token reservations remain separate.",
+    "Captured quotes are per-operation estimates, not provider invoices or conservative cost upper bounds. Provider fallback rates remain rough and not model-specific unless configured.",
+    "Rates and USD caps are not yet pinned for an entire run or child launch. Later operations may capture different ambient rates. Historical unpriced usage does not acquire known costs.",
+    "Only covered shared and native nonstreaming physical API boundaries produce quotes. Legacy/non-API estimation and old new-operation writers are not retroactively covered.",
+    "A malformed nonempty API price configuration now stops dispatch even with USDcap0; this is intentional strict validation. Empty configuration and valid default requests retain cost arithmetic and serialized wire behavior.",
+    "Stored unknown cost is numeric0 with explicit unpriced quote metadata. Current aggregate totals do not expose a new run-wide price-coverage projection; a subsequent priced request cannot establish historical coverage.",
+    "Saved-run totals are historical reported estimates; source formulas do not prove which rates were configured at the time or actual billed amounts.",
+    "All provider interaction is mocked. No production speedup, historical savings, invoice accuracy, output-quality gain or global Pareto-optimality claim."
+  ],
+  "next_slice": "ASTRA-04b5b3b: define monetary admission using explicit rate/cap pinning and historical/unknown price coverage; preserve recorded costs separately from held estimates.",
+  "loop": {
+    "automation_id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE",
+    "checked_via": [
+      "automation_update view",
+      "automation.toml status inspection"
+    ]
+  },
+  "publication": "Local work continues; GitHub authentication rejection unchanged. No deployment, provider operation, saved-run mutation or push retry.",
+  "independent_evidence_audit": {
+    "status": "clear",
+    "audited_at": "2026-09-08T01:46:22.579006+00:00",
+    "source_hashes_matched": 14,
+    "comparison_source_hashes_matched": 11,
+    "baseline_file_and_ast_pairs_matched": 2,
+    "comparison_and_saved_receipt_hashes_match": true,
+    "actual_xml_passed": 1266,
+    "actual_xml_skipped": 1,
+    "new_test_counts": {
+      "ledger": 42,
+      "boundary": 57,
+      "child": 2
+    },
+    "actual_suite_start_utc": "2026-09-08T01:37:34.855437+00:00",
+    "latest_audited_source_mtime_utc": "2026-09-08T01:37:11.048846+00:00",
+    "source_mtimes_precede_final_suite": true,
+    "raw_final_and_two_earlier_logs_match": true,
+    "decimal_comparison_arithmetic": "18 invocations,15 mock sends,6 exact accounting replays; settlement and replay deltas separately verified.",
+    "acceptance_test_names_present_in_xml": 12,
+    "saved_artifacts_rehashed": 77,
+    "pipeline_state_inventory": 32,
+    "bounded_logs_rehashed": 12,
+    "logs_reparsed": 0,
+    "child_health_hashes": 4,
+    "selected_source_hashes": 16,
+    "selected_numeric_scopes_reconciled": 10,
+    "prior_receipt_hashes": 5,
+    "pinned_saved_source_hashes": 2,
+    "markdown_links_resolve": 12,
+    "json_local_paths_resolve": 32,
+    "pending_scope": "Run-wide rates/USD caps, historical unpriced coverage and monetary holds remain ASTRA-04b5b3b."
+  }
+}

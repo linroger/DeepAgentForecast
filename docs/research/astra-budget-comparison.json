@@ -1,0 +1,186 @@
+{
+  "schema": "astra-budget-comparison/v1",
+  "baseline_commit": "1c87a2954a3e5230676b5bfbad071cd36ce42030",
+  "baseline_telemetry_sha256": "9db5c875efd26f2e8f65a4f85fccadb8113c637dfbcd9d75accb53fea5e3d490",
+  "current_source_sha256": {
+    "backend/app/utils/telemetry.py": "c9f34e7d15a0e50113130c80843b0d5e7492551db0b9e8e98f87cf605d0e9cdf",
+    "backend/app/utils/usage_ledger.py": "aaf105e828f6916f38110aeae731e080b800b0152f52fe19991e25d54fda543e",
+    "backend/scripts/benchmark_budget_guard.py": "1261b72194ed3a5e83c54b2c1c9cdb1919c19e08af7da03b9728fd9b750a4b93"
+  },
+  "method": "Pinned check_budget function and current check_budget share current meter/full snapshot and same fixture ledger; warm-up then alternating order; no writes in timed intervals.",
+  "provider_requests": 0,
+  "network_requests": 0,
+  "cases": [
+    {
+      "delta_rows": 100,
+      "operation_rows": 100,
+      "recorded_tokens": 15000,
+      "recorded_cost_usd": 0.0173,
+      "guard_modes": {
+        "tokens": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 0.4229
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 0.1388
+          },
+          "reduction_percent": 67.18
+        },
+        "cost": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 0.4196
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 0.2449
+          },
+          "reduction_percent": 41.63
+        },
+        "both": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 0.421
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 0.2544
+          },
+          "reduction_percent": 39.57
+        }
+      }
+    },
+    {
+      "delta_rows": 1000,
+      "operation_rows": 1000,
+      "recorded_tokens": 150000,
+      "recorded_cost_usd": 0.173,
+      "guard_modes": {
+        "tokens": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 2.0981
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 0.4474
+          },
+          "reduction_percent": 78.68
+        },
+        "cost": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 2.1225
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 1.4672
+          },
+          "reduction_percent": 30.87
+        },
+        "both": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 2.1456
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 1.4692
+          },
+          "reduction_percent": 31.52
+        }
+      }
+    },
+    {
+      "delta_rows": 10000,
+      "operation_rows": 10000,
+      "recorded_tokens": 1500000,
+      "recorded_cost_usd": 1.73,
+      "guard_modes": {
+        "tokens": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 21.6447
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 3.6771
+          },
+          "reduction_percent": 83.01
+        },
+        "cost": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 21.6541
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 15.6073
+          },
+          "reduction_percent": 27.92
+        },
+        "both": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 21.5595
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 15.5911
+          },
+          "reduction_percent": 27.68
+        }
+      }
+    },
+    {
+      "delta_rows": 100000,
+      "operation_rows": 100000,
+      "recorded_tokens": 15000000,
+      "recorded_cost_usd": 17.3,
+      "guard_modes": {
+        "tokens": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 279.2175
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 59.2455
+          },
+          "reduction_percent": 78.78
+        },
+        "cost": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 283.4583
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 209.0073
+          },
+          "reduction_percent": 26.27
+        },
+        "both": {
+          "before": {
+            "samples": 20,
+            "median_check_ms": 283.1697
+          },
+          "after": {
+            "samples": 20,
+            "median_check_ms": 209.5792
+          },
+          "reduction_percent": 25.99
+        }
+      }
+    }
+  ],
+  "limits": [
+    "Budget limits default to zero; the unchanged disabled path gets no claimed performance benefit.",
+    "Saved aggregate call counts do not establish physical ledger sizes; 100 is observed-scale adjacency, 1000 is sensitivity, and10000/100000 are scaling stress.",
+    "Read latency is local synthetic performance, not production or whole-workflow speedup.",
+    "Both narrow projections remain linear in the run's delta history; cost grouping is retained for rounding compatibility.",
+    "No schema/index/write-path change, reservations or complete invoice bound is included."
+  ]
+}

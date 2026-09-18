@@ -15,6 +15,7 @@ import 都在函数体内），故可从 backend 测试里直接 import 做纯�
 import json
 import os
 import sys
+from types import ModuleType
 
 import pytest
 
@@ -304,17 +305,80 @@ def test_extract_only_valid_report_routes_to_run_extract_only(tmp_path, monkeypa
     assert called.get("extract_only") is True
 
 
-def test_normal_run_does_not_route_to_extract_only(tmp_path, monkeypatch):
+@pytest.mark.parametrize("engine,extra_args", [
+    ("hybrid", []),
+    ("linear", ["--no-actors"]),
+])
+def test_normal_run_does_not_route_to_extract_only(tmp_path, monkeypatch, engine, extra_args):
     # 无 --extract-only → 不走 run_extract_only（拦截，若被调用则测试失败）。用一个必然在客户端
     # 构造/凭据阶段短路的 model，确认路由分支不误触发抽取-only。
     monkeypatch.setattr(dr, "run_extract_only",
                         lambda *a, **k: pytest.fail("run_extract_only 不应在正常运行被调用"))
     monkeypatch.setenv("MINIMAX_API_KEY", "")  # 缺 key → 凭据前置门非零退出（在 try 之前）
+    monkeypatch.setenv("RESEARCH_ENGINE", engine)
+    calls = []
+    linear = ModuleType("linear_research")
+    linear.run = lambda *a, **k: calls.append("linear") or 0
+    monkeypatch.setitem(sys.modules, "linear_research", linear)
     rc = _run_main(
-        ["--model", "minimax", "--out-dir", str(tmp_path), "--prompt", "Q"],
+        ["--model", "minimax", "--out-dir", str(tmp_path), "--prompt", "Q", *extra_args],
         monkeypatch,
     )
     assert rc == 3  # missing MINIMAX_API_KEY，且从未触碰 run_extract_only
+    assert calls == []
+    meta = json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))
+    assert meta["error"] == "missing MINIMAX_API_KEY"
+
+
+@pytest.mark.parametrize("extra_args,unsupported", [
+    (["--no-actors", "--evidence-only"], "evidence-only"),
+    (["--no-actors", "--synthesis-manifest", "unused.json"], "synthesis-manifest"),
+    ([], "actor-intelligence"),
+    (["--no-actors", "--resume"], "resume"),
+    (["--no-actors", "--config", "unused.yaml"], "config"),
+])
+def test_linear_unsupported_contract_stops_before_engine(
+        tmp_path, monkeypatch, extra_args, unsupported):
+    """Unsupported modes cannot spend calls or silently start fresh research."""
+    monkeypatch.setenv("RESEARCH_ENGINE", "linear")
+    monkeypatch.setenv("MINIMAX_API_KEY", "test-key-not-used")
+    calls = []
+    linear = ModuleType("linear_research")
+    linear.run = lambda *a, **k: calls.append("linear") or 0
+    monkeypatch.setitem(sys.modules, "linear_research", linear)
+
+    rc = _run_main([
+        "--prompt", "Q", "--out-dir", str(tmp_path), "--model", "minimax",
+        *extra_args,
+    ], monkeypatch)
+
+    assert rc == 3
+    assert calls == []
+    meta = json.loads((tmp_path / "meta.json").read_text(encoding="utf-8"))
+    assert meta["status"] == "failed"
+    assert unsupported in meta["error"]
+    assert not (tmp_path / dr.REPORT_FILENAME).exists()
+    assert not (tmp_path / dr.ACTORS_FILENAME).exists()
+
+
+def test_linear_explicit_report_only_routes_after_preflight(tmp_path, monkeypatch):
+    monkeypatch.setenv("RESEARCH_ENGINE", "linear")
+    monkeypatch.setenv("MINIMAX_API_KEY", "test-key-not-used")
+    calls = []
+    linear = ModuleType("linear_research")
+
+    def run(question, out_dir, args, meta, plog, write_meta):
+        calls.append((question, out_dir, args.no_actors))
+        plog.close()
+        return 0
+
+    linear.run = run
+    monkeypatch.setitem(sys.modules, "linear_research", linear)
+    assert _run_main([
+        "--prompt", "Q", "--out-dir", str(tmp_path), "--model", "minimax",
+        "--no-actors",
+    ], monkeypatch) == 0
+    assert calls == [("Q", tmp_path, True)]
 
 
 # ------------------------------------------------------ 编排器 _has_research_checkpoint

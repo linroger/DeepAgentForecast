@@ -1656,12 +1656,16 @@ class SimulationConfigGenerator:
         Analyst inference is modeler-only even when malformed input labels it
         public.  Contested/unknown rows may be shared only when their visibility
         is explicitly public, and retain their uncertainty label in the brief.
+        An explicit actor-access denial in any participating pack overrides
+        public copies of the same claim. This brief reaches every actor, so
+        another actor's access cannot reintroduce the denied claim globally.
         A missing pack is not interpreted through raw dossier fields.
         """
         if not isinstance(actor_context_packs, dict):
             return []
         rows: List[Dict[str, Any]] = []
         seen_claims = set()
+        denied_claims = set()
         for actor in extract_actor_rows(actors):
             if not cls._is_canonical_actor(actor):
                 continue
@@ -1681,25 +1685,31 @@ class SimulationConfigGenerator:
                 for raw in claims:
                     if not isinstance(raw, dict):
                         continue
+                    qualifiers = raw.get("qualifiers")
+                    qualifiers = qualifiers if isinstance(qualifiers, dict) else {}
                     claim = sanitize_untrusted_dossier_text(raw.get("claim"), 520)
                     refs = cls._safe_actor_context_list(
                         raw.get("source_refs"), limit=6, max_chars=120
                     )
                     if not claim or not refs:
                         continue
+                    dedupe_key = claim.casefold()
+                    if (
+                        raw.get("actor_knows") is False
+                        or qualifiers.get("actor_knows") is False
+                    ):
+                        denied_claims.add(dedupe_key)
+                        continue
                     evidence_type = str(
                         raw.get("evidence_type") or "unknown"
                     ).strip().casefold().replace("-", "_").replace(" ", "_")
                     if evidence_type == "analyst_inference":
                         continue
-                    qualifiers = raw.get("qualifiers")
-                    qualifiers = qualifiers if isinstance(qualifiers, dict) else {}
                     visibility = str(
                         raw.get("visibility") or qualifiers.get("visibility") or ""
                     ).strip().casefold().replace("-", "_").replace(" ", "_")
                     if visibility not in cls._PUBLIC_ACTOR_CONTEXT_VISIBILITIES:
                         continue
-                    dedupe_key = claim.casefold()
                     if dedupe_key in seen_claims:
                         continue
                     seen_claims.add(dedupe_key)
@@ -1715,7 +1725,9 @@ class SimulationConfigGenerator:
                         ),
                         "source_refs": refs,
                     })
-        return rows
+        # Resolve denials after every validated pack so actor/dimension order
+        # cannot change the knowledge distributed to all participants.
+        return [row for row in rows if row["claim"].casefold() not in denied_claims]
 
     @classmethod
     def _build_canonical_public_world_brief(

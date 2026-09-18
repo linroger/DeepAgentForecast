@@ -404,6 +404,112 @@ def _write_shared_actor_artifacts(folder: Path) -> str:
     return dossier
 
 
+@pytest.mark.parametrize("stop_lane", [True, False])
+def test_compaction_stop_preserves_attempt_and_never_synthesizes_survivors_or_retries(
+    tmp_path, monkeypatch, stop_lane,
+):
+    _configure_global_mode(monkeypatch, tmp_path)
+    calls = []
+    stopped_dirs = []
+
+    def fake_run(_prompt, handoff_dir, **kwargs):
+        folder = Path(handoff_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        is_evidence = kwargs.get("evidence_only", False)
+        calls.append((is_evidence, folder.name))
+        if (stop_lane and folder.name == "track_2") or not is_evidence:
+            (folder / "research_compaction.sqlite3").write_bytes(b"retained archive")
+            stopped_dirs.append(folder)
+            raise po._ResearchCompactionStopped("archive_write_failed", "thread-stopped")
+        evidence = "# Internal Evidence Lane Pack\n\n" + "retained evidence " * 80
+        (folder / "evidence_pack.md").write_text(evidence)
+        sources = [{"url": f"https://example.com/{folder.name}", "title": "Source"}]
+        (folder / "sources.json").write_text(json.dumps(sources))
+        dossier = _write_shared_actor_artifacts(folder) if folder.name == "track_1" else ""
+        return {
+            "report": evidence, "report_path": str(folder / "evidence_pack.md"),
+            "actor_dossier": dossier, "actors": None, "sources": sources,
+            "timeline": None, "exit_code": 0,
+            "research_telemetry": {"wall_s": 1, "tokens_total": 1},
+        }
+
+    monkeypatch.setattr(po.DeerFlowResearchRunner, "run", staticmethod(fake_run))
+    handoff = tmp_path / "handoff"
+    state = po.PipelineState(
+        pipeline_id="pipe-compaction-stop", prompt="Question",
+        handoff_dir=str(handoff), options={"depth": "deep", "research_model": "claude"},
+    )
+    with pytest.raises(po._ResearchCompactionStopped):
+        po.PipelineOrchestrator()._run_parallel_research_tracks(
+            state, str(handoff), lambda *_: None, 2,
+        )
+    assert sum(not is_evidence for is_evidence, _ in calls) == (0 if stop_lane else 1)
+    assert len(stopped_dirs) == 1
+    assert (stopped_dirs[0] / "research_compaction.sqlite3").read_bytes() == b"retained archive"
+    assert (handoff / "track_1" / "evidence_pack.md").exists()
+    assert not (handoff / "research_report.md").exists()
+
+
+def test_synthesis_recovery_compaction_stop_keeps_directory_and_does_not_retry(
+    tmp_path, monkeypatch,
+):
+    _configure_global_mode(monkeypatch, tmp_path)
+    handoff = tmp_path / "handoff"
+    handoff.mkdir()
+    manifest = handoff / "evidence_synthesis_manifest.json"
+    manifest.write_text(json.dumps({
+        "version": 3, "lanes": [{"title": "sealed lane", "path": "track_1/evidence_pack.md"}],
+        "sources": [], "actor_dossier": {},
+    }))
+    monkeypatch.setattr(po, "_synthesis_recovery_budget_epoch", lambda *_: (
+        str(tmp_path / "budget.sqlite3"), str(tmp_path / "budget.json"), "epoch-1",
+    ))
+    monkeypatch.setattr(po, "_research_budget_exhaustion", lambda *_: None)
+    calls = []
+
+    def stopped(_prompt, handoff_dir, **kwargs):
+        calls.append(Path(handoff_dir))
+        (calls[-1] / "research_compaction.sqlite3").write_bytes(b"retained archive")
+        raise po._ResearchCompactionStopped("invalid_summary", "thread-stopped")
+
+    monkeypatch.setattr(po.DeerFlowResearchRunner, "run", staticmethod(stopped))
+    state = po.PipelineState(
+        pipeline_id="pipe-recovery-stop", prompt="Question", handoff_dir=str(handoff),
+        options={"depth": "deep", "research_model": "claude"},
+    )
+    with pytest.raises(po._ResearchCompactionStopped):
+        po.PipelineOrchestrator()._run_research_synthesis_recovery(
+            state, str(handoff), lambda *_: None, str(manifest),
+        )
+    assert len(calls) == 1
+    assert (calls[0] / "research_compaction.sqlite3").read_bytes() == b"retained archive"
+    assert manifest.exists()
+
+
+def test_compaction_stop_prevents_queued_outer_lanes_from_launching(
+    tmp_path, monkeypatch,
+):
+    _configure_global_mode(monkeypatch, tmp_path)
+    monkeypatch.setattr(po, "research_outer_track_workers", lambda *_: 1)
+    launches = []
+
+    def stopped(_prompt, handoff_dir, **kwargs):
+        launches.append(Path(handoff_dir).name)
+        raise po._ResearchCompactionStopped("archive_write_failed", "thread-one")
+
+    monkeypatch.setattr(po.DeerFlowResearchRunner, "run", staticmethod(stopped))
+    handoff = tmp_path / "handoff"
+    state = po.PipelineState(
+        pipeline_id="pipe-queued-stop", prompt="Question", handoff_dir=str(handoff),
+        options={"depth": "deep", "research_model": "claude"},
+    )
+    with pytest.raises(po._ResearchCompactionStopped):
+        po.PipelineOrchestrator()._run_parallel_research_tracks(
+            state, str(handoff), lambda *_: None, 3,
+        )
+    assert launches == ["track_1"]
+
+
 def test_three_outer_lanes_produce_one_global_report_not_three(tmp_path, monkeypatch):
     _configure_global_mode(monkeypatch, tmp_path)
     calls = []

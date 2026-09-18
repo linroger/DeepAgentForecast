@@ -1,0 +1,212 @@
+{
+  "schema": "astra-unresolved-run-evidence/v1",
+  "validated_at": "2026-09-07T20:10:00.175951+00:00",
+  "iteration_baseline": "d09ee4fe3cb2c926eb5a96a683cf89660872d9ff",
+  "scope": "Read-only historical recovery/unknown-usage refresh. Hash unchanged files without reclassifying their raw log contents. No providers, network, saved-state mutations or deployment.",
+  "saved_artifact_root": "/Users/rogerlin/Downloads/DeepResearchForecast",
+  "prior_receipt": {
+    "path": "docs/research/astra-api-run-evidence.json",
+    "sha256": "a7086b6927062fcbfc066951d6be011c9e223765352023a1ec3be66c1682d6be",
+    "validated_source_inventory": {
+      "path": "docs/research/astra-iteration-04-run-evidence.json",
+      "sha256": "e127201a3fb3fc4592d018e1b4915d0bb93b5b999ecce8e44677140a191e9264",
+      "selection": "77 source_files entries prefixed saved:; six historical code entries excluded"
+    }
+  },
+  "validation": {
+    "saved_artifacts": {
+      "checked": 77,
+      "matched": 77,
+      "changed_paths": [],
+      "missing_paths": []
+    },
+    "pipeline_inventory": {
+      "count": 32,
+      "status_counts": {
+        "cancelled": 3,
+        "completed": 26,
+        "failed": 3
+      },
+      "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+      "new_ids": [],
+      "removed_ids": [],
+      "changed_state_hash_ids": []
+    },
+    "bounded_logs": {
+      "prior_files_hashed": 12,
+      "changed_paths": [],
+      "missing_paths": [],
+      "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+      "new_dated_paths": [],
+      "new_file_boundary": "Discover dated filenames newer than the prior maximum; revalidate every previously bounded log including active mirofish.log. Older unselected logs are outside this refresh.",
+      "new_or_changed_logs_parsed": 0,
+      "prior_pattern_counts_reused": true
+    }
+  },
+  "selected_historical_facts": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/run_telemetry.json",
+        "sha256": "a952a3790fec998f1d64bf78a8b41f6189972cf0303a6250daf0f4a0f5c2f240"
+      },
+      "resume_count": {
+        "value": null,
+        "key": "$.options.resume_count",
+        "source": "state_source",
+        "present": false
+      },
+      "current_attempt_recorded_tokens": {
+        "value": 82983739,
+        "key": "$.total.total_tokens",
+        "source": "meter_source"
+      },
+      "cumulative_recorded_tokens": {
+        "value": null,
+        "key": "$.cumulative_total.total_tokens",
+        "source": "meter_source",
+        "present": false
+      },
+      "simulation_health_calls": {
+        "value": 221,
+        "by_platform": {
+          "twitter": 109,
+          "reddit": 112
+        },
+        "key": "$.sim_llm_health.platforms.*.llm_calls",
+        "aggregation": "sum",
+        "unit": "saved health call counter; not request-level usage receipts",
+        "source": "meter_source"
+      },
+      "run_stage_meter": {
+        "value": null,
+        "present": false,
+        "key": "$.by_stage.run",
+        "source": "meter_source"
+      },
+      "coverage_fields": {
+        "usage_complete_present": false,
+        "usage_operations_present": false,
+        "source": "meter_source",
+        "unresolved_physical_operation_count": null
+      }
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/run_telemetry.json",
+        "sha256": "42dace2bb7276a04eb3f987ee232fee04905852bd97691449cc59dcb1e22ff1e"
+      },
+      "resume_count": {
+        "value": 7,
+        "key": "$.options.resume_count",
+        "source": "state_source",
+        "present": true
+      },
+      "current_attempt_recorded_tokens": {
+        "value": 2558618,
+        "key": "$.total.total_tokens",
+        "source": "meter_source"
+      },
+      "cumulative_recorded_tokens": {
+        "value": 5353285,
+        "key": "$.cumulative_total.total_tokens",
+        "source": "meter_source",
+        "present": true
+      },
+      "simulation_health_calls": {
+        "value": 648,
+        "by_platform": {
+          "twitter": 324,
+          "reddit": 324
+        },
+        "key": "$.sim_llm_health.platforms.*.llm_calls",
+        "aggregation": "sum",
+        "unit": "saved health call counter; not request-level usage receipts",
+        "source": "meter_source"
+      },
+      "run_stage_meter": {
+        "value": null,
+        "present": false,
+        "key": "$.by_stage.run",
+        "source": "meter_source"
+      },
+      "coverage_fields": {
+        "usage_complete_present": false,
+        "usage_operations_present": false,
+        "source": "meter_source",
+        "unresolved_physical_operation_count": null
+      }
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1"
+      },
+      "meter_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/run_telemetry.json",
+        "sha256": "71f60f4930ba2d325c8ce6f395f1b897cbbcd4c17aaa912d0ce936e46ecad968"
+      },
+      "resume_count": {
+        "value": 9,
+        "key": "$.options.resume_count",
+        "source": "state_source",
+        "present": true
+      },
+      "current_attempt_recorded_tokens": {
+        "value": 2940662,
+        "key": "$.total.total_tokens",
+        "source": "meter_source"
+      },
+      "cumulative_recorded_tokens": {
+        "value": 2954750,
+        "key": "$.cumulative_total.total_tokens",
+        "source": "meter_source",
+        "present": true
+      },
+      "simulation_health_calls": {
+        "value": 212,
+        "by_platform": {
+          "twitter": 137,
+          "reddit": 75
+        },
+        "key": "$.sim_llm_health.platforms.*.llm_calls",
+        "aggregation": "sum",
+        "unit": "saved health call counter; not request-level usage receipts",
+        "source": "meter_source"
+      },
+      "run_stage_meter": {
+        "value": null,
+        "present": false,
+        "key": "$.by_stage.run",
+        "source": "meter_source"
+      },
+      "coverage_fields": {
+        "usage_complete_present": false,
+        "usage_operations_present": false,
+        "source": "meter_source",
+        "unresolved_physical_operation_count": null
+      }
+    }
+  ],
+  "interpretation": [
+    "No refreshed artifact changes support a newer production benchmark. Reuse the prior receipt for literal retry/429/empty-marker counts and their nonexclusive scope.",
+    "Precision correction: the older audit projected absent $.by_stage.run entries as parent_run_tokens:0. These selected source files omit the RUN entry; this receipt represents absence with null and present:false, not confirmed zero usage.",
+    "Nonzero simulation health call counters with an absent RUN meter demonstrate an accounting coverage gap; they do not quantify tokens, failed requests, or billed amounts.",
+    "Historical telemetry has no top-level usage_complete or usage_operations fields. Unresolved physical operation counts and recovery settlement outcomes cannot be reconstructed as zero from these aggregates.",
+    "The reference research aggregate may include replay overcount and overlaps options.research_telemetry; resumed totals include earlier work. Do not sum current, cumulative and overlapping research snapshots.",
+    "ASTRA-04b2 was verified offline after these saved runs. Unresolved-operation admission/recovery behavior still requires current-source deterministic crash/restart acceptance; historical absence neither validates nor disproves that behavior."
+  ]
+}

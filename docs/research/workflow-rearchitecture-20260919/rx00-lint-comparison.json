@@ -1,0 +1,760 @@
+{
+  "scope_files": 99,
+  "current_violations": [
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 967,
+      "source_line": "logger.debug(f\"\u8df3\u8fc7Zep\u68c0\u7d22\uff1a\u672a\u8bbe\u7f6egraph_id\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 1915,
+      "source_line": "logger.info(f\"\u4ece\u635f\u574f\u7684JSON\u4e2d\u63d0\u53d6\u4e86\u90e8\u5206\u4fe1\u606f\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 1923,
+      "source_line": "logger.warning(f\"JSON\u4fee\u590d\u5931\u8d25\uff0c\u8fd4\u56de\u57fa\u7840\u7ed3\u6784\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2205,
+      "source_line": "\"bio\": f\"Expert and thought leader in their field.\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "B905",
+      "line": 2469,
+      "source_line": "for entity, profile in zip(entities, profiles):",
+      "message": "`zip()` without an explicit `strict=` parameter"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2534,
+      "source_line": "f\"\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2535,
+      "source_line": "f\"\u3010\u7b80\u4ecb\u3011\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2537,
+      "source_line": "f\"\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2538,
+      "source_line": "f\"\u3010\u8be6\u7ec6\u4eba\u8bbe\u3011\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2540,
+      "source_line": "f\"\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/services/oasis_profile_generator.py",
+      "code": "F541",
+      "line": 2541,
+      "source_line": "f\"\u3010\u57fa\u672c\u5c5e\u6027\u3011\",",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/app/utils/oasis_llm.py",
+      "code": "B904",
+      "line": 351,
+      "source_line": "raise exc",
+      "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+    },
+    {
+      "path": "backend/app/utils/oasis_llm.py",
+      "code": "C408",
+      "line": 613,
+      "source_line": "common: Dict[str, Any] = dict(",
+      "message": "Unnecessary `dict()` call (rewrite as a literal)"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "B905",
+      "line": 1049,
+      "source_line": "for platform_name, platform_result in zip(platforms_to_interview, platform_results):",
+      "message": "`zip()` without an explicit `strict=` parameter"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "C420",
+      "line": 2798,
+      "source_line": "{\"round\": round_num, \"by_stance\": {s: 0 for s in _STANCE_BUCKETS}, \"_sent\": 0.0, \"_n\": 0},",
+      "message": "Unnecessary dict comprehension for iterable; use `dict.fromkeys` instead"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "B007",
+      "line": 2978,
+      "source_line": "for idx, members in enumerate(comms):",
+      "message": "Loop control variable `idx` not used within loop body"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "B007",
+      "line": 3046,
+      "source_line": "for post_id, num_likes, num_shares in rows:",
+      "message": "Loop control variable `num_shares` not used within loop body"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "B904",
+      "line": 4403,
+      "source_line": "raise RuntimeError(",
+      "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "B904",
+      "line": 4922,
+      "source_line": "raise RuntimeError(",
+      "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "F541",
+      "line": 5121,
+      "source_line": "log_manager.info(f\"\u6a21\u62df\u53c2\u6570:\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "F541",
+      "line": 5147,
+      "source_line": "log_manager.info(f\"  - \u4e3b\u65e5\u5fd7: simulation.log\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "F541",
+      "line": 5148,
+      "source_line": "log_manager.info(f\"  - Twitter\u52a8\u4f5c: twitter/actions.jsonl\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "F541",
+      "line": 5149,
+      "source_line": "log_manager.info(f\"  - Reddit\u52a8\u4f5c: reddit/actions.jsonl\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "F541",
+      "line": 5334,
+      "source_line": "log_manager.info(f\"\u5168\u90e8\u5b8c\u6210!\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_parallel_simulation.py",
+      "code": "F541",
+      "line": 5335,
+      "source_line": "log_manager.info(f\"\u65e5\u5fd7\u6587\u4ef6:\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_reddit_simulation.py",
+      "code": "F541",
+      "line": 829,
+      "source_line": "print(f\"\\n\u6a21\u62df\u53c2\u6570:\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_reddit_simulation.py",
+      "code": "F541",
+      "line": 993,
+      "source_line": "print(f\"\\n\u6a21\u62df\u5faa\u73af\u5b8c\u6210!\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_twitter_simulation.py",
+      "code": "F541",
+      "line": 839,
+      "source_line": "print(f\"\\n\u6a21\u62df\u53c2\u6570:\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/scripts/run_twitter_simulation.py",
+      "code": "F541",
+      "line": 1003,
+      "source_line": "print(f\"\\n\u6a21\u62df\u5faa\u73af\u5b8c\u6210!\")",
+      "message": "f-string without any placeholders"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 24,
+      "source_line": "def invoke(run, client_factory, models, request):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 24,
+      "source_line": "def invoke(run, client_factory, models, request):",
+      "message": "Redefinition of unused `client_factory` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 24,
+      "source_line": "def invoke(run, client_factory, models, request):",
+      "message": "Redefinition of unused `models` from line 15"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 35,
+      "source_line": "def _rows(run):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 48,
+      "source_line": "def test_invalid_price_fails_before_transmission_and_recovers_without_reset(run, invoke, monkeypatch, raw):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 62,
+      "source_line": "def test_missing_price_stops_dollar_enabled_work_but_explicit_zero_is_priced(run, invoke, monkeypatch, provider):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 77,
+      "source_line": "def test_unpriced_disabled_budget_retains_unknown_rates_and_positive_usage(run, invoke):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 86,
+      "source_line": "def test_rate_drift_during_response_and_restarted_replay_cannot_reprice_usage(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 112,
+      "source_line": "def test_model_specific_prices_precede_provider_estimate_and_preserve_model_case(run, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 129,
+      "source_line": "def test_invalid_dollar_cap_cannot_disable_price_admission(run, monkeypatch, limit):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 137,
+      "source_line": "def test_shared_quote_rejects_model_mismatch_before_dispatch(run, client_factory, payload):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 137,
+      "source_line": "def test_shared_quote_rejects_model_mismatch_before_dispatch(run, client_factory, payload):",
+      "message": "Redefinition of unused `client_factory` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 145,
+      "source_line": "def test_shared_model_attribution_snapshot_ignores_caller_mutation_before_send(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 145,
+      "source_line": "def test_shared_model_attribution_snapshot_ignores_caller_mutation_before_send(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 161,
+      "source_line": "def test_actual_shared_plain_and_tools_record_distinct_model_quotes(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_boundary.py",
+      "code": "F811",
+      "line": 161,
+      "source_line": "def test_actual_shared_plain_and_tools_record_distinct_model_quotes(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_cost_child.py",
+      "code": "F811",
+      "line": 16,
+      "source_line": "def test_child_price_receipt_survives_retry_or_crash_and_recovery(launch, monkeypatch, scenario):",
+      "message": "Redefinition of unused `launch` from line 12"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 18,
+      "source_line": "def test_concurrent_same_owner_calls_cannot_spend_same_remainder(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 18,
+      "source_line": "def test_concurrent_same_owner_calls_cannot_spend_same_remainder(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 50,
+      "source_line": "def test_unknown_retry_holds_use_allowance_without_fabricating_tokens(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 50,
+      "source_line": "def test_unknown_retry_holds_use_allowance_without_fabricating_tokens(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 68,
+      "source_line": "def test_native_unknown_retries_hold_output_allowance(run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 68,
+      "source_line": "def test_native_unknown_retries_hold_output_allowance(run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `models` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 92,
+      "source_line": "run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 92,
+      "source_line": "run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `models` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 103,
+      "source_line": "def test_missing_usage_retains_allowance_after_success(run, client_factory, monkeypatch, native_tools):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 103,
+      "source_line": "def test_missing_usage_retains_allowance_after_success(run, client_factory, monkeypatch, native_tools):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 125,
+      "source_line": "def test_known_empty_response_releases_allowance_before_logical_retry(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 125,
+      "source_line": "def test_known_empty_response_releases_allowance_before_logical_retry(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 142,
+      "source_line": "def test_native_known_error_usage_releases_allowance(run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 142,
+      "source_line": "def test_native_known_error_usage_releases_allowance(run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `models` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 167,
+      "source_line": "def test_unplannable_request_never_reaches_sdk(run, client_factory, monkeypatch, patch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 167,
+      "source_line": "def test_unplannable_request_never_reaches_sdk(run, client_factory, monkeypatch, patch):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 178,
+      "source_line": "def test_planned_nested_request_cannot_mutate_during_admission(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 178,
+      "source_line": "def test_planned_nested_request_cannot_mutate_during_admission(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 197,
+      "source_line": "def test_text_tool_schema_estimate_counts_all_input_and_persists_only_numbers(run, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 211,
+      "source_line": "def test_disabled_token_budget_does_not_validate_or_serialize_payload(run, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 219,
+      "source_line": "run, client_factory, monkeypatch, changed_limit):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 219,
+      "source_line": "run, client_factory, monkeypatch, changed_limit):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 237,
+      "source_line": "run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 237,
+      "source_line": "run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `models` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 252,
+      "source_line": "def test_native_schema_parse_failure_releases_known_usage_hold(run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 252,
+      "source_line": "def test_native_schema_parse_failure_releases_known_usage_hold(run, models, monkeypatch, asynchronous):",
+      "message": "Redefinition of unused `models` from line 14"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 265,
+      "source_line": "def test_unsupported_cap_and_cyclic_input_do_not_poison_storage(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 13"
+    },
+    {
+      "path": "backend/tests/test_api_token_reservations.py",
+      "code": "F811",
+      "line": 265,
+      "source_line": "def test_unsupported_cap_and_cyclic_input_do_not_poison_storage(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 13"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 26,
+      "source_line": "run, client_factory, monkeypatch, kind, native_tools):",
+      "message": "Redefinition of unused `run` from line 11"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 26,
+      "source_line": "run, client_factory, monkeypatch, kind, native_tools):",
+      "message": "Redefinition of unused `client_factory` from line 11"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 58,
+      "source_line": "def test_native_sdk_stops_without_retry_or_full_projection(run, models, monkeypatch, asynchronous, kind):",
+      "message": "Redefinition of unused `run` from line 11"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 58,
+      "source_line": "def test_native_sdk_stops_without_retry_or_full_projection(run, models, monkeypatch, asynchronous, kind):",
+      "message": "Redefinition of unused `models` from line 12"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 78,
+      "source_line": "def test_unresolved_admission_is_not_weakened_by_narrow_budget_read(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 11"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 78,
+      "source_line": "def test_unresolved_admission_is_not_weakened_by_narrow_budget_read(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 11"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 92,
+      "source_line": "def test_missing_storage_stops_before_any_provider_work(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 11"
+    },
+    {
+      "path": "backend/tests/test_budget_guard_boundary.py",
+      "code": "F811",
+      "line": 92,
+      "source_line": "def test_missing_storage_stops_before_any_provider_work(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 11"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 21,
+      "source_line": "def test_unpriced_history_blocks_later_priced_api_and_disable_recovers(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 21,
+      "source_line": "def test_unpriced_history_blocks_later_priced_api_and_disable_recovers(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `invoke` from line 11"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 46,
+      "source_line": "def test_unquoted_prior_observations_block_current_dollar_api(run, invoke, monkeypatch, source, provider):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 46,
+      "source_line": "def test_unquoted_prior_observations_block_current_dollar_api(run, invoke, monkeypatch, source, provider):",
+      "message": "Redefinition of unused `invoke` from line 11"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 62,
+      "source_line": "def test_opaque_legacy_baseline_blocks_even_when_recorded_cost_is_zero(run, invoke, monkeypatch, tokens):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 62,
+      "source_line": "def test_opaque_legacy_baseline_blocks_even_when_recorded_cost_is_zero(run, invoke, monkeypatch, tokens):",
+      "message": "Redefinition of unused `invoke` from line 11"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 78,
+      "source_line": "def test_real_local_cache_observation_does_not_create_a_price_gap(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 78,
+      "source_line": "def test_real_local_cache_observation_does_not_create_a_price_gap(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `invoke` from line 11"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 89,
+      "source_line": "def test_explicit_zero_price_remains_complete_without_inferred_free_provider(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 89,
+      "source_line": "def test_explicit_zero_price_remains_complete_without_inferred_free_provider(run, invoke, monkeypatch):",
+      "message": "Redefinition of unused `invoke` from line 11"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 99,
+      "source_line": "def test_coverage_decision_is_captured_before_shared_sdk_options_mutate_config(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 99,
+      "source_line": "def test_coverage_decision_is_captured_before_shared_sdk_options_mutate_config(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 115,
+      "source_line": "def test_price_only_check_preserves_same_owner_priced_concurrency(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 115,
+      "source_line": "def test_price_only_check_preserves_same_owner_priced_concurrency(run, client_factory, monkeypatch):",
+      "message": "Redefinition of unused `client_factory` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 145,
+      "source_line": "run, client_factory, monkeypatch, policy):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 145,
+      "source_line": "run, client_factory, monkeypatch, policy):",
+      "message": "Redefinition of unused `client_factory` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 166,
+      "source_line": "def test_native_known_usage_on_failed_http_response_is_price_and_usage_covered(run, models, monkeypatch):",
+      "message": "Redefinition of unused `run` from line 12"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_boundary.py",
+      "code": "F811",
+      "line": 166,
+      "source_line": "def test_native_known_usage_on_failed_http_response_is_price_and_usage_covered(run, models, monkeypatch):",
+      "message": "Redefinition of unused `models` from line 13"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_status.py",
+      "code": "F811",
+      "line": 34,
+      "source_line": "def test_saved_restarted_public_status_retains_unpriced_coverage(isolated, monkeypatch):",
+      "message": "Redefinition of unused `isolated` from line 15"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_status.py",
+      "code": "F811",
+      "line": 54,
+      "source_line": "def test_attempt_filter_does_not_hide_historical_price_gap_in_public_status(isolated, monkeypatch):",
+      "message": "Redefinition of unused `isolated` from line 15"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_status.py",
+      "code": "F811",
+      "line": 65,
+      "source_line": "def test_flush_uses_one_cumulative_price_coverage_view_after_interleaved_observation(isolated, monkeypatch):",
+      "message": "Redefinition of unused `isolated` from line 15"
+    },
+    {
+      "path": "backend/tests/test_cost_coverage_status.py",
+      "code": "F811",
+      "line": 87,
+      "source_line": "def test_child_checks_shared_historical_prices_before_dollar_enabled_send(launch, monkeypatch, gap):",
+      "message": "Redefinition of unused `launch` from line 16"
+    },
+    {
+      "path": "backend/tests/test_token_reservation_status.py",
+      "code": "F811",
+      "line": 40,
+      "source_line": "def test_saved_and_restarted_status_subtracts_uncertain_hold(isolated, status, source, tokens):",
+      "message": "Redefinition of unused `isolated` from line 13"
+    },
+    {
+      "path": "backend/tests/test_token_reservation_status.py",
+      "code": "F811",
+      "line": 65,
+      "source_line": "def test_status_uses_pinned_policy_and_surfaces_configuration_mismatch(isolated, monkeypatch, configured):",
+      "message": "Redefinition of unused `isolated` from line 13"
+    },
+    {
+      "path": "backend/tests/test_token_reservation_status.py",
+      "code": "F811",
+      "line": 77,
+      "source_line": "def test_precise_late_settlement_releases_headroom_without_replacing_recorded_usage(isolated):",
+      "message": "Redefinition of unused `isolated` from line 13"
+    }
+  ],
+  "parent_violation_counts": {
+    "ec29ab1": 29,
+    "019a7e4": 107
+  },
+  "introduced_violations": [],
+  "method": "Run identical configured Ruff rules against working tree and exact main/ASTRA parent bytes. Match existing violations by path/code/source text."
+}

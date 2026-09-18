@@ -1,0 +1,687 @@
+{
+  "schema": "astra-public-graph-receipt-comparison/v1",
+  "generated_at": "2026-09-16T12:14:07.565745+00:00",
+  "baseline_ref": "45a8da856f54159974fdff7f200e045de80c2357",
+  "source_receipts": [
+    {
+      "path": "backend/app/services/graphiti_client/runtime.py",
+      "baseline_sha256": "a9461c52de48efb0c8d49eb3068094c1db6c7334b58df95144c8c13834907028",
+      "current_sha256": "c17677af3d473b4e4dd716b252615709106d662e3527023493d2ebea7cde2346",
+      "methods": [
+        "run",
+        "add_episodes_concurrent",
+        "_add_episodes_concurrent"
+      ]
+    },
+    {
+      "path": "backend/app/services/graphiti_client/client.py",
+      "baseline_sha256": "77f2ee80c7480cdb6a438876ef3af38da05b9227e1b97a6b31bf6c70b1dd4d5c",
+      "current_sha256": "c447b94335fd8edc724695e08ffa664dc6df75e9edfadaf4b27d38da58acad1d",
+      "methods": [
+        "add_batch"
+      ]
+    },
+    {
+      "path": "backend/app/services/graph_builder.py",
+      "baseline_sha256": "0eb3150596342ee3ea5de2603f36f1aefe8f5743323245161067070c2174c18c",
+      "current_sha256": "3d582fa107baee32e0248b70072a6204e9f1b84ac18897bf9a419bc98bda64be",
+      "methods": [
+        "add_text_batches"
+      ]
+    }
+  ],
+  "fixture_sha256": "ab4d2bbd37e76003432df932f60e3d684c8a3c7a93622f3980fa3fcd20fcfe69",
+  "observations": [
+    {
+      "revision": "baseline",
+      "case": "ack-first",
+      "observation": {
+        "chunks": [
+          "synthetic acknowledged fact",
+          "synthetic hung fact"
+        ],
+        "returned_uuids": null,
+        "raised_type": "ValueError",
+        "storage_events": [
+          {
+            "body": "synthetic acknowledged fact",
+            "returned_uuid": "uuid-fast"
+          }
+        ],
+        "calls": [
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-0",
+            "body": "synthetic acknowledged fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          },
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-1",
+            "body": "synthetic hung fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          }
+        ],
+        "ingest_stats": {
+          "total": 2,
+          "failed": 2,
+          "succeeded": 0,
+          "skip_ratio": 1.0,
+          "skip_reasons": {},
+          "input_chunks": 2,
+          "skipped_cast_filter": 0
+        },
+        "lock_observation": {
+          "active_children_when_lock_reacquired": [],
+          "cancelled_children": [
+            "synthetic hung fact"
+          ],
+          "storage_events_at_read": [
+            {
+              "body": "synthetic acknowledged fact",
+              "returned_uuid": "uuid-fast"
+            }
+          ]
+        },
+        "forced_deadlines": [
+          {
+            "timeout_argument": 10.0
+          }
+        ],
+        "cancellation_requests": 1,
+        "cleanup_entered": false,
+        "active_at_return": [],
+        "submitted_batches": [
+          [
+            "synthetic acknowledged fact",
+            "synthetic hung fact"
+          ]
+        ],
+        "batch_errors": [
+          {
+            "type": "TimeoutError",
+            "message": "graphiti operation exceeded 10s"
+          }
+        ]
+      }
+    },
+    {
+      "revision": "baseline",
+      "case": "ack-second",
+      "observation": {
+        "chunks": [
+          "synthetic hung fact",
+          "synthetic acknowledged fact"
+        ],
+        "returned_uuids": null,
+        "raised_type": "ValueError",
+        "storage_events": [
+          {
+            "body": "synthetic acknowledged fact",
+            "returned_uuid": "uuid-fast"
+          }
+        ],
+        "calls": [
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-0",
+            "body": "synthetic hung fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          },
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-1",
+            "body": "synthetic acknowledged fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          }
+        ],
+        "ingest_stats": {
+          "total": 2,
+          "failed": 2,
+          "succeeded": 0,
+          "skip_ratio": 1.0,
+          "skip_reasons": {},
+          "input_chunks": 2,
+          "skipped_cast_filter": 0
+        },
+        "lock_observation": {
+          "active_children_when_lock_reacquired": [],
+          "cancelled_children": [
+            "synthetic hung fact"
+          ],
+          "storage_events_at_read": [
+            {
+              "body": "synthetic acknowledged fact",
+              "returned_uuid": "uuid-fast"
+            }
+          ]
+        },
+        "forced_deadlines": [
+          {
+            "timeout_argument": 10.0
+          }
+        ],
+        "cancellation_requests": 1,
+        "cleanup_entered": false,
+        "active_at_return": [],
+        "submitted_batches": [
+          [
+            "synthetic hung fact",
+            "synthetic acknowledged fact"
+          ]
+        ],
+        "batch_errors": [
+          {
+            "type": "TimeoutError",
+            "message": "graphiti operation exceeded 10s"
+          }
+        ]
+      }
+    },
+    {
+      "revision": "baseline",
+      "case": "unknown-write",
+      "observation": {
+        "chunks": [
+          "synthetic unknown write",
+          "synthetic blocked fact"
+        ],
+        "returned_uuids": null,
+        "raised_type": "ValueError",
+        "storage_events": [
+          {
+            "body": "synthetic unknown write",
+            "write_observed_without_ack": true
+          }
+        ],
+        "calls": [
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-0",
+            "body": "synthetic unknown write",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          },
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-1",
+            "body": "synthetic blocked fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          }
+        ],
+        "ingest_stats": {
+          "total": 2,
+          "failed": 2,
+          "succeeded": 0,
+          "skip_ratio": 1.0,
+          "skip_reasons": {},
+          "input_chunks": 2,
+          "skipped_cast_filter": 0
+        },
+        "lock_observation": {
+          "active_children_when_lock_reacquired": [],
+          "cancelled_children": [
+            "synthetic blocked fact",
+            "synthetic unknown write"
+          ],
+          "storage_events_at_read": [
+            {
+              "body": "synthetic unknown write",
+              "write_observed_without_ack": true
+            }
+          ]
+        },
+        "forced_deadlines": [
+          {
+            "timeout_argument": 10.0
+          }
+        ],
+        "cancellation_requests": 1,
+        "cleanup_entered": false,
+        "active_at_return": [],
+        "submitted_batches": [
+          [
+            "synthetic unknown write",
+            "synthetic blocked fact"
+          ]
+        ],
+        "batch_errors": [
+          {
+            "type": "TimeoutError",
+            "message": "graphiti operation exceeded 10s"
+          }
+        ]
+      }
+    },
+    {
+      "revision": "baseline",
+      "case": "normal-success",
+      "observation": {
+        "returned_uuids": [
+          "uuid-a",
+          "uuid-b",
+          "uuid-c"
+        ],
+        "core_calls": [
+          {
+            "graph_id": "synthetic-success-graph",
+            "body": "fact-a",
+            "name": "chunk-0",
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00"
+          },
+          {
+            "graph_id": "synthetic-success-graph",
+            "body": "fact-b",
+            "name": "chunk-1",
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00"
+          },
+          {
+            "graph_id": "synthetic-success-graph",
+            "body": "fact-c",
+            "name": "chunk-0",
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00"
+          }
+        ],
+        "ingest_stats": {
+          "total": 3,
+          "failed": 0,
+          "succeeded": 3,
+          "skip_ratio": 0.0,
+          "skip_reasons": {},
+          "input_chunks": 3,
+          "skipped_cast_filter": 0
+        }
+      }
+    },
+    {
+      "revision": "current",
+      "case": "ack-first",
+      "observation": {
+        "chunks": [
+          "synthetic acknowledged fact",
+          "synthetic hung fact"
+        ],
+        "returned_uuids": [
+          "uuid-fast"
+        ],
+        "raised_type": null,
+        "storage_events": [
+          {
+            "body": "synthetic acknowledged fact",
+            "returned_uuid": "uuid-fast"
+          }
+        ],
+        "calls": [
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-0",
+            "body": "synthetic acknowledged fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          },
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-1",
+            "body": "synthetic hung fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          }
+        ],
+        "ingest_stats": {
+          "total": 2,
+          "failed": 1,
+          "succeeded": 1,
+          "skip_ratio": 0.5,
+          "skip_reasons": {
+            "batch_timeout_unacknowledged": 1
+          },
+          "input_chunks": 2,
+          "skipped_cast_filter": 0,
+          "batch_timeouts": [
+            {
+              "batch_start_index": 0,
+              "input_count": 2,
+              "cleanup_confirmed": true,
+              "acknowledged": [
+                {
+                  "input_index": 0,
+                  "uuid": "uuid-fast"
+                }
+              ],
+              "started_unacknowledged": [
+                1
+              ],
+              "never_started": []
+            }
+          ],
+          "not_submitted": 0,
+          "cleanup_confirmed": true
+        },
+        "lock_observation": {
+          "active_children_when_lock_reacquired": [],
+          "cancelled_children": [
+            "synthetic hung fact"
+          ],
+          "storage_events_at_read": [
+            {
+              "body": "synthetic acknowledged fact",
+              "returned_uuid": "uuid-fast"
+            }
+          ]
+        },
+        "forced_deadlines": [
+          {
+            "timeout_argument": 10.0
+          }
+        ],
+        "cancellation_requests": 1,
+        "cleanup_entered": false,
+        "active_at_return": [],
+        "submitted_batches": [
+          [
+            "synthetic acknowledged fact",
+            "synthetic hung fact"
+          ]
+        ],
+        "batch_errors": [
+          {
+            "type": "GraphBatchTimeout",
+            "message": "Graph batch deadline exceeded; 1/2 acknowledged; async cleanup confirmed"
+          }
+        ]
+      }
+    },
+    {
+      "revision": "current",
+      "case": "ack-second",
+      "observation": {
+        "chunks": [
+          "synthetic hung fact",
+          "synthetic acknowledged fact"
+        ],
+        "returned_uuids": [
+          "uuid-fast"
+        ],
+        "raised_type": null,
+        "storage_events": [
+          {
+            "body": "synthetic acknowledged fact",
+            "returned_uuid": "uuid-fast"
+          }
+        ],
+        "calls": [
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-0",
+            "body": "synthetic hung fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          },
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-1",
+            "body": "synthetic acknowledged fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          }
+        ],
+        "ingest_stats": {
+          "total": 2,
+          "failed": 1,
+          "succeeded": 1,
+          "skip_ratio": 0.5,
+          "skip_reasons": {
+            "batch_timeout_unacknowledged": 1
+          },
+          "input_chunks": 2,
+          "skipped_cast_filter": 0,
+          "batch_timeouts": [
+            {
+              "batch_start_index": 0,
+              "input_count": 2,
+              "cleanup_confirmed": true,
+              "acknowledged": [
+                {
+                  "input_index": 1,
+                  "uuid": "uuid-fast"
+                }
+              ],
+              "started_unacknowledged": [
+                0
+              ],
+              "never_started": []
+            }
+          ],
+          "not_submitted": 0,
+          "cleanup_confirmed": true
+        },
+        "lock_observation": {
+          "active_children_when_lock_reacquired": [],
+          "cancelled_children": [
+            "synthetic hung fact"
+          ],
+          "storage_events_at_read": [
+            {
+              "body": "synthetic acknowledged fact",
+              "returned_uuid": "uuid-fast"
+            }
+          ]
+        },
+        "forced_deadlines": [
+          {
+            "timeout_argument": 10.0
+          }
+        ],
+        "cancellation_requests": 1,
+        "cleanup_entered": false,
+        "active_at_return": [],
+        "submitted_batches": [
+          [
+            "synthetic hung fact",
+            "synthetic acknowledged fact"
+          ]
+        ],
+        "batch_errors": [
+          {
+            "type": "GraphBatchTimeout",
+            "message": "Graph batch deadline exceeded; 1/2 acknowledged; async cleanup confirmed"
+          }
+        ]
+      }
+    },
+    {
+      "revision": "current",
+      "case": "unknown-write",
+      "observation": {
+        "chunks": [
+          "synthetic unknown write",
+          "synthetic blocked fact"
+        ],
+        "returned_uuids": null,
+        "raised_type": "ValueError",
+        "storage_events": [
+          {
+            "body": "synthetic unknown write",
+            "write_observed_without_ack": true
+          }
+        ],
+        "calls": [
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-0",
+            "body": "synthetic unknown write",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          },
+          {
+            "graph_id": "synthetic-receipt-graph",
+            "name": "chunk-1",
+            "body": "synthetic blocked fact",
+            "attempt": 1,
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00",
+            "attempt_budget": null
+          }
+        ],
+        "ingest_stats": {
+          "total": 2,
+          "failed": 2,
+          "succeeded": 0,
+          "skip_ratio": 1.0,
+          "skip_reasons": {
+            "batch_timeout_unacknowledged": 2
+          },
+          "input_chunks": 2,
+          "skipped_cast_filter": 0,
+          "batch_timeouts": [
+            {
+              "batch_start_index": 0,
+              "input_count": 2,
+              "cleanup_confirmed": true,
+              "acknowledged": [],
+              "started_unacknowledged": [
+                0,
+                1
+              ],
+              "never_started": []
+            }
+          ],
+          "not_submitted": 0,
+          "cleanup_confirmed": true
+        },
+        "lock_observation": {
+          "active_children_when_lock_reacquired": [],
+          "cancelled_children": [
+            "synthetic blocked fact",
+            "synthetic unknown write"
+          ],
+          "storage_events_at_read": [
+            {
+              "body": "synthetic unknown write",
+              "write_observed_without_ack": true
+            }
+          ]
+        },
+        "forced_deadlines": [
+          {
+            "timeout_argument": 10.0
+          }
+        ],
+        "cancellation_requests": 1,
+        "cleanup_entered": false,
+        "active_at_return": [],
+        "submitted_batches": [
+          [
+            "synthetic unknown write",
+            "synthetic blocked fact"
+          ]
+        ],
+        "batch_errors": [
+          {
+            "type": "GraphBatchTimeout",
+            "message": "Graph batch deadline exceeded; 0/2 acknowledged; async cleanup confirmed"
+          }
+        ]
+      }
+    },
+    {
+      "revision": "current",
+      "case": "normal-success",
+      "observation": {
+        "returned_uuids": [
+          "uuid-a",
+          "uuid-b",
+          "uuid-c"
+        ],
+        "core_calls": [
+          {
+            "graph_id": "synthetic-success-graph",
+            "body": "fact-a",
+            "name": "chunk-0",
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00"
+          },
+          {
+            "graph_id": "synthetic-success-graph",
+            "body": "fact-b",
+            "name": "chunk-1",
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00"
+          },
+          {
+            "graph_id": "synthetic-success-graph",
+            "body": "fact-c",
+            "name": "chunk-0",
+            "source_type": "text",
+            "source_description": "mirofish-text",
+            "reference_time": "2026-09-16T09:00:00+00:00"
+          }
+        ],
+        "ingest_stats": {
+          "total": 3,
+          "failed": 0,
+          "succeeded": 3,
+          "skip_ratio": 0.0,
+          "skip_reasons": {},
+          "input_chunks": 3,
+          "skipped_cast_filter": 0
+        }
+      }
+    }
+  ],
+  "normal_success_inputs_and_receipts_equal": true,
+  "network_events": [],
+  "limits": [
+    "Per-call acknowledgement only; no durable resume or automatic replay.",
+    "Unknown synthetic storage observation is never accepted as an acknowledged UUID.",
+    "Cancellation of async tasks does not stop already running synchronous executor/provider operations.",
+    "No historical token savings or production speedup measured."
+  ]
+}

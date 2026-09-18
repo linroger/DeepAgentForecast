@@ -1,0 +1,375 @@
+{
+  "schema": "astra-reservation-verification/v1",
+  "slice": "ASTRA-04b5b1",
+  "verified_at": "2026-09-07T23:31:46.213320+00:00",
+  "status": "verified_offline",
+  "baseline_commit": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+  "scope": "Atomic estimated token allowance and physical API dispatch, settlement, restart and public status; parent ASTRA-04b5b remains partial.",
+  "gates": {
+    "backend": {
+      "passed": 1072,
+      "failures": 0,
+      "errors": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_fallback_model.py",
+        "backend/tests/test_graph_cost_containment.py",
+        "backend/tests/test_graph_optimizations.py",
+        "backend/tests/test_wave9_kg.py",
+        "backend/tests/test_report_chart_quality.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py",
+        "backend/tests/test_simulation_shared_usage.py",
+        "backend/tests/test_audit_fixes_runner.py",
+        "backend/tests/test_audit_fixes_runloop.py",
+        "backend/tests/test_simulation_runner_throttle.py",
+        "backend/tests/test_oasis_v1_provenance.py",
+        "backend/tests/test_decision_channel.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_budget_totals.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/tests/test_token_reservations.py",
+        "backend/tests/test_api_token_reservations.py",
+        "backend/tests/test_token_reservation_status.py",
+        "--tb=short",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-reservation-evidence-vblwv9wf/backend.xml"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "lint": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "backend/app/api/research.py",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/utils/api_budget.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/benchmark_api_reservations.py",
+        "backend/tests/test_api_token_reservations.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_token_reservation_status.py",
+        "backend/tests/test_token_reservations.py"
+      ],
+      "files": [
+        "backend/app/api/research.py",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/utils/api_budget.py",
+        "backend/app/utils/llm_client.py",
+        "backend/app/utils/oasis_usage.py",
+        "backend/app/utils/telemetry.py",
+        "backend/app/utils/usage_ledger.py",
+        "backend/scripts/benchmark_api_reservations.py",
+        "backend/tests/test_api_token_reservations.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_token_reservation_status.py",
+        "backend/tests/test_token_reservations.py"
+      ],
+      "returncode": 0,
+      "output": "All checks passed!\n",
+      "parse": "all_passed"
+    },
+    "diff_check": "passed"
+  },
+  "source_sha256": {
+    "backend/app/api/research.py": "fbf3907226e2aa145f4a3ba5fa50c5134047731e31043c656ee55d0d1d1fddf9",
+    "backend/app/services/pipeline_orchestrator.py": "c62b0c675c6564d7f94aa8df17905bc0ce6983f3583de71d162edaa51e4058c4",
+    "backend/app/utils/api_budget.py": "e1ad29975c37181bbaabe81a15a27d16aa98f1100344a76c9d27499872d20b37",
+    "backend/app/utils/llm_client.py": "da6c4779e22ed38d906a6c19450c57aa430b34f5973cc6550f111a2d663cb0bf",
+    "backend/app/utils/oasis_usage.py": "79acdb50d6a4dd46b18510377a77e3a9334d59aa5884c60ce58d3f7793507749",
+    "backend/app/utils/telemetry.py": "4a91c2a4ae3c667580dcc909c3f78fcefce32a1d23d186644b2c122fdbf15621",
+    "backend/app/utils/usage_ledger.py": "e56ae77fa30c36006cd6bc9a6e7500111e93ffbd1dc0a9d4ed9ed1300bc528e4",
+    "backend/scripts/benchmark_api_reservations.py": "26272d504fd62bfa7848d6de31384a3bb501c04a5b25788a9ca2f68eaed10da3",
+    "backend/tests/test_api_token_reservations.py": "19ba5dd3972ab21dbb573c7b6dc6b04f60f43ef899a9b8a2e73712804789de3f",
+    "backend/tests/test_budget_guard_boundary.py": "b5eb8661eb20bd6a425a44185cd74f2d2f04178d4c829ad4aa2e1d1f56adcbe5",
+    "backend/tests/test_llm_physical_attempts.py": "a633d13379cac64f36798fc1a540d5915757bd734bd8e3854b1d5e88f892673b",
+    "backend/tests/test_llm_sdk_attempt_boundary.py": "b503c63e1ab36dd673003a2b0f70958681f82b6e56b571c600f2c0c75eb28ef2",
+    "backend/tests/test_oasis_physical_usage.py": "5457fb554d92c19b0c8500ec46385f9e51d4729d4588aa030b8f27d5882f5e9f",
+    "backend/tests/test_token_reservation_status.py": "32c8ec3b3b8d972c8d8368774e348a3661fe6a75165d85fa25fe426dc3af0567",
+    "backend/tests/test_token_reservations.py": "3379bb941af070b03a7f8ce3e5b5f528caa6473956f024483cd2c8394c099e98"
+  },
+  "independent_review": {
+    "status": "clear",
+    "focused_new_tests_passed": 74,
+    "new_test_modules": {
+      "test_token_reservations.py": 30,
+      "test_api_token_reservations.py": 39,
+      "test_token_reservation_status.py": 5
+    },
+    "additional_probe": "Actual baseline5924dd4 ledger preserves extension, rejects fresh unreserved marker, retains hold after old terminal usage, then current precise reconciliation releases it.",
+    "resolved_findings": [
+      "SDK extra_body override",
+      "mutable caller request",
+      "hosted search and prediction",
+      "nontext and ambiguous request caps",
+      "configuration change during planning and after response",
+      "invalid cap storage poisoning",
+      "partial schema loss",
+      "held allowance omitted from public remaining budget"
+    ]
+  },
+  "comparison": {
+    "path": "docs/research/astra-reservation-comparison.json",
+    "sha256": "53917d0177a1dd355c69497dbadc7efe4ed25b3dc1097c611f652fef5750a85b",
+    "cases": {
+      "same_owner_concurrency": {
+        "before": {
+          "token_cap": 20,
+          "max_tokens": 10,
+          "mock_transport_requests": 2,
+          "peak_fixture_transports": 2,
+          "first_request": {
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null
+          },
+          "competing_request": {
+            "outcome": "success",
+            "content_matches_fixture": true
+          },
+          "while_first_request_pending": {
+            "recorded_calls": 0,
+            "recorded_tokens": 0,
+            "unknown_operations": 0,
+            "in_flight_operations": 1,
+            "distinct_owner_attempts": 1,
+            "token_reservation_state": {
+              "schema": "token-reservation-state/v1",
+              "coverage": "recorded_llm_api_attempts",
+              "token_limit": null,
+              "active_operations": 0,
+              "reserved_tokens": 0,
+              "estimated": true
+            }
+          },
+          "recorded_calls": 2,
+          "recorded_tokens": 30,
+          "unknown_operations": 0,
+          "in_flight_operations": 0,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": null,
+            "active_operations": 0,
+            "reserved_tokens": 0,
+            "estimated": true
+          }
+        },
+        "after": {
+          "token_cap": 20,
+          "max_tokens": 10,
+          "mock_transport_requests": 1,
+          "peak_fixture_transports": 1,
+          "first_request": {
+            "outcome": "success",
+            "content_matches_fixture": true
+          },
+          "competing_request": {
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null
+          },
+          "while_first_request_pending": {
+            "recorded_calls": 0,
+            "recorded_tokens": 0,
+            "unknown_operations": 0,
+            "in_flight_operations": 1,
+            "distinct_owner_attempts": 1,
+            "token_reservation_state": {
+              "schema": "token-reservation-state/v1",
+              "coverage": "recorded_llm_api_attempts",
+              "token_limit": 20,
+              "active_operations": 1,
+              "reserved_tokens": 14,
+              "estimated": true
+            }
+          },
+          "recorded_calls": 1,
+          "recorded_tokens": 15,
+          "unknown_operations": 0,
+          "in_flight_operations": 0,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": 20,
+            "active_operations": 0,
+            "reserved_tokens": 0,
+            "estimated": true
+          }
+        }
+      },
+      "timeout_retries": {
+        "before": {
+          "token_cap": 28,
+          "max_tokens": 10,
+          "mock_transport_requests": 3,
+          "outcome": "APITimeoutError",
+          "content_matches_fixture": null,
+          "recorded_calls": 3,
+          "recorded_tokens": 0,
+          "unknown_operations": 3,
+          "in_flight_operations": 0,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": null,
+            "active_operations": 0,
+            "reserved_tokens": 0,
+            "estimated": true
+          }
+        },
+        "after": {
+          "token_cap": 28,
+          "max_tokens": 10,
+          "mock_transport_requests": 2,
+          "outcome": "BudgetExceeded",
+          "content_matches_fixture": null,
+          "recorded_calls": 2,
+          "recorded_tokens": 0,
+          "unknown_operations": 2,
+          "in_flight_operations": 0,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": 28,
+            "active_operations": 2,
+            "reserved_tokens": 28,
+            "estimated": true
+          }
+        }
+      },
+      "successful_request_overhead": {
+        "before": {
+          "token_cap": 1000000,
+          "max_tokens": 10,
+          "mock_transport_requests": 33,
+          "samples": 30,
+          "untimed_warmup_requests": 3,
+          "median_local_elapsed_ms": 2.1434,
+          "all_content_matches_fixture": true,
+          "recorded_calls": 33,
+          "recorded_tokens": 495,
+          "unknown_operations": 0,
+          "in_flight_operations": 0,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": null,
+            "active_operations": 0,
+            "reserved_tokens": 0,
+            "estimated": true
+          }
+        },
+        "after": {
+          "token_cap": 1000000,
+          "max_tokens": 10,
+          "mock_transport_requests": 33,
+          "samples": 30,
+          "untimed_warmup_requests": 3,
+          "median_local_elapsed_ms": 2.2144,
+          "all_content_matches_fixture": true,
+          "recorded_calls": 33,
+          "recorded_tokens": 495,
+          "unknown_operations": 0,
+          "in_flight_operations": 0,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": 1000000,
+            "active_operations": 0,
+            "reserved_tokens": 0,
+            "estimated": true
+          }
+        }
+      }
+    }
+  },
+  "historical_evidence": {
+    "path": "docs/research/astra-reservation-run-evidence.json",
+    "sha256": "60c9f378cfc49cfc8ff391a332893c6e71e4b96fee63a62293e9ff98308a4b12",
+    "artifacts_unchanged": 77,
+    "pipeline_states_unchanged": 32,
+    "bounded_logs_unchanged": 12,
+    "new_logs_reparsed": 0
+  },
+  "acceptance": {
+    "concurrent_calls": "Two same-owner API sends at baseline become one admitted send and one predispatch BudgetExceeded; actual fixture total30 becomes15 under cap20.",
+    "uncertain_retries": "Three baseline timeouts become two sends under cap28; both usages remain unknown and28 planned tokens remain held, without fabricated consumption.",
+    "atomicity": "Separate-process admission, process exit, failed delta write rollback and exact replay are covered by permanent ledger scenarios.",
+    "producer_boundaries": "Actual shared SDK plain/native tools, native sync/async retries, structured parse errors, missing usage, request mutation and captured post-response cap are covered.",
+    "projection": "GET status after reset is read-only, keeps recorded spend, subtracts outstanding allowance and displays pinned configuration mismatches. Both saved projection views use cumulative reservation state."
+  },
+  "raw_evidence_directory": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-reservation-evidence-vblwv9wf",
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE"
+  },
+  "limits": [
+    "This slice covers token-enabled, explicitly bound durable shared LLMClient and factory-instrumented nonstreaming native CAMEL API sends. USD-only checks, CLI requests and pre-protocol writers do not obtain token reservations.",
+    "Input allowance is a versioned UTF-8 JSON byte estimate, not a tokenizer bound. Actual reported usage is never clipped. No hard provider-token or invoice ceiling is claimed.",
+    "Caps default to zero. Native production requests currently omit an output cap and will be rejected before dispatch when token reservations are enabled. No default output cap is injected; an operator-facing native output-cap configuration path remains a separately tracked follow-up.",
+    "A first positive reservation pins the run token limit, including on insufficient allowance. Later disabled or different-cap markers are rejected; restoring the pinned configuration resolves this policy mismatch without clearing storage failures.",
+    "Unknown, missing and estimated outcomes hold only the planned amount not already present in recorded high-water usage. A zero remaining hold can still have uncertain usage. Holds have no automatic expiry.",
+    "The mixed-writer database trigger protects older code that writes llm_api_attempt dispatch markers. It cannot stop code predating that protocol before an unobserved call. Older terminal observations retain conservative holds until current exact reconciliation.",
+    "Existing completed estimated or opaque legacy baselines remain recorded history with incomplete coverage. Activation rejects unreserved in-flight, unknown or accounting-error API work; it does not reconstruct missing historical physical usage.",
+    "Partial extension loss fails closed. All extension objects absent is treated as old v1 storage; enabled reservations require parent initialization. This is not a tamper-proof detector for deletion of the entire extension.",
+    "Late known usage may release a hold while an inherited accounting_error status still requires the existing completed-known recovery transition. Accounting policy remains conservative.",
+    "Cumulative token totals and outstanding-hold queries still scale with stored history; no constant-time or production throughput claim. Local comparative success overhead and dispatch counts are synthetic, with no network/provider calls.",
+    "Saved evidence contains no newer production baseline and cannot establish historical enabled caps, peak physical overlap or overshoot. No deployment, services, credentials or saved pipeline mutation occurred."
+  ]
+}

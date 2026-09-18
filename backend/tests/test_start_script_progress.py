@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 from pathlib import Path
 import shlex
@@ -6,6 +7,9 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,7 +82,7 @@ def _startup_project(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         set -u
         url="${!#}"
         case "$url" in
-          *:5001/health)
+          *:"${FAKE_BACKEND_PORT:-5001}"/health)
             body="${FAKE_BACKEND_BODY:-}"
             if [ -n "${FAKE_HEALTH_FAIL_MARKER:-}" ] \
                 && [ -f "$FAKE_HEALTH_FAIL_MARKER" ]; then
@@ -87,6 +91,17 @@ def _startup_project(tmp_path: Path) -> tuple[Path, dict[str, str]]:
             ;;
           *:3000/)
             body="${FAKE_FRONTEND_BODY:-}"
+            ;;
+          *:3000/health)
+            body="${FAKE_FRONTEND_HEALTH_BODY:-}"
+            ;;
+          *:3000/__drf/dev-routing)
+            if [ "${FAKE_ROUTING_BODY+x}" = "x" ]; then
+              body="$FAKE_ROUTING_BODY"
+            else
+              selected="${FAKE_BACKEND_PORT:-5001}"
+              body='{"schema":"drf-dev-routing/v1","service":"DeepResearchForecast Frontend","api_target":"http://127.0.0.1:'"$selected"'","health_target":"http://127.0.0.1:'"$selected"'"}'
+            fi
             ;;
           *)
             exit 22
@@ -120,11 +135,14 @@ def _startup_project(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     )
 
     env = os.environ.copy()
+    env.pop("FLASK_PORT", None)
+    env.pop("DRF_LAUNCHER_BACKEND_PORT", None)
     env.update(
         {
             "PATH": f"{root / 'test-bin'}:{env['PATH']}",
             "FAKE_BACKEND_BODY": EXPECTED_BACKEND_BODY,
             "FAKE_FRONTEND_BODY": EXPECTED_FRONTEND_BODY,
+            "FAKE_FRONTEND_HEALTH_BODY": EXPECTED_BACKEND_BODY,
             "START_MONITOR_INTERVAL_SECONDS": "0.05",
         }
     )
@@ -227,6 +245,137 @@ def test_watcher_ignores_completed_history_then_discovers_new_pipeline(tmp_path)
 def test_vite_dev_server_uses_strict_port():
     config = (ROOT / "frontend" / "vite.config.js").read_text(encoding="utf-8")
     assert "strictPort: true" in config
+
+
+@pytest.mark.parametrize("port", [None, "18745"])
+@pytest.mark.parametrize("no_open", [False, True])
+def test_start_opens_root_once_only_after_ui_and_api_ready(tmp_path, port, no_open):
+    root, env = _startup_project(tmp_path)
+    browser_log = root / "browser-opens.txt"
+    env["FAKE_BROWSER_LOG"] = str(browser_log)
+    for name in ("open", "xdg-open"):
+        _write_executable(
+            root / "test-bin" / name,
+            '#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "$FAKE_BROWSER_LOG"\n',
+        )
+    if port is not None:
+        env["FLASK_PORT"] = port
+        env["FAKE_BACKEND_PORT"] = port
+
+    args = ["--detach"] + (["--no-open"] if no_open else [])
+    result = _run_start(root, env, *args)
+
+    assert result.returncode == 0, _output(result)
+    assert f"http://localhost:{port or '5001'}/health" in result.stdout
+    if no_open:
+        assert not browser_log.exists()
+    else:
+        assert browser_log.read_text().splitlines() == ["http://localhost:3000/"]
+
+
+def test_start_rejects_ui_shell_with_wrong_proxy_backend(tmp_path):
+    root, env = _startup_project(tmp_path)
+    env["FAKE_FRONTEND_HEALTH_BODY"] = '{"status":"ok","service":"unrelated"}'
+    env["FAKE_LISTEN_3000_PID"] = "4343"
+
+    result = _run_start(root, env, "--detach", "--no-open")
+
+    assert result.returncode == 1
+    assert "Frontend port :3000 is occupied by a wrong or unhealthy responder" in _output(result)
+    assert not (root / ".frontend.pid").exists()
+
+
+@pytest.mark.parametrize("wrong_route", ["api_target", "health_target", "both"])
+def test_start_rejects_same_product_proxy_to_another_backend(tmp_path, wrong_route):
+    root, env = _startup_project(tmp_path)
+    env["FLASK_PORT"] = env["FAKE_BACKEND_PORT"] = "18745"
+    env["FAKE_LISTEN_3000_PID"] = "4343"
+    routing = {
+        "schema": "drf-dev-routing/v1",
+        "service": "DeepResearchForecast Frontend",
+        "api_target": "http://127.0.0.1:18745",
+        "health_target": "http://127.0.0.1:18745",
+    }
+    for route in ("api_target", "health_target"):
+        if wrong_route in (route, "both"):
+            routing[route] = "http://127.0.0.1:5001"
+    env["FAKE_ROUTING_BODY"] = json.dumps(routing)
+    # Both health endpoints intentionally retain the correct product signature.
+    result = _run_start(root, env, "--detach", "--no-open")
+
+    assert result.returncode == 1
+    assert "Frontend port :3000 is occupied by a wrong or unhealthy responder" in _output(result)
+    assert not (root / ".frontend.pid").exists()
+
+
+@pytest.mark.parametrize("body", ["", "not-json", "null", "[]", "{}", '{"schema":"other"}',
+    '{"schema":"drf-dev-routing/v1","service":"DeepResearchForecast Frontend","api_target":null,"health_target":"http://127.0.0.1:5001"}'])
+def test_start_rejects_absent_or_malformed_proxy_identity(tmp_path, body):
+    root, env = _startup_project(tmp_path)
+    env["FAKE_LISTEN_3000_PID"] = "4343"
+    env["FAKE_ROUTING_BODY"] = body
+
+    result = _run_start(root, env, "--detach", "--no-open")
+
+    assert result.returncode == 1
+    assert "Frontend port :3000 is occupied by a wrong or unhealthy responder" in _output(result)
+    assert not (root / ".frontend.pid").exists()
+
+
+@pytest.mark.parametrize("port", ["0", "65536", "-1", "5001.5", " 5001", "invalid", "99999999999999999999999999"])
+def test_start_rejects_invalid_backend_port_before_starting_services(tmp_path, port):
+    root, env = _startup_project(tmp_path)
+    env["FLASK_PORT"] = port
+
+    result = _run_start(root, env, "--detach", "--no-open")
+
+    assert result.returncode == 2
+    assert "FLASK_PORT must be an integer from 1 through 65535" in _output(result)
+    assert not (root / ".backend.pid").exists()
+    assert not (root / ".frontend.pid").exists()
+
+
+@pytest.mark.parametrize("port", ["5001", "18745"])
+def test_both_launched_services_receive_the_resolved_port(tmp_path, port):
+    root, env = _startup_project(tmp_path)
+    capture = root / "service-env.txt"
+    env["FAKE_SERVICE_ENV"] = str(capture)
+    # Run the actual launch functions with an inert nohup replacement. No app
+    # server or socket is created, and no inherited provider configuration is read.
+    _write_executable(
+        root / "test-bin" / "nohup",
+        '#!/usr/bin/env bash\nprintf "%s|%s|%s\\n" "$PWD" "$FLASK_PORT" "$DRF_LAUNCHER_BACKEND_PORT" >> "$FAKE_SERVICE_ENV"\n',
+    )
+    script = (ROOT / "scripts" / "start.sh").read_text()
+    functions = []
+    for name in ("_start_backend", "_start_frontend"):
+        start = script.index(f"{name}() {{")
+        end = script.index("\n}", start) + 2
+        functions.append(script[start:end])
+    variables = {
+        "BACKEND_PORT": port,
+        "FRONTEND_PORT": "3000",
+        "BACKEND_DIR": str(root / "backend"),
+        "FRONTEND_DIR": str(root / "frontend"),
+        "BACKEND_LOG": str(root / "logs" / "backend.log"),
+        "FRONTEND_LOG": str(root / "logs" / "frontend.log"),
+        "BACKEND_PID_FILE": str(root / ".backend.pid"),
+        "FRONTEND_PID_FILE": str(root / ".frontend.pid"),
+        "PYTHON_BIN": str(root / "backend" / ".venv" / "bin" / "python"),
+    }
+    lines = [f"{key}={shlex.quote(value)}" for key, value in variables.items()]
+    lines += ["_require_command() { return 0; }", *functions, "_start_backend", "_start_frontend"]
+    result = subprocess.run(["bash", "-c", "\n".join(lines)], env=env, cwd=root, text=True, capture_output=True, check=False)
+    assert result.returncode == 0, _output(result)
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if capture.exists() and len(capture.read_text().splitlines()) == 2:
+            break
+        time.sleep(0.01)
+    assert sorted(capture.read_text().splitlines()) == sorted([
+        f"{root / 'backend'}|{port}|{port}",
+        f"{root / 'frontend'}|{port}|{port}",
+    ])
 
 
 def test_start_rejects_wrong_backend_health_on_an_occupied_port(tmp_path):

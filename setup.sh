@@ -584,14 +584,21 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   #     names (`use: market_tools:...`, `use: search_tools:...`, `use: cached_fetch:...`).
   #   - research_budget.py is imported by search_tools/cached_fetch and must be
   #     colocated with them for the shared LOOP-007 SQLite control plane.
+  #   - research_compaction.py archives evidence before summarization removes it;
+  #     middleware and synthesis consumers must import the same receipt contract.
   #     deerflow_research.py runs as `python <deer-flow>/deerflow_research.py`, so
   #     sys.path[0] is the deer-flow dir and the harness reflection resolver
   #     (resolve_variable -> import_module) imports these by bare name — they MUST
   #     sit next to config.yaml in deer-flow/ or web_search/web_fetch/prediction_market
-  #     tools fail to load. Deploy all four so the wiring is reproducible.
-  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py runtime_skill_sync.py; do
+  #     tools fail to load. Deploy the shared helpers with these tool modules.
+  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py research_compaction.py runtime_skill_sync.py; do
     if [ -f "$BRIDGE_DIR/$_tool_mod" ]; then
       cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/$_tool_mod"
+      if [ "$_tool_mod" = "research_compaction.py" ]; then
+        # Native Gateway runs from backend/ with PYTHONPATH=.; the bridge runs
+        # from the repository root. Both entrypoints need the same helper.
+        cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/backend/$_tool_mod"
+      fi
       if [ "$_tool_mod" = "runtime_skill_sync.py" ]; then
         ok "Installed runtime_skill_sync.py (runtime bundle verifier)"
       else

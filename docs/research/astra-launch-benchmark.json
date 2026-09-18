@@ -1,0 +1,74 @@
+{
+  "schema_version": "astra-launch-benchmark/v1",
+  "documented_at_utc": "2026-09-07T16:59:35.576139+00:00",
+  "measurement_context": "Observed once during the ASTRA-03 implementation iteration; this artifact preserves that run and does not claim a new measurement.",
+  "source": {
+    "path": "backend/app/services/launch_intents.py",
+    "sha256": "1962e68c69df3c8b0c5d981fa27e1dcfd51561e14b0dbafb3711f71399d247e4"
+  },
+  "environment": {
+    "python_version": "3.12.6",
+    "platform": "Darwin",
+    "runtime_command": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+    "working_directory": "backend"
+  },
+  "fixture": {
+    "fresh_intents": 40,
+    "replay_lookups": 100,
+    "concurrency": 1,
+    "initial_state_json_utf8_bytes_per_row": 202,
+    "canonical_request_json_utf8_bytes": 140,
+    "intent_key_characters": 33,
+    "snapshot": {
+      "pipeline_id": "pipe_bench_000",
+      "prompt": "Synthetic offline launch fixture.",
+      "mode": "full",
+      "task_id": null,
+      "options": {
+        "safety_policy_v1": {
+          "version": "safety-policy/v1",
+          "origin": "admission"
+        }
+      }
+    },
+    "canonical_request": {
+      "prompt": "Synthetic offline launch fixture.",
+      "mode": "full",
+      "depth": null,
+      "max_rounds": null,
+      "model": null,
+      "language": null,
+      "project_name": null
+    },
+    "storage": "A fresh system-local tempfile.TemporaryDirectory with prefix astra-launch-benchmark-; LaunchIntentStore creates launch_intents.sqlite3 inside it. Default temp location and filesystem are assumed, not normalized or characterized. The directory was removed automatically after measurement.",
+    "database_bytes": null,
+    "database_bytes_note": "Final SQLite database size was not sampled; snapshot/request payload sizes above are computed from the exact fixture serialization."
+  },
+  "timing_definition": {
+    "clock": "time.perf_counter, elapsed seconds multiplied by 1000",
+    "admission": "Each sample measures reserve(key, request, snapshot), then transition(key, dispatching), then transition(key, dispatched): three separate durable SQLite commits including connection setup/teardown. The first sample also initializes the database schema.",
+    "lookup": "Each sample measures one store.lookup(key, request), including connection setup/teardown, key/request hashing and snapshot decoding. Queries cycle over the 40 admitted keys.",
+    "median": "statistics.median over all samples in the group",
+    "p95": "sorted(lookup_ms)[94], the 95th ordered sample out of 100; no interpolation",
+    "warmup": "No separate warmup. Lookup samples run after the 40 admissions, so they exercise an already-created database and may benefit from OS cache.",
+    "rounding": "Reported milliseconds are rounded to three decimal places."
+  },
+  "observed": {
+    "admission_three_commits_median_ms": 1.124,
+    "lookup_median_ms": 0.097,
+    "lookup_p95_ms": 0.123
+  },
+  "limits": [
+    "Synthetic local-store measurement only; excludes HTTP, pipeline_state.json persistence, TaskManager work, thread dispatch, provider calls and complete pipeline execution.",
+    "Measures small fixed-size records at one local directory and one concurrent caller; does not establish large-ledger, concurrent-request, remote-filesystem or cold-cache latency.",
+    "No before/after production throughput measurement was performed; these figures are not a production speedup claim.",
+    "Per-sample raw timings and final database size were not retained; the exact procedure and observed aggregates are preserved here.",
+    "Timing varies with machine load and filesystem behavior; no performance threshold is asserted."
+  ],
+  "reproduction": {
+    "working_directory": "backend",
+    "python_executable": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+    "instruction": "Execute python_source with the indicated Python executable from backend/. The snippet loads only the source module, uses a temporary local database, prints aggregate timing JSON, and calls no providers.",
+    "python_source": "import importlib.util\nimport json\nimport statistics\nimport tempfile\nimport time\nfrom pathlib import Path\npath = Path('app/services/launch_intents.py')\nspec = importlib.util.spec_from_file_location('launch_admission_benchmark', path)\nmodule = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(module)\nwith tempfile.TemporaryDirectory(prefix='astra-launch-benchmark-') as root:\n    store = module.LaunchIntentStore(root)\n    snapshot = {'pipeline_id': 'pipe_bench_000', 'prompt': 'Synthetic offline launch fixture.', 'mode': 'full', 'task_id': None, 'options': {'safety_policy_v1': {'version': 'safety-policy/v1', 'origin': 'admission'}}}\n    request = {'prompt': snapshot['prompt'], 'mode': 'full', 'depth': None, 'max_rounds': None, 'model': None, 'language': None, 'project_name': None}\n    admitted_ms = []\n    lookup_ms = []\n    for i in range(40):\n        key = f'benchmark-intent-{i:016d}'\n        snapshot['pipeline_id'] = f'pipe_bench_{i:03d}'\n        start = time.perf_counter()\n        store.reserve(key, request, snapshot)\n        store.transition(key, 'dispatching')\n        store.transition(key, 'dispatched')\n        admitted_ms.append((time.perf_counter() - start) * 1000)\n    for i in range(100):\n        key = f'benchmark-intent-{i % 40:016d}'\n        start = time.perf_counter()\n        store.lookup(key, request)\n        lookup_ms.append((time.perf_counter() - start) * 1000)\n    print(json.dumps({'scope': 'Synthetic local SQLite admission plus two dispatch-state commits; excludes pipeline files, API, providers', 'new_intents': 40, 'lookups': 100, 'admission_three_commits_median_ms': round(statistics.median(admitted_ms), 3), 'lookup_median_ms': round(statistics.median(lookup_ms), 3), 'lookup_p95_ms': round(sorted(lookup_ms)[94], 3)}, indent=2))\n"
+  }
+}

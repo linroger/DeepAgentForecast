@@ -1,0 +1,227 @@
+{
+  "schema": "astra-ontology-reuse-historical-metadata/v1",
+  "validated_at": "2026-09-13T12:36:45.018806+00:00",
+  "scope": "Four previously selected recent or expensive historical pipeline records; this is a bounded current metadata inspection, not event reconstruction.",
+  "summary": {
+    "pipelines_inspected": 4,
+    "manifest_ontology_hash_and_size_match": 4,
+    "project_ontology_equals_handoff": 4,
+    "explicit_stage_reused_fields_present": 0,
+    "matching_current_reuse_completion_labels": 3,
+    "manifest_ontology_input_binding_fields_present": 0
+  },
+  "pipelines": [
+    {
+      "pipeline_id": "pipe_f23527f7d903",
+      "project_id": "proj_c8a168f61678",
+      "created_at": "2026-07-09T08:12:33.491844+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/pipeline_state.json",
+        "exists": true,
+        "sha256": "d35ebcbe44d251b120b9d1d23546efca5935bf11d23782e2bc5f8aaa6fac1bbc",
+        "bytes": 10262,
+        "mtime_utc": "2026-07-09T22:10:12.244869+00:00"
+      },
+      "ontology_stage_status": "completed",
+      "explicit_stage_reused_field_present": false,
+      "completion_message_matches_current_reuse_label": false,
+      "ontology_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/handoff/ontology.json",
+        "exists": true,
+        "sha256": "dceecd82d47ace354e6de46c8f0ce33de67c91faa730192203e4bf4977be7af9",
+        "bytes": 26220,
+        "mtime_utc": "2026-07-09T10:51:10.641133+00:00"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_f23527f7d903/handoff/manifest.json",
+        "exists": true,
+        "sha256": "e124810d18f500c454c588c2c4b1d436ea775823fbda2f0ade3b47bb8931767e",
+        "bytes": 2990,
+        "mtime_utc": "2026-07-09T19:43:22.679014+00:00"
+      },
+      "manifest_ontology_entry": {
+        "sha256": "dceecd82d47ace354e6de46c8f0ce33de67c91faa730192203e4bf4977be7af9",
+        "bytes": 26220,
+        "produced_by_stage": "ontology",
+        "produced_at": "2026-07-09T10:51:10.641646+00:00",
+        "schema_ok": true
+      },
+      "manifest_recorded_ontology_path_matches": true,
+      "manifest_ontology_sha256_matches": true,
+      "manifest_ontology_size_matches": true,
+      "project_source": {
+        "path": "backend/uploads/projects/proj_c8a168f61678/project.json",
+        "exists": true,
+        "sha256": "98b45e2f79ab4e2fa2b1ade73c20564b1070ea4b8eaad7a29a39019c5642955a",
+        "bytes": 29757,
+        "mtime_utc": "2026-07-09T19:28:41.255060+00:00"
+      },
+      "project_has_ontology": true,
+      "project_ontology_equals_handoff": true,
+      "handoff_ontology_canonical_sha256": "dbec42a1edfa1d6dafe9c92bb5a0863f7f703f7f45012d7d59b8f0b0ac04a9ad",
+      "project_ontology_canonical_sha256": "dbec42a1edfa1d6dafe9c92bb5a0863f7f703f7f45012d7d59b8f0b0ac04a9ad",
+      "manifest_ontology_input_binding_fields_present": []
+    },
+    {
+      "pipeline_id": "pipe_91aaf91f6392",
+      "project_id": "proj_0b164d997b9c",
+      "created_at": "2026-07-12T14:18:53.207724+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/pipeline_state.json",
+        "exists": true,
+        "sha256": "cc4544cde9f9a5b0210187230cefdf2b988dfc692b9bd64b862e7884d5117436",
+        "bytes": 20869,
+        "mtime_utc": "2026-07-12T19:47:22.495927+00:00"
+      },
+      "ontology_stage_status": "completed",
+      "explicit_stage_reused_field_present": false,
+      "completion_message_matches_current_reuse_label": true,
+      "ontology_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/handoff/ontology.json",
+        "exists": true,
+        "sha256": "208035a0b9d1be89342fd55a1bba8c51cf56e014083861aa190a99a476ba7bc0",
+        "bytes": 20994,
+        "mtime_utc": "2026-07-12T15:51:39.423949+00:00"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_91aaf91f6392/handoff/manifest.json",
+        "exists": true,
+        "sha256": "d2f18fbce03d3c37cc156181261a312425a3c4a5b60e14e2d26c22fb17be43ac",
+        "bytes": 16143,
+        "mtime_utc": "2026-07-12T19:47:22.463293+00:00"
+      },
+      "manifest_ontology_entry": {
+        "sha256": "208035a0b9d1be89342fd55a1bba8c51cf56e014083861aa190a99a476ba7bc0",
+        "bytes": 20994,
+        "produced_by_stage": "ontology",
+        "produced_at": "2026-07-12T19:37:14.634457+00:00",
+        "schema_ok": true
+      },
+      "manifest_recorded_ontology_path_matches": true,
+      "manifest_ontology_sha256_matches": true,
+      "manifest_ontology_size_matches": true,
+      "project_source": {
+        "path": "backend/uploads/projects/proj_0b164d997b9c/project.json",
+        "exists": true,
+        "sha256": "88bb0316e71a8c38eae5ae8e9c5ddc0044971819803e9687451148757dd05168",
+        "bytes": 24765,
+        "mtime_utc": "2026-07-12T16:19:53.543497+00:00"
+      },
+      "project_has_ontology": true,
+      "project_ontology_equals_handoff": true,
+      "handoff_ontology_canonical_sha256": "8a7aa7ba7ea03c5bfdc6852882d29b6ef3d6f10b8f9c629839ed8d5a87831253",
+      "project_ontology_canonical_sha256": "8a7aa7ba7ea03c5bfdc6852882d29b6ef3d6f10b8f9c629839ed8d5a87831253",
+      "manifest_ontology_input_binding_fields_present": []
+    },
+    {
+      "pipeline_id": "pipe_bef6879b2e94",
+      "project_id": "proj_3235a5c57a4b",
+      "created_at": "2026-07-14T21:20:23.971987+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/pipeline_state.json",
+        "exists": true,
+        "sha256": "23b04b0b065ef9cd1639041ed0d87a3615a95f06dc242466a5ebe7522add1e22",
+        "bytes": 22537,
+        "mtime_utc": "2026-07-15T05:30:26.468401+00:00"
+      },
+      "ontology_stage_status": "completed",
+      "explicit_stage_reused_field_present": false,
+      "completion_message_matches_current_reuse_label": true,
+      "ontology_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/handoff/ontology.json",
+        "exists": true,
+        "sha256": "d1fdf0f8675d18adade88861ab223dd7971ca3fc523d769dd091a30d8c1282cc",
+        "bytes": 25522,
+        "mtime_utc": "2026-07-14T22:59:50.923659+00:00"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_bef6879b2e94/handoff/manifest.json",
+        "exists": true,
+        "sha256": "4eaf9feb428957984ec2c1d7865f9fce5f17ae433b1c13c76aab3449313c6c92",
+        "bytes": 11736,
+        "mtime_utc": "2026-07-15T05:30:26.415193+00:00"
+      },
+      "manifest_ontology_entry": {
+        "sha256": "d1fdf0f8675d18adade88861ab223dd7971ca3fc523d769dd091a30d8c1282cc",
+        "bytes": 25522,
+        "produced_by_stage": "ontology",
+        "produced_at": "2026-07-15T05:05:46.481317+00:00",
+        "schema_ok": true
+      },
+      "manifest_recorded_ontology_path_matches": true,
+      "manifest_ontology_sha256_matches": true,
+      "manifest_ontology_size_matches": true,
+      "project_source": {
+        "path": "backend/uploads/projects/proj_3235a5c57a4b/project.json",
+        "exists": true,
+        "sha256": "8d9f0972433fde4c2d28c7333675908f5bdc4b7e721ed7caa92452dfaae3acd0",
+        "bytes": 30184,
+        "mtime_utc": "2026-07-15T00:39:42.761497+00:00"
+      },
+      "project_has_ontology": true,
+      "project_ontology_equals_handoff": true,
+      "handoff_ontology_canonical_sha256": "7477032f5d314200046f2c7478187cffa365b70b00d380fc6e7f5c2ac3d8ad0c",
+      "project_ontology_canonical_sha256": "7477032f5d314200046f2c7478187cffa365b70b00d380fc6e7f5c2ac3d8ad0c",
+      "manifest_ontology_input_binding_fields_present": []
+    },
+    {
+      "pipeline_id": "pipe_0e1b84d2682a",
+      "project_id": "proj_af536207868e",
+      "created_at": "2026-07-15T14:15:27.286816+00:00",
+      "state_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/pipeline_state.json",
+        "exists": true,
+        "sha256": "f2ba0ca5dadcb28264c29ef948d35f04453498530bc1819d4e0a5532ab8684c1",
+        "bytes": 24201,
+        "mtime_utc": "2026-07-15T21:32:43.078934+00:00"
+      },
+      "ontology_stage_status": "completed",
+      "explicit_stage_reused_field_present": false,
+      "completion_message_matches_current_reuse_label": true,
+      "ontology_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/handoff/ontology.json",
+        "exists": true,
+        "sha256": "2de2ff978b7489feb8f41fbbb3a7bba9b133985760f65099cfb57c147f9cdb28",
+        "bytes": 21988,
+        "mtime_utc": "2026-07-15T16:10:44.023507+00:00"
+      },
+      "manifest_source": {
+        "path": "backend/uploads/pipelines/pipe_0e1b84d2682a/handoff/manifest.json",
+        "exists": true,
+        "sha256": "d9f75efccf3b1e5d2578bc8aa7927d5313a6f3911e065d8dfd5314bef9e5926a",
+        "bytes": 13397,
+        "mtime_utc": "2026-07-15T21:32:43.069029+00:00"
+      },
+      "manifest_ontology_entry": {
+        "sha256": "2de2ff978b7489feb8f41fbbb3a7bba9b133985760f65099cfb57c147f9cdb28",
+        "bytes": 21988,
+        "produced_by_stage": "ontology",
+        "produced_at": "2026-07-15T21:00:50.066937+00:00",
+        "schema_ok": true
+      },
+      "manifest_recorded_ontology_path_matches": true,
+      "manifest_ontology_sha256_matches": true,
+      "manifest_ontology_size_matches": true,
+      "project_source": {
+        "path": "backend/uploads/projects/proj_af536207868e/project.json",
+        "exists": true,
+        "sha256": "800494a542e579453464ab8a657985adf9e996630cdbbffdc739fb3738e9333b",
+        "bytes": 26816,
+        "mtime_utc": "2026-07-15T17:53:39.380613+00:00"
+      },
+      "project_has_ontology": true,
+      "project_ontology_equals_handoff": true,
+      "handoff_ontology_canonical_sha256": "310c085cae38a6a565e043d8b10231f89d559ba6a02f2ff622e14084efe903b3",
+      "project_ontology_canonical_sha256": "310c085cae38a6a565e043d8b10231f89d559ba6a02f2ff622e14084efe903b3",
+      "manifest_ontology_input_binding_fields_present": []
+    }
+  ],
+  "limits": [
+    "Current matching artifact hashes and project payloads do not prove that historical reuse verified integrity or input freshness before completing a stage.",
+    "A saved completion label is not a durable record of each prior reuse decision, validation outcome, or ontology regeneration.",
+    "No before-and-after artifact history or research-to-ontology input binding is established by this inspection; it neither proves nor rules out earlier stale or tampered reuse.",
+    "Existing stage endpoint spans can include restart downtime and restamping, and cannot measure present ontology processing performance.",
+    "Only four selected records are inspected; no assertion covers all historical projects or unselected logs.",
+    "No raw ontology, project names, research text, prompts, report content, provider payloads or credentials are exported."
+  ]
+}

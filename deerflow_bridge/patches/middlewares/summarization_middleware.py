@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import uuid
 from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Protocol, override, runtime_checkable
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import SummarizationMiddleware
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage, ToolMessage, get_buffer_string
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage, ToolMessage, get_buffer_string, messages_to_dict
 from langgraph.config import get_config
 from langgraph.constants import TAG_NOSTREAM
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
@@ -18,6 +20,7 @@ from langgraph.runtime import Runtime
 
 from deerflow.agents.middlewares.dynamic_context_middleware import is_dynamic_context_reminder
 from deerflow.agents.middlewares.tool_call_metadata import clone_ai_message_with_tool_calls
+from research_compaction import ResearchCompactionError, record_compaction, stop_after_compaction_failure
 
 logger = logging.getLogger(__name__)
 
@@ -206,11 +209,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         ``RunnableBinding`` to other coroutines during ``await`` and break parent logic
         that inspects the raw model (``profile`` / ``_get_ls_params``).
         """
-        if not messages_to_summarize:
-            return "No previous conversation history."
-        prompt = self._build_summary_prompt(messages_to_summarize)
-        if prompt is None:
-            return "Previous conversation was too long to summarize."
+        prompt = self._required_summary_prompt(messages_to_summarize)
         try:
             from deerflow.agents.middlewares.model_concurrency_middleware import (
                 provider_model_lease,
@@ -221,17 +220,17 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                     prompt,
                     config={"metadata": {"lc_source": "summarization"}},
                 )
-            return response.text.strip()
-        except Exception as e:
-            return f"Error generating summary: {e!s}"
+        except ResearchCompactionError:
+            raise
+        except Exception:
+            # Provider diagnostics can contain request details. They are never
+            # valid replacement evidence and must not enter a summary message.
+            raise ResearchCompactionError("summary_model_failed") from None
+        return self._validated_summary_response(response)
 
     async def _asummarize_with(self, messages_to_summarize: list[AnyMessage]) -> str:
         """Async counterpart of :meth:`_summarize_with` using the nostream model."""
-        if not messages_to_summarize:
-            return "No previous conversation history."
-        prompt = self._build_summary_prompt(messages_to_summarize)
-        if prompt is None:
-            return "Previous conversation was too long to summarize."
+        prompt = self._required_summary_prompt(messages_to_summarize)
         try:
             from deerflow.agents.middlewares.model_concurrency_middleware import (
                 async_provider_model_lease,
@@ -242,9 +241,32 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                     prompt,
                     config={"metadata": {"lc_source": "summarization"}},
                 )
-            return response.text.strip()
-        except Exception as e:
-            return f"Error generating summary: {e!s}"
+        except ResearchCompactionError:
+            raise
+        except Exception:
+            raise ResearchCompactionError("summary_model_failed") from None
+        return self._validated_summary_response(response)
+
+    @staticmethod
+    def _validated_summary_response(response: Any) -> str:
+        try:
+            text = response.text
+        except Exception:
+            raise ResearchCompactionError("invalid_summary") from None
+        if not isinstance(text, str) or not text.strip():
+            raise ResearchCompactionError("invalid_summary")
+        return text.strip()
+
+    def _required_summary_prompt(self, messages_to_summarize: list[AnyMessage]) -> str:
+        if not messages_to_summarize:
+            raise ResearchCompactionError("empty_summary_input")
+        try:
+            prompt = self._build_summary_prompt(messages_to_summarize)
+        except Exception:
+            raise ResearchCompactionError("summary_prompt_failed") from None
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ResearchCompactionError("empty_summary_input")
+        return prompt
 
     def _build_summary_prompt(self, messages_to_summarize: list[AnyMessage]) -> str | None:
         """Build the summary prompt, returning ``None`` when trimming leaves nothing."""
@@ -257,10 +279,29 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         return self.summary_prompt.format(messages=formatted_messages).rstrip()
 
     def before_model(self, state: AgentState, runtime: Runtime) -> dict | None:
-        return self._maybe_summarize(state, runtime)
+        try:
+            return self._maybe_summarize(state, runtime)
+        except ResearchCompactionError as exc:
+            self._signal_owned_run_stop(exc)
+            raise
 
     async def abefore_model(self, state: AgentState, runtime: Runtime) -> dict | None:
-        return await self._amaybe_summarize(state, runtime)
+        try:
+            return await self._amaybe_summarize(state, runtime)
+        except ResearchCompactionError as exc:
+            self._signal_owned_run_stop(exc)
+            raise
+
+    @staticmethod
+    def _signal_owned_run_stop(error: ResearchCompactionError) -> None:
+        # A bridge subprocess belongs to one research attempt, so its sibling
+        # lanes must stop together. Native gateway/CLI processes can serve many
+        # unrelated sessions; their typed failures remain local to the thread.
+        if (
+            os.environ.get("RESEARCH_COMPACTION_RUN_SCOPED", "").strip().lower() == "true"
+            or os.environ.get("RESEARCH_PROCESS_ATTEMPT_ID", "").strip()
+        ):
+            stop_after_compaction_failure(error)
 
     def _maybe_summarize(self, state: AgentState, runtime: Runtime) -> dict | None:
         messages = state["messages"]
@@ -274,11 +315,19 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         if cutoff_index <= 0:
             return None
 
+        thread_id = self._required_thread_id(runtime)
         messages_to_summarize, preserved_messages = self._partition_with_skill_rescue(messages, cutoff_index)
         messages_to_summarize, preserved_messages = self._preserve_dynamic_context_reminders(messages_to_summarize, preserved_messages)
+        try:
+            summary = self._create_summary(messages_to_summarize)
+        except ResearchCompactionError as exc:
+            if exc.thread_id:
+                raise
+            raise ResearchCompactionError(exc.reason, thread_id=thread_id) from None
+        new_messages = self._record_summary(summary, messages[:cutoff_index], thread_id)
+        # Optional hooks can enqueue memory work. Dispatch only after summary
+        # validation and durable evidence capture, never for a failed attempt.
         self._fire_hooks(messages_to_summarize, preserved_messages, runtime)
-        summary = self._create_summary(messages_to_summarize)
-        new_messages = self._build_new_messages(summary)
 
         return {
             "messages": [
@@ -300,11 +349,21 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
         if cutoff_index <= 0:
             return None
 
+        thread_id = self._required_thread_id(runtime)
         messages_to_summarize, preserved_messages = self._partition_with_skill_rescue(messages, cutoff_index)
         messages_to_summarize, preserved_messages = self._preserve_dynamic_context_reminders(messages_to_summarize, preserved_messages)
+        try:
+            summary = await self._acreate_summary(messages_to_summarize)
+        except ResearchCompactionError as exc:
+            if exc.thread_id:
+                raise
+            raise ResearchCompactionError(exc.reason, thread_id=thread_id) from None
+        # Serialization and SQLite's durable commit must not block concurrent
+        # async research tasks. Await completion before any state replacement.
+        new_messages = await asyncio.to_thread(
+            self._record_summary, summary, messages[:cutoff_index], thread_id,
+        )
         self._fire_hooks(messages_to_summarize, preserved_messages, runtime)
-        summary = await self._acreate_summary(messages_to_summarize)
-        new_messages = self._build_new_messages(summary)
 
         return {
             "messages": [
@@ -313,6 +372,54 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                 *preserved_messages,
             ]
         }
+
+    @staticmethod
+    def _required_thread_id(runtime: Runtime) -> str:
+        thread_id = _resolve_thread_id(runtime)
+        if not isinstance(thread_id, str) or not thread_id.strip():
+            raise ResearchCompactionError("missing_thread_id")
+        return thread_id
+
+    def _record_summary(
+        self, summary: str, original_segment: list[AnyMessage], thread_id: str,
+    ) -> list[HumanMessage]:
+        """Archive exact original messages before the reducer may remove them.
+
+        Archive the pre-rescue partition, rather than prompt-trimmed input or
+        split tool-call clones, so receipt provenance retains original bytes and
+        complete tool-call/result relationships. A failed write stops this node;
+        LangGraph can resume it from the preceding checkpoint on the same thread.
+        """
+        if not isinstance(summary, str) or not summary.strip():
+            raise ResearchCompactionError("invalid_summary", thread_id=thread_id)
+        new_messages = self._build_new_messages(summary)
+        message = new_messages[0]
+        message.id = str(uuid.uuid4())
+        try:
+            archive_options: dict[str, str] = {}
+            if not (
+                os.environ.get("RESEARCH_COMPACTION_DB", "").strip()
+                or os.environ.get("RESEARCH_BUDGET_DB", "").strip()
+            ):
+                from deerflow.config.paths import get_paths
+
+                # Native clients share this overlay without bridge env vars.
+                # Resolve their durable data location without mutating process
+                # environment shared by concurrent gateway sessions.
+                archive_options["archive_path"] = str(get_paths().base_dir / "research_compaction.sqlite3")
+            envelope = record_compaction(
+                thread_id=thread_id,
+                message_id=message.id,
+                content=message.content,
+                source_messages=messages_to_dict(original_segment),
+                **archive_options,
+            )
+        except ResearchCompactionError as exc:
+            raise ResearchCompactionError(exc.reason, thread_id=thread_id) from None
+        except Exception:
+            raise ResearchCompactionError("archive_write_failed", thread_id=thread_id) from None
+        message.additional_kwargs = {**message.additional_kwargs, "drf_compaction": envelope}
+        return new_messages
 
     @override
     def _build_new_messages(self, summary: str) -> list[HumanMessage]:

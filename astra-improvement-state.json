@@ -1,0 +1,821 @@
+{
+  "schema": "astra-improvement-state/v1",
+  "updated_at": "2026-09-09T14:49:34.883666+00:00",
+  "status": "active",
+  "worktree": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+  "branch": "codex/astra-workflow-review-2026-09-07",
+  "audit_commit": "6f47f47",
+  "current_slice": [
+    "ASTRA-MARKET-02"
+  ],
+  "consecutive_blocked_iterations": 0,
+  "automation_id": "astra-workflow-improvement-loop",
+  "stopping_condition": "All justified recommendations verified or evidence-backed deferred; no measured bottleneck warrants another safe change. Pause after three consecutive iterations blocked by the same external dependency that prevents all independent progress.",
+  "publication": "Blocked: configured GitHub authentication rejected audit push; local work may continue.",
+  "recommendations": [
+    {
+      "id": "ASTRA-01",
+      "priority": "P1",
+      "title": "Make compaction failure non-destructive",
+      "status": "verified_offline",
+      "evidence": [
+        "docs/research/astra-compaction-verification.json",
+        "docs/research/astra-compaction-benchmark.json"
+      ],
+      "deployment": "Not deployed; implementation is on the isolated branch."
+    },
+    {
+      "id": "ASTRA-02",
+      "priority": "P1",
+      "title": "Carry typed compaction evidence into every synthesis consumer",
+      "status": "verified_offline",
+      "evidence": [
+        "docs/research/astra-compaction-verification.json",
+        "docs/research/astra-compaction-benchmark.json"
+      ],
+      "deployment": "Not deployed; implementation is on the isolated branch."
+    },
+    {
+      "id": "ASTRA-03",
+      "priority": "P1",
+      "title": "Add durable launch-intent idempotency",
+      "status": "verified_offline",
+      "evidence": [
+        "docs/research/astra-launch-verification.json",
+        "docs/research/astra-launch-benchmark.json",
+        "docs/research/astra-launch-verification.md"
+      ],
+      "deployment": "Not deployed; implementation is on the isolated branch.",
+      "limits": [
+        "Keyed initial admission only; legacy unkeyed launches remain non-idempotent.",
+        "No general cross-process resume locking guarantee.",
+        "Crash before pipeline-state persistence retains identity/snapshot; existing resume cannot materialize missing JSON.",
+        "Ledger tombstones do not expire; independent ledger removal/rollback loses admission history."
+      ]
+    },
+    {
+      "id": "ASTRA-04",
+      "priority": "P1",
+      "title": "Unify durable usage and cumulative budget enforcement",
+      "status": "in_progress",
+      "evidence": [
+        "docs/research/astra-usage-verification.json",
+        "docs/research/astra-usage-benchmark.json",
+        "docs/research/astra-usage-browser.json",
+        "docs/research/astra-iteration-04-run-evidence.json",
+        "docs/research/astra-research-stream-verification.json",
+        "docs/research/astra-research-stream-verification.md",
+        "docs/research/astra-api-attempt-verification.json",
+        "docs/research/astra-api-attempt-verification.md",
+        "docs/research/astra-api-attempt-comparison.json",
+        "docs/research/astra-api-run-evidence.json",
+        "docs/research/astra-unresolved-verification.json",
+        "docs/research/astra-unresolved-verification.md",
+        "docs/research/astra-unresolved-comparison.json",
+        "docs/research/astra-unresolved-run-evidence.json",
+        "docs/research/astra-simulation-verification.json",
+        "docs/research/astra-simulation-verification.md",
+        "docs/research/astra-simulation-comparison.json",
+        "docs/research/astra-simulation-run-evidence.json",
+        "docs/research/astra-budget-verification.json",
+        "docs/research/astra-budget-verification.md",
+        "docs/research/astra-budget-comparison.json",
+        "docs/research/astra-budget-run-evidence.json",
+        "docs/research/astra-reservation-verification.md",
+        "docs/research/astra-reservation-verification.json",
+        "docs/research/astra-reservation-run-evidence.json",
+        "docs/research/astra-reservation-comparison.json",
+        "docs/research/astra-native-cap-verification.json",
+        "docs/research/astra-native-cap-verification.md",
+        "docs/research/astra-native-cap-comparison.json",
+        "docs/research/astra-native-cap-run-evidence.json",
+        "docs/research/astra-api-cost-verification.json",
+        "docs/research/astra-api-cost-verification.md",
+        "docs/research/astra-api-cost-comparison.json",
+        "docs/research/astra-monetary-run-evidence.json"
+      ],
+      "subtasks": [
+        {
+          "id": "ASTRA-04a",
+          "title": "Durable trustworthy usage accounting and snapshot imports",
+          "status": "verified_offline",
+          "evidence": "docs/research/astra-usage-verification.json",
+          "implementation_commit": "8eaa71b"
+        },
+        {
+          "id": "ASTRA-04b",
+          "title": "Provider-boundary reservations and cumulative budget coverage",
+          "status": "in_progress",
+          "subtasks": [
+            {
+              "id": "ASTRA-04b1",
+              "title": "Checkpoint-relative incremental research stream accounting",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-research-stream-verification.json",
+              "implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9"
+            },
+            {
+              "id": "ASTRA-04b2",
+              "title": "Record each physical backend API attempt before validation and control SDK retries",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-api-attempt-verification.json",
+              "implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06"
+            },
+            {
+              "id": "ASTRA-04b3",
+              "title": "Expose unresolved physical operations and define restart-safe admission before reservations",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-unresolved-verification.json",
+              "implementation_commit": "d2b706c436b07f0eb53e9062287e10f13979cf3f"
+            },
+            {
+              "id": "ASTRA-04b4",
+              "title": "Transport detached simulation physical attempts into durable parent accounting",
+              "status": "verified_offline",
+              "evidence": "docs/research/astra-simulation-verification.json",
+              "implementation_commit": "af5d2a1305bffabe04dc7d33475b2c99640256db"
+            },
+            {
+              "id": "ASTRA-04b5",
+              "title": "Profile cumulative-budget query scaling and implement transactional API admission reservations with explicit uncertainty",
+              "status": "in_progress",
+              "subtasks": [
+                {
+                  "id": "ASTRA-04b5a",
+                  "title": "Avoid complete usage projections on each cumulative budget check",
+                  "status": "verified_offline",
+                  "evidence": "docs/research/astra-budget-verification.json",
+                  "implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac"
+                },
+                {
+                  "id": "ASTRA-04b5b",
+                  "title": "Implement bounded transactional API reservation and settlement with explicit uncertainty",
+                  "status": "in_progress",
+                  "subtasks": [
+                    {
+                      "id": "ASTRA-04b5b1",
+                      "title": "Atomically reserve and settle estimated API token allowance with pinned policy and visible uncertainty",
+                      "status": "verified_offline",
+                      "evidence": "docs/research/astra-reservation-verification.json",
+                      "implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da"
+                    },
+                    {
+                      "id": "ASTRA-04b5b2",
+                      "title": "Expose explicit native output caps through the production factory and child configuration without changing defaults",
+                      "status": "verified_offline",
+                      "evidence": "docs/research/astra-native-cap-verification.json",
+                      "implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4"
+                    },
+                    {
+                      "id": "ASTRA-04b5b3",
+                      "title": "Design and validate estimated monetary reservation policy with explicit rate and missing-price coverage",
+                      "status": "in_progress",
+                      "subtasks": [
+                        {
+                          "id": "ASTRA-04b5b3a",
+                          "title": "Capture immutable API price estimates with explicit missing-price admission and replay consistency",
+                          "status": "verified_offline",
+                          "evidence": "docs/research/astra-api-cost-verification.json",
+                          "implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164"
+                        },
+                        {
+                          "id": "ASTRA-04b5b3b",
+                          "title": "Define and implement monetary admission with pinned rates and caps, unknown-price coverage and durable held estimates",
+                          "status": "in_progress",
+                          "subtasks": [
+                            {
+                              "id": "ASTRA-04b5b3b1",
+                              "title": "Expose indexed recorded price coverage and reject dollar-enabled API admission with historical price gaps",
+                              "status": "verified_offline",
+                              "evidence": "docs/research/astra-cost-coverage-verification.json",
+                              "implementation_commit": "f647bfb5103aed0d3b0d6528523b9085a4058182"
+                            },
+                            {
+                              "id": "ASTRA-04b5b3b2",
+                              "title": "Pin run-wide rate/cap and coverage policy, then atomically admit and settle joint token and dollar holds",
+                              "status": "pending"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "limits": [
+        "Token-enabled durable API sends now reserve estimated allowance; monetary reservations and CLI physical provenance remain pending.",
+        "Concurrent planned token allowance is reserved atomically for covered API sends. Input estimates and opaque history prevent a hard provider-token or invoice cap claim.",
+        "Checkpoint-relative stream deltas are verified offline; exact CLI request provenance, idless observations and pre-delivery crash gaps remain incomplete.",
+        "Simulation aggregate model labels retain stable identity; detailed model diagnostics are separate.",
+        "Imported historical baselines are opaque and legacy marker-first ambiguity is explicit.",
+        "Unknown/cache partition coverage is not inferred; usage_complete remains false.",
+        "Backend and factory-instrumented nonstreaming CAMEL physical attempts, unresolved recovery and token reservations are verified offline; monetary reservations, CLI physical failures and custom SDK replacement remain incomplete.",
+        "Enabled budget guards use a verified narrow projection; token sums remain O(delta rows), and cost grouping is retained for exact rounding compatibility. No default-disabled or production speedup claim.",
+        "Native factory requests remain uncapped by default and are rejected before send if token reservations are enabled. An explicit native output policy now reaches actual factory/child requests and is pinned per simulation; held allowance stays separate from recorded usage.",
+        "API operations retain captured estimates and currently dollar-enabled durable API requests reject historical price gaps before dispatch. Price-only coverage is run-wide over recorded operations, not complete usage. Run-wide rate/cap pinning and monetary holds remain pending; no invoice accuracy or hard monetary cap claim."
+      ]
+    },
+    {
+      "id": "ASTRA-05",
+      "priority": "P1",
+      "title": "Checkpoint report sections and repair phases",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-06",
+      "priority": "P1",
+      "title": "Checkpoint graph episodes and use individual deadlines",
+      "status": "in_progress",
+      "evidence": [
+        "docs/research/astra-graph-receipt-verification.json"
+      ],
+      "subtasks": [
+        {
+          "id": "ASTRA-06a",
+          "title": "Preserve acknowledged batch receipts through synchronous timeout and truthful accounting",
+          "status": "verified_offline",
+          "verified_at": "2026-09-16T12:30:36.676096+00:00",
+          "evidence": "docs/research/astra-graph-receipt-verification.json",
+          "implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7"
+        },
+        {
+          "id": "ASTRA-06b",
+          "title": "Durable episode checkpoints, input/policy identity and ambiguous-write reconciliation",
+          "status": "pending"
+        },
+        {
+          "id": "ASTRA-06c",
+          "title": "Introduce measured per-episode deadlines with bounded queue/replay/cleanup semantics",
+          "status": "pending"
+        }
+      ],
+      "limits": [
+        "06a preserves attempt-local acknowledgement receipts; no durable restart reuse or new per-episode deadline is claimed.",
+        "Unknown external writes remain unresolved. Async cleanup does not prove provider termination or database rollback."
+      ]
+    },
+    {
+      "id": "ASTRA-07",
+      "priority": "P1",
+      "title": "Seal full WorldState before enabling partial calendar resume",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-08",
+      "priority": "P2",
+      "title": "Move decision-model waits off the simulation event loop",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-09",
+      "priority": "P2",
+      "title": "Read graph edges once per snapshot",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-10",
+      "priority": "P2",
+      "title": "Read only the required research checkpoint; balance actor context",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-11",
+      "priority": "P2",
+      "title": "Measure cache economics and marginal evidence yield",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-12",
+      "priority": "P2",
+      "title": "Bound report tool results consistently and attribute operations",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-13",
+      "priority": "P2",
+      "title": "Make all UI polling lifecycle- and revision-aware",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-14",
+      "priority": "P2",
+      "title": "Reduce chart transfer/parse cost and harden bundle reads",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-15",
+      "priority": "P2",
+      "title": "Produce forecast vectors per ensemble seed, then one report",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-16",
+      "priority": "P2",
+      "title": "Validate reproducible CI and current frontend acceptance",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-17",
+      "priority": "P2",
+      "title": "Build dependency-aware retention around the existing cleanup work",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-18",
+      "priority": "P2",
+      "title": "Avoid reparsing every successful JSON response",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-19",
+      "priority": "P2",
+      "title": "Share backend port configuration and probe through the UI origin",
+      "status": "pending",
+      "evidence": []
+    },
+    {
+      "id": "ASTRA-20",
+      "priority": "P3",
+      "title": "Extract a few stable stage interfaces and shorten continuity reads",
+      "status": "pending",
+      "evidence": []
+    }
+  ],
+  "next_recommendation": "ASTRA-MARKET-02",
+  "last_completed_slice": [
+    "ASTRA-06a"
+  ],
+  "iterations": [
+    {
+      "completed_at": "2026-09-07T15:55:54+00:00",
+      "recommendations": [
+        "ASTRA-01",
+        "ASTRA-02"
+      ],
+      "result": "Implemented and independently reviewed; 427 offline tests passed, no production speedup claimed.",
+      "next": "Durable launch-intent idempotency (ASTRA-03).",
+      "verified_source_hashes": "docs/research/astra-compaction-verification.json",
+      "implementation_commit": "ccb88d2"
+    },
+    {
+      "completed_at": "2026-09-07T17:05:06.148759+00:00",
+      "recommendations": [
+        "ASTRA-03"
+      ],
+      "result": "Durable keyed admission and atomic retirement independently reviewed;239 offline tests plus isolated real-browser acceptance passed.",
+      "next": "ASTRA-04 durable usage and cumulative budget enforcement.",
+      "verified_source_hashes": "docs/research/astra-launch-verification.json",
+      "implementation_commit": "06dc8b9"
+    },
+    {
+      "completed_at": "2026-09-07T18:00:54.750363+00:00",
+      "recommendations": [
+        "ASTRA-04a"
+      ],
+      "result": "Durable accounting foundation verified offline:532 tests, browser acceptance and independent review.",
+      "next": "ASTRA-04b accounting prerequisites and reservations.",
+      "verified_source_hashes": "docs/research/astra-usage-verification.json",
+      "implementation_commit": "8eaa71b"
+    },
+    {
+      "completed_at": "2026-09-07T18:32:47.705762+00:00",
+      "recommendations": [
+        "ASTRA-04b1"
+      ],
+      "result": "577 backend+98 overlay tests passed, plus23 complete-client upgrade checks;2 deployment-only skips. Independent review clear.",
+      "next": "ASTRA-04b2 physical API response accounting and SDK retry ownership before reservations.",
+      "verified_source_hashes": "docs/research/astra-research-stream-verification.json",
+      "implementation_commit": "099bdbe58579fc94ae862faa778b785b349dafb9"
+    },
+    {
+      "completed_at": "2026-09-07T19:29:32.165379+00:00",
+      "recommendations": [
+        "ASTRA-04b2"
+      ],
+      "result": "741 backend tests passed, one deployment-only skip; actual-SDK comparison and independent review clear.",
+      "next": "ASTRA-04b3 unresolved operations and recovery/admission policy, then transactional reservations and detached-child physical coverage.",
+      "verified_source_hashes": "docs/research/astra-api-attempt-verification.json",
+      "implementation_commit": "60925d1bf002db724358d452ff43f17ac1492e06"
+    },
+    {
+      "completed_at": "2026-09-07T20:26:09.611959+00:00",
+      "recommendations": [
+        "ASTRA-04b3"
+      ],
+      "result": "782 backend tests passed, one deployment-only skip; crash/restart, indexed-read comparison and independent review clear.",
+      "next": "ASTRA-04b4 detached simulation physical-attempt transport before wider reservation coverage.",
+      "verified_source_hashes": "docs/research/astra-unresolved-verification.json",
+      "implementation_commit": "d2b706c436b07f0eb53e9062287e10f13979cf3f"
+    },
+    {
+      "completed_at": "2026-09-07T21:36:44.479039+00:00",
+      "recommendations": [
+        "ASTRA-04b4"
+      ],
+      "result": "960 backend tests passed, one deployment-only skip; scoped child crash/replay, native sync/async SDK transport and independent review clear.",
+      "next": "ASTRA-04b5 cumulative-budget query scaling and transactional API reservations.",
+      "verified_source_hashes": "docs/research/astra-simulation-verification.json",
+      "implementation_commit": "af5d2a1305bffabe04dc7d33475b2c99640256db"
+    },
+    {
+      "completed_at": "2026-09-07T22:25:48.747239+00:00",
+      "recommendations": [
+        "ASTRA-04b5a"
+      ],
+      "result": "998 backend tests passed, one deployment-only skip; independent38-case review and paired warm guard comparison clear. Token-only10000-row stress median21.6447\u21923.6771ms; cost-enabled21.6541\u219215.6073ms.",
+      "next": "ASTRA-04b5b bounded transactional API reservation/settlement with explicit uncertainty.",
+      "verified_source_hashes": "docs/research/astra-budget-verification.json",
+      "implementation_commit": "99eac2abc2a90977d7b935699f837f227b2a04ac"
+    },
+    {
+      "completed_at": "2026-09-07T23:33:46.182071+00:00",
+      "recommendations": [
+        "ASTRA-04b5b1"
+      ],
+      "result": "1072 backend tests passed with one deployment-only skip; independent74-case review clear. Offline competing calls2\u21921, unknown timeout retries3\u21922 with28tokens held; successful local median2.1434\u21922.2144ms.",
+      "next": "ASTRA-04b5b2 explicit native output-cap configuration through the production factory and child path; then monetary policy and remaining coverage.",
+      "verified_source_hashes": "docs/research/astra-reservation-verification.json",
+      "implementation_commit": "04c981b4119726019a50ec15eb19272e4ac012da"
+    },
+    {
+      "completed_at": "2026-09-08T00:36:08.402049+00:00",
+      "recommendations": [
+        "ASTRA-04b5b2"
+      ],
+      "result": "1,165 backend tests passed with one deployment-only skip; all 67 new cases independently reviewed. Actual factory cap admission and child policy/seal scenarios verified offline.",
+      "next": "ASTRA-04b5b3: monetary reservation feasibility, rate and missing-price policy, then remaining accounting coverage and graph/report recovery.",
+      "verified_source_hashes": "docs/research/astra-native-cap-verification.json",
+      "implementation_commit": "4de6d4fc67bef158d765752a6f02ca47dc581fe4"
+    },
+    {
+      "completed_at": "2026-09-08T01:41:49.138035+00:00",
+      "recommendations": [
+        "ASTRA-04b5b3a"
+      ],
+      "result": "1,266 backend tests passed with one deployment-only skip; all101 new pricing/ledger/child cases independently reviewed. Paired mocked paths reject missing-price work before send and preserve captured settlement and zero-delta exact replay.",
+      "next": "ASTRA-04b5b3b: monetary admission with explicit rate/cap pinning and incomplete-price coverage; graph/report recovery follows.",
+      "verified_source_hashes": "docs/research/astra-api-cost-verification.json",
+      "implementation_commit": "98ed4b7d804b531774d69b1287e492e9782c7164"
+    },
+    {
+      "completed_at": "2026-09-09T14:26:59.714746+00:00",
+      "recommendations": [
+        "ASTRA-04b5b3b1"
+      ],
+      "result": "1,363 backend tests passed with one deployment-only skip; all97 new cases independently reviewed. Prior-price-gap SDK sends1\u21920 with exact history preserved. Current10,000-row indexed coverage2.310521ms versus338.115958ms without index; no production speedup claim.",
+      "next": "ASTRA-04b5b3b2 run-wide rate/cap policy and atomic joint token/dollar holds; graph/report recovery follows.",
+      "verified_source_hashes": "docs/research/astra-cost-coverage-verification.json",
+      "implementation_commit": "f647bfb5103aed0d3b0d6528523b9085a4058182"
+    },
+    {
+      "completed_at": "2026-09-11T13:33:46.827991+00:00",
+      "recommendations": [
+        "ASTRA-INTEGRATION-01"
+      ],
+      "result": "Shared actor denial verified offline:172 focused passes,18 independent passes, paired71-to-0 denied case/channel observations. Broad3896pass/1known scaffold failure/17skip/16xfail; frontend113pass/build successful. Wider integration remains open.",
+      "next": "ASTRA-INTEGRATION-02 complete sanitation before bounded ontology sampling, then ontology reuse and report context closure.",
+      "verified_source_hashes": "docs/research/astra-integration-verification.json",
+      "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
+    },
+    {
+      "completed_at": "2026-09-13T11:46:52.662469+00:00",
+      "recommendations": [
+        "ASTRA-INTEGRATION-02"
+      ],
+      "result": "Full sanitation transfer verified offline:12 ontology/graph boundary passes,69 independent passes,56 capped/default byte-parity comparisons. Broad3905pass/1known scaffold failure/17skip/11existingxfail. More graph episodes reflect restored evidence; no production speedup claimed.",
+      "next": "ASTRA-INTEGRATION-03 ontology artifact/input binding and dependent-stage reuse invalidation.",
+      "verified_source_hashes": "docs/research/astra-ontology-context-verification.json",
+      "implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58"
+    },
+    {
+      "completed_at": "2026-09-13T13:10:37.091677+00:00",
+      "recommendations": [
+        "ASTRA-INTEGRATION-03a"
+      ],
+      "result": "Cached ontology integrity fence verified offline:73focused/82independent passes; broad3923pass/1known scaffold failure/17skip/11existingxfail. Invalid fixture completions4-to-0 and downstream entries16-to-0. Parent03 remains partial; no production speedup claimed.",
+      "next": "03b input binding and strict publication, then03c owned durable downstream invalidation and ensemble closure before automatic regeneration.",
+      "verified_source_hashes": "docs/research/astra-ontology-reuse-verification.json",
+      "implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3"
+    },
+    {
+      "completed_at": "2026-09-16T11:43:31.107727+00:00",
+      "recommendations": [
+        "ASTRA-EXPERIENCE-01"
+      ],
+      "result": "Direct workspace/readiness/routing verified:3957backend passes with1known scaffoldfailure,17skip,11xfail;131frontend passes; source review and pre-stop browser acceptance. All26successful pipelines/156stage records/254logs audited.",
+      "next": "ASTRA06a source-level graph receipt preservation; browser automation stopped per user.",
+      "verified_source_hashes": "docs/research/astra-workspace-verification.json",
+      "implementation_commit": "45a8da856f54159974fdff7f200e045de80c2357"
+    },
+    {
+      "completed_at": "2026-09-16T12:30:36.676096+00:00",
+      "recommendations": [
+        "ASTRA-06a"
+      ],
+      "result": "Attempt-local graph receipt preservation verified:21 new scenarios;144 focused and109 independent passes;3978backend passes with1known scaffoldfail/17skip/11existingxfail. Acknowledged siblings survive timeout; no new replay; failure counters stay exact.",
+      "next": "Fix binary market token identity before quote provenance; design durable graph/input checkpointing and per-episode deadlines separately.",
+      "verified_source_hashes": "docs/research/astra-graph-receipt-verification.json",
+      "implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7"
+    }
+  ],
+  "last_implementation_commit": "4935dc3c58d61baf490eeec32127da49e1c2c2a7",
+  "optimization_objectives": {
+    "minimize": [
+      "provider work and accounted consumption",
+      "critical-path elapsed time",
+      "resource use",
+      "recovery and regeneration work"
+    ],
+    "preserve": [
+      "source and actor provenance",
+      "quality acceptance",
+      "recovery correctness"
+    ],
+    "evidence_rule": "Accept improvements only with source-backed mechanism and falsifiable checks; record tradeoffs and unmeasured production effects."
+  },
+  "open_issues": [
+    {
+      "id": "ASTRA-LINT-01",
+      "priority": "P3",
+      "status": "documented_preexisting",
+      "description": "18 baseline Ruff findings in the three simulation entry scripts and oasis_llm.py; no new findings introduced by ASTRA-04b4.",
+      "evidence": "docs/research/astra-simulation-verification.json",
+      "resolution": "Address as a separate verified cleanup slice; retain source-aware differential lint until then."
+    },
+    {
+      "id": "ASTRA-TOKEN-01",
+      "priority": "P2",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-04b5b2",
+      "description": "Native production model creation has no explicit output-token cap configuration path. Token-enabled reservations therefore stop its uncapped requests before dispatch.",
+      "evidence": "docs/research/astra-native-cap-verification.json",
+      "resolution": "Validated opt-in native output policy reaches actual factory/SDK and child shared-ledger requests without changing uncapped defaults, agent memory or sealed configuration. Policy and budgets bind new authorities; same-simulation launches reject drift. 67 new cases independently reviewed.",
+      "resolved_at": "2026-09-08T00:36:08.402049+00:00"
+    },
+    {
+      "id": "ASTRA-COST-01",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-04b5b3a",
+      "description": "API price recalculation can add cost on unchanged replay, while missing prices pass a positive dollar guard as zero.",
+      "evidence": "docs/research/astra-api-cost-verification.json",
+      "resolution": "Strict captured API estimates persist through response, replay and child recovery. Explicit unpriced rates reject new dollar-enabled sends; old-writer inconsistent costs fail transactionally.",
+      "resolved_at": "2026-09-08T01:41:49.138035+00:00"
+    },
+    {
+      "id": "ASTRA-COST-02",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-04b5b3b2",
+      "description": "Recorded dollar guards do not reserve concurrent planned costs; rates and dollar caps are not run-wide pinned. Two actual-SDK mock calls record1.00USD against0.75USD while recorded price coverage is complete.",
+      "evidence": "docs/research/astra-cost-coverage-verification.json",
+      "resolution": "Define explicit run-wide rate/cap and uncertainty policy, then validate both token and dollar capacity before any hold write. Price-gap admission is now resolved separately; full monetary admission remains open."
+    },
+    {
+      "id": "ASTRA-COST-03",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-04b5b3b1",
+      "description": "Enabling a dollar limit after unpriced or opaque recorded history could admit a newly priced request against an incomplete zero-dollar historical amount.",
+      "evidence": "docs/research/astra-cost-coverage-verification.json",
+      "resolution": "Run-wide price coverage reaches status, and currently dollar-enabled durable API dispatch transactionally rejects recorded price gaps before marker or token hold writes. Captured admission survives tested binding resets.",
+      "resolved_at": "2026-09-09T14:26:59.714746+00:00"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-01",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Explicit denied actor knowledge is reinjected by public shared-world selection.",
+      "evidence": "docs/research/astra-integration-verification.json",
+      "resolved_at": "2026-09-11T13:33:46.827991+00:00",
+      "resolution": "Literal-false denial across validated participating packs prevents same normalized claim from entering six shared channels. Independent18-case review and paired71-to-0 exposure comparison preserve actor-local access, modeler audit and seals.",
+      "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-02",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Ontology sanitization truncates long document tails before sampling.",
+      "evidence": "docs/research/astra-ontology-context-verification.json",
+      "resolved_at": "2026-09-13T11:46:52.662469+00:00",
+      "resolution": "Explicit complete sanitation precedes ontology sampling and graph splitting, preserving safe tails under normalization/replacement expansion. Five ontology xfails removed; real primary/fallback and bounded graph scenarios pass. Default/capped sanitizer bytes and source artifacts preserved; restored graph coverage can increase work.",
+      "implementation_commit": "9ab66777c50a5ab4efc5510b61799267b8e42b58"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-03",
+      "priority": "P1",
+      "status": "in_progress",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Ontology reuse bypasses registered artifact integrity and input-generation binding.",
+      "evidence": "docs/research/astra-ontology-reuse-verification.json",
+      "subtasks": [
+        {
+          "id": "ASTRA-INTEGRATION-03a",
+          "title": "Validate cached ontology artifact/project integrity and preserve proof on reuse",
+          "status": "verified_offline",
+          "verified_at": "2026-09-13T13:10:37.091677+00:00",
+          "evidence": "docs/research/astra-ontology-reuse-verification.json",
+          "implementation_commit": "c3008bf94a2708291c8dbe263dadd04b8d98bad3"
+        },
+        {
+          "id": "ASTRA-INTEGRATION-03b",
+          "title": "Bind ontology to effective research inputs and generation policy",
+          "status": "pending"
+        },
+        {
+          "id": "ASTRA-INTEGRATION-03c",
+          "title": "Durably invalidate and preserve dependent outputs with fork ownership and ensemble closure",
+          "status": "pending"
+        }
+      ],
+      "resolution_progress": "Artifact/project consistency and original registration preservation are verified under03a; input freshness and automatic dependency-safe regeneration remain unimplemented03b/03c."
+    },
+    {
+      "id": "ASTRA-INTEGRATION-04",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Alternate report generation and ensemble entry points omit structured research artifacts; broad TypeError constructor retries can drop context after internal failures.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-05",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Report chat constructs research context but omits it from actual chat prompts; bounded report head alone loses relevant evidence.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-06",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Coalition analysis silently slices already-loaded action history at 100,000 records and misses older interactions.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-07",
+      "priority": "P2",
+      "status": "needs_regression",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Twitter loader injects role/world/calendar without the final composed-context attestation used by Reddit.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-08",
+      "priority": "P2",
+      "status": "measured_candidate",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Actor batch construction repeats full dossier/report hashing, contract validation and report section splitting per actor.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-09",
+      "priority": "P2",
+      "status": "measured_candidate",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Run-summary and report-outcome aggregation repeatedly reload the same complete action history.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-10",
+      "priority": "P2",
+      "status": "source_candidate",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Graph chunk preparation sanitizes report and dossier before choosing the configured source, including excluded documents.",
+      "evidence": "docs/handoff/astra-integration/handoff.md"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-11",
+      "priority": "P3",
+      "status": "documented_preexisting",
+      "recommendation": "ASTRA-INTEGRATION",
+      "description": "Pre-cutover drf2 config pins the original checkout skills path while its test expects the current worktree path; corrected full gate must report this portability failure.",
+      "evidence": "docs/research/astra-integration-verification.md"
+    },
+    {
+      "id": "ASTRA-UI-01",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Delayed graph requests can display an old run graph under a newly selected run.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-UI-02",
+      "priority": "P1",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Readiness request failure is shown as Configuration ready; mode/settings races leave stale readiness.",
+      "evidence": "docs/research/astra-workspace-verification.json",
+      "resolved_at": "2026-09-16T11:43:31.107727+00:00"
+    },
+    {
+      "id": "ASTRA-UI-03",
+      "priority": "P2",
+      "status": "resolved_offline",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Launcher FLASK_PORT and fixed Vite proxy can disagree; Vite open:true duplicates launcher browser opening.",
+      "evidence": "docs/research/astra-workspace-verification.json",
+      "resolved_at": "2026-09-16T11:43:31.107727+00:00"
+    },
+    {
+      "id": "ASTRA-UI-04",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Hidden simulation/report panels keep network polling while inactive.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-01",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Market extraction overwrites research-time price with current quote and drops per-row refresh failure/timestamps.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-02",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Filtering blank token IDs shifts Yes/No positional mapping.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-03",
+      "priority": "P1",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Contradictory, out-of-range or disputed resolution data is accepted as resolved Yes and can pollute calibration truth.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-VIZ-01",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "Null/blank/boolean/array values become0% or0pp and out-of-range probabilities are displayed.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    },
+    {
+      "id": "ASTRA-MARKET-04",
+      "priority": "P2",
+      "status": "open",
+      "recommendation": "ASTRA-EXPERIENCE",
+      "description": "History parsing clamps invalid probabilities and infinite timestamps raise OverflowError.",
+      "evidence": "docs/handoff/astra-experience/handoff.md"
+    }
+  ],
+  "active_user_request": {
+    "id": "ASTRA-EXPERIENCE",
+    "status": "in_progress",
+    "handoff": "docs/handoff/astra-experience/handoff.md",
+    "description": "Audit every successful run and each stage/log; improve direct research UI, visualization, Polymarket and workflow while retaining the full integration backlog."
+  },
+  "next_issue": "ASTRA-MARKET-02",
+  "experience_work": [
+    {
+      "id": "ASTRA-EXPERIENCE-AUDIT",
+      "status": "verified_saved_evidence",
+      "title": "Per-run/stage accounting and log audit for every successful saved pipeline",
+      "evidence": "docs/research/astra-successful-runs-audit-20260916.json"
+    },
+    {
+      "id": "ASTRA-EXPERIENCE-01",
+      "status": "verified_offline",
+      "title": "Direct research entry and professional accessible workspace UI",
+      "evidence": "docs/research/astra-workspace-verification.json"
+    },
+    {
+      "id": "ASTRA-EXPERIENCE-VIZ-MARKETS",
+      "status": "investigating",
+      "title": "Visualization quality and Polymarket contract correctness"
+    }
+  ],
+  "user_constraints": {
+    "browser_automation": "Stopped by explicit user direction on September16; require a new explicit request before using Playwright/CUA.",
+    "focus": "Source review, code fixes, unit/integration validation and workflow bottlenecks."
+  }
+}

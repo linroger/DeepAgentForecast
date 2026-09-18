@@ -228,7 +228,9 @@ class LLMClient:
     ):
         self.provider = (provider or Config.LLM_PROVIDER or "claude-cli").lower()
 
-        # 最近一次调用的精确 token 用量（OpenAI 兼容路径填充；CLI 路径为 None→按文本粗估）。
+        # Compatibility receipt for detached simulation wrappers. Shared clients
+        # may serve multiple Graphiti threads; accounting never reads this field.
+        self._usage_local = threading.local()
         self._last_usage: Optional[Dict[str, int]] = None
 
         # openai 提供方所需的连接参数（CLI 模式下不使用）
@@ -254,13 +256,25 @@ class LLMClient:
         # S9: set True on a fallback client so failover never recurses.
         self._is_fallback = False
 
+    @property
+    def _last_usage(self) -> Optional[Dict[str, int]]:
+        return getattr(getattr(self, "_usage_local", None), "value", None)
+
+    @_last_usage.setter
+    def _last_usage(self, value: Optional[Dict[str, int]]) -> None:
+        if not hasattr(self, "_usage_local"):
+            self._usage_local = threading.local()
+        self._usage_local.value = value
+
     @staticmethod
     def _build_openai_client(provider: str, api_key: Optional[str], base_url: Optional[str]):
         """构造一个 OpenAI 兼容客户端（供主客户端与 fast-tier 第二客户端复用）。"""
         from openai import OpenAI
         if not api_key:
             raise ValueError(f"LLM_PROVIDER={provider} 时必须配置 LLM_API_KEY")
-        client_kwargs: Dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+        client_kwargs: Dict[str, Any] = {
+            "api_key": api_key, "base_url": base_url, "max_retries": 0,
+        }
         # GLM-run 2026-09-18: an explicit hard timeout on EVERY call. Without
         # it (HTTP/2 path off), a provider stream that dies mid-read can wedge
         # the calling pipeline thread forever — observed live on the report
@@ -276,13 +290,11 @@ class LLMClient:
         if provider == "kimi":
             client_kwargs["default_headers"] = {"User-Agent": Config.LLM_USER_AGENT}
         # R2-EXEC-6: 当 LLM_HTTP2 开启时，注入一个调优过的 httpx 客户端（HTTP/2 多路复用 +
-        # 更大 keepalive 池）并把 SDK 自带重试关掉（max_retries=0，由 chat() 的退避循环统一负责）。
-        # 默认（未配置 LLM_HTTP2 / 为 false）返回 None → 沿用 OpenAI SDK 自带 httpx 客户端，
-        # 行为与现状逐字节一致（degrade-safe）。
+        # 更大 keepalive 池）。SDK retries remain disabled even when custom
+        # transport construction fails; the application owns every retry.
         http_client = LLMClient._build_http_client()
         if http_client is not None:
             client_kwargs["http_client"] = http_client
-            client_kwargs["max_retries"] = 0
         return OpenAI(**client_kwargs)
 
     @staticmethod
@@ -365,6 +377,167 @@ class LLMClient:
                 return None
         return self._fast_openai_client
 
+    def _resolve_openai_route(self, tier: str) -> tuple[Any, str, str]:
+        """Return the client/provider/model actually selected, including fallback."""
+        client, provider = self._openai_client, self.provider
+        if (not self._is_fallback and getattr(Config, "LLM_TIERED_ROUTING", False)
+                and tier == "fast"):
+            fast_client = self._fast_provider_client()
+            if fast_client is not None:
+                client, provider = fast_client, Config.LLM_FAST_PROVIDER
+        return client, provider, self._model_for_tier(tier)
+
+    @staticmethod
+    def _usage_field(value: Any, name: str, default: Any = None) -> Any:
+        return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
+
+    @staticmethod
+    def _response_usage(response: Any, messages: List[Dict]) -> Dict[str, Any]:
+        """Validate reported counters; absent usage permits only labeled estimates."""
+        from .telemetry import estimate_tokens
+        from .usage_ledger import normalize_counter
+
+        field = LLMClient._usage_field
+        usage = field(response, "usage")
+        if usage is not None and not (isinstance(usage, dict) or hasattr(usage, "__dict__")):
+            raise ValueError("Provider usage must be an object")
+        pt, ct = field(usage, "prompt_tokens"), field(usage, "completion_tokens")
+        total = field(usage, "total_tokens")
+        details = field(usage, "prompt_tokens_details")
+        if details is not None and not (isinstance(details, dict) or hasattr(details, "__dict__")):
+            raise ValueError("Provider input token details must be an object")
+        read = field(details, "cached_tokens")
+        if read is None:
+            read = field(usage, "cache_read_input_tokens", 0)
+        write = field(usage, "cache_creation_input_tokens", 0)
+        # Optional cache details are observations, not a complete input partition.
+        cache = {"cache_read_tokens": 0 if read is None else read,
+                 "cache_write_tokens": 0 if write is None else write}
+        normalize_counter(cache)
+        if pt is None or ct is None:
+            # A total or one positive component cannot be faithfully split by
+            # this ledger. Never silently erase or invent the missing partition.
+            supplied = {key: value for key, value in {
+                "prompt_tokens": pt, "completion_tokens": ct,
+            }.items() if value is not None}
+            checked = normalize_counter(supplied)
+            if total is not None:
+                checked_total = normalize_counter({"prompt_tokens": total})["prompt_tokens"]
+            else:
+                checked_total = 0
+            if checked["total_tokens"] or checked_total or any(cache.values()):
+                raise ValueError("Provider returned partial token attribution")
+            pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
+            texts = []
+            for choice in field(response, "choices", None) or []:
+                message = field(choice, "message")
+                content = field(message, "content")
+                if isinstance(content, str):
+                    texts.append(content)
+                for tool in field(message, "tool_calls", None) or []:
+                    arguments = field(field(tool, "function"), "arguments")
+                    if isinstance(arguments, str):
+                        texts.append(arguments)
+            return {"prompt_tokens": pt, "completion_tokens": sum(map(estimate_tokens, texts)),
+                    "usage_source": "estimated", **cache}
+        values = {"prompt_tokens": pt, "completion_tokens": ct, **cache}
+        if total is not None:
+            values["total_tokens"] = total
+        values = normalize_counter(values)
+        if any(values[key] > values["prompt_tokens"] for key in cache):
+            raise ValueError("Cache observations exceed inclusive input usage")
+        return {"prompt_tokens": values["prompt_tokens"], "completion_tokens": values["completion_tokens"],
+                "usage_source": "known", **cache}
+
+    def _create_openai_completion(self, client: Any, provider: str, model: str,
+                                  kwargs: Dict[str, Any]) -> Any:
+        """One SDK dispatch and durable settlement, before content validation.
+
+        An interrupted process can leave the zero-counter in-flight row behind.
+        When a durable token cap is enabled, the marker also holds the planned
+        request allowance. An unresolved observation is never proof of no spend.
+        Completed means a response's usage was settled, not that its content or
+        tool arguments passed the caller's subsequent validation.
+        """
+        from .telemetry import (
+            BudgetExceeded, LLMMeter, UsageLedgerConflict, UsageLedgerStorageError,
+            UsageLedgerUnresolvedError, check_budget, resolve_run_attribution,
+        )
+        from .api_budget import prepare_token_request
+        from .api_cost import capture_cost_context
+        run_id, stage, inferred = resolve_run_attribution()
+        LLMMeter.assert_accounting_available(run_id)
+        check_budget(run_id)
+        # Plan and send one private snapshot when token planning is enabled.
+        kwargs, reservation = prepare_token_request(kwargs, run_id)
+        # The quote must describe the model actually sent. Keep attribution
+        # fields private even when token planning does not copy the full input.
+        kwargs = dict(kwargs)
+        if kwargs.get("model") != model:
+            raise BudgetExceeded("API request model does not match its price attribution")
+        if kwargs.get("extra_body") is not None:
+            if not isinstance(kwargs["extra_body"], dict) or "model" in kwargs["extra_body"]:
+                raise BudgetExceeded("API price attribution cannot use an extra_body model override")
+            kwargs["extra_body"] = dict(kwargs["extra_body"])
+        cost_quote, dollar_enabled = capture_cost_context(provider, model)
+        require_cost_coverage = dollar_enabled and LLMMeter.is_durable_run(run_id)
+        self._last_usage = None
+        # Request-local options also cover shared/injected SDK clients whose
+        # constructor defaults still permit retries. Lightweight offline fakes
+        # expose create only and have no hidden SDK retry machinery.
+        if callable(getattr(client, "with_options", None)):
+            client = client.with_options(max_retries=0)
+        # Captured admission requirements survive a concurrent binding reset;
+        # the facade must reject the lost binding before any physical send.
+        metered = (reservation is not None or require_cost_coverage
+                   or Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id))
+        operation_id = LLMMeter.new_operation_id(run_id)
+
+        def record(*, calls: int = 1, status: str = "completed", latency_ms: float = 0.0,
+                   prompt_tokens: int = 0, completion_tokens: int = 0,
+                   usage_source: str = "unknown", **cache: Any) -> None:
+            if metered:
+                LLMMeter.record_snapshot(
+                    "llm_api_attempt", operation_id, provider, model,
+                    prompt_tokens, completion_tokens, latency_ms,
+                    run_id=run_id, stage=stage, calls=calls, status=status,
+                    usage_source=usage_source, uncached_tokens=None,
+                    token_reservation=reservation if status == "in_flight" else None,
+                    cost_quote=cost_quote,
+                    require_cost_coverage=require_cost_coverage if status == "in_flight" else False,
+                    _fallback=inferred, **cache,
+                )
+
+        def check_attempt_budget() -> None:
+            if reservation is not None:
+                check_budget(run_id, token_limit=reservation["token_limit"])
+            else:
+                check_budget(run_id)
+
+        record(calls=0, status="in_flight")
+        started = time.monotonic()
+        try:
+            response = client.chat.completions.create(**kwargs)
+        except (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict):
+            raise
+        except Exception:
+            record(status="unknown", latency_ms=(time.monotonic() - started) * 1000)
+            check_attempt_budget()
+            raise
+        elapsed = (time.monotonic() - started) * 1000
+        try:
+            usage = self._response_usage(response, kwargs["messages"])
+        except (ValueError, TypeError, OverflowError, AttributeError) as exc:
+            record(status="accounting_error", latency_ms=elapsed)
+            # The committed error survives restart and blocks new dispatch.
+            # Precise recovery may settle it without a separate storage latch.
+            raise UsageLedgerUnresolvedError("Invalid provider usage; precise settlement required") from exc
+        record(latency_ms=elapsed, **usage)
+        if usage["usage_source"] == "known":
+            self._last_usage = {key: usage[key] for key in ("prompt_tokens", "completion_tokens")}
+        check_attempt_budget()
+        return response
+
     # ------------------------------------------------------------------
     # 公共接口
     # ------------------------------------------------------------------
@@ -379,28 +552,34 @@ class LLMClient:
         """
         发送聊天请求，返回模型响应文本。
 
-        所有提供方在瞬时失败（RuntimeError，含 CLI 错误、超时、推理模型空 content）
-        时自动指数退避重试（3 次）。OpenAI SDK 自身的 APIError 子类不在此重试范围，
-        会按原样抛出（SDK 内部已有自己的重试与限流处理）。
+        瞬时 API/CLI 错误、超时和推理模型空 content 自动指数退避重试（3 次）。
+        SDK 自带重试关闭；每次 API dispatch 独立计量，预算/计量停止信号不重试。
 
         tier（EXECPLAN2 I-6-2）: 'strong'（默认，= 当前模型，行为不变）| 'fast'（廉价/快速档）。
         仅当 Config.LLM_TIERED_ROUTING=true 且为 OpenAI 兼容提供方时，fast 才路由到更便宜的
         模型/提供方；CLI 订阅提供方与关闭路由时一律 no-op（graceful degradation）。
         """
         # EXECPLAN2 I-6-2: 解析本次调用实际使用的模型（fast/strong）。关闭路由时 = self.model。
-        model = self._model_for_tier(tier)
+        route = self._resolve_openai_route(tier) if self.provider in OPENAI_COMPATIBLE_PROVIDERS else None
+        provider = route[1] if route else self.provider
+        model = route[2] if route else self._model_for_tier(tier)
+        self._last_usage = None
         # EXECPLAN2 I-6-0/I-5-0/I-5-3: 内容寻址缓存命中直接返回；否则正常调用后记录
         # token/延迟/成本计量并做预算检查。计量默认开（开销极小），缓存/预算默认关。
-        from .telemetry import LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens
+        from .telemetry import (
+            LLMMeter, LLMCache, get_run_context, check_budget, estimate_tokens,
+            BudgetExceeded, UsageLedgerConflict, UsageLedgerStorageError,
+        )
         run_id, stage = get_run_context()
+        LLMMeter.assert_accounting_available(run_id)
         cache_key = None
         if Config.LLM_CACHE_ENABLED:
             # 缓存键纳入解析后的 model，避免 fast/strong 两档结果互相串档。
-            cache_key = LLMCache.key(self.provider, model, messages, temperature, max_tokens, response_format)
+            cache_key = LLMCache.key(provider, model, messages, temperature, max_tokens, response_format)
             hit = LLMCache.get(cache_key)
             if hit is not None:
-                if Config.LLM_TELEMETRY_ENABLED:
-                    LLMMeter.record(self.provider, model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
+                if Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id):
+                    LLMMeter.record(provider, model, 0, 0, 0.0, cached=True, stage=stage, run_id=run_id)
                 return hit
 
         last_error: Optional[Exception] = None
@@ -413,9 +592,10 @@ class LLMClient:
         self._last_usage = None
         # Circuit breaker: if the primary is in a content-filter/quota cooldown, skip the doomed
         # primary attempt entirely and go straight to the fallback (prevents the futile-call flood).
-        if _cb_tripped(self.provider) and not self._is_fallback:
+        if _cb_tripped(provider) and not self._is_fallback:
             _fb = self._try_fallback(messages, temperature, max_tokens, response_format,
-                                     RuntimeError(f"circuit-breaker: {self.provider} in 422/429 cooldown"))
+                                     RuntimeError(f"circuit-breaker: {provider} in 422/429 cooldown"),
+                                     primary_provider=provider)
             if _fb is not None:
                 result = _fb
                 served_by_fallback = True
@@ -425,22 +605,26 @@ class LLMClient:
                 # 白烧 5 次注定失败的调用（2026-07-08 实测：最高 231 错误/分钟持续 26 小时）。
                 # 直接抛出（复用穷尽路径的异常类型），让调用方快速失败。
                 raise RuntimeError(
-                    f"LLM 调用失败：主提供方 {self.provider} 处于 422/429 熔断冷却，"
+                    f"LLM 调用失败：主提供方 {provider} 处于 422/429 熔断冷却，"
                     f"且回退提供方不可用"
                 )
         for attempt in range(MAX_RETRIES):
             if result is not None:
                 break
+            LLMMeter.assert_accounting_available(run_id)
+            check_budget(run_id)
             try:
                 if self.provider in OPENAI_COMPATIBLE_PROVIDERS:
-                    result = self._chat_openai(messages, temperature, max_tokens, response_format, tier=tier)
+                    result = self._chat_openai(messages, temperature, max_tokens, response_format, tier=tier, _route=route)
                 elif self.provider == "codex-cli":
                     # CLI 订阅提供方只有单一订阅模型，tier 在此为 no-op。
                     result = self._chat_codex_cli(messages, temperature, max_tokens, response_format)
                 else:
                     result = self._chat_claude_cli(messages, temperature, max_tokens, response_format)
-                _cb_reset(self.provider)  # primary succeeded → clear its 422/429 streaks
+                _cb_reset(provider)  # clear the provider actually used
                 break
+            except (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict):
+                raise
             except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
                 if _is_deterministic_auth_error(exc):
@@ -450,7 +634,7 @@ class LLMClient:
                     )
                     break
                 if _is_quota(exc):
-                    _cb_record_429(self.provider)  # LLM-3: 连续配额失败达阈值 → 冷却直连回退
+                    _cb_record_429(provider)  # LLM-3: 连续配额失败达阈值 → 冷却直连回退
                 if attempt < MAX_RETRIES - 1:
                     delay = _retry_delay(exc, attempt)
                     logger.warning(
@@ -460,7 +644,7 @@ class LLMClient:
             except Exception as exc:  # noqa: BLE001 — non-retryable (e.g. 422 content-filter): stop retrying, try fallback
                 last_error = exc
                 if _is_content_filter(exc):
-                    _cb_record_422(self.provider)  # count toward tripping the breaker
+                    _cb_record_422(provider)  # count toward tripping the breaker
                 logger.warning(f"LLM 调用遇不可重试错误，转回退提供方: {_err_brief(exc)}")
                 break
         if result is None:
@@ -469,40 +653,46 @@ class LLMClient:
             # request once on a configured fallback provider so the run recovers instead of
             # shipping placeholders. The pipeline health gate (S1) still catches the case where
             # neither provider succeeds. Off unless LLM_FALLBACK_PROVIDER is set.
-            fb = self._try_fallback(messages, temperature, max_tokens, response_format, last_error)
+            fb = self._try_fallback(messages, temperature, max_tokens, response_format, last_error,
+                                    primary_provider=provider)
             if fb is not None:
                 result = fb
                 served_by_fallback = True
             else:
                 raise last_error if last_error is not None else RuntimeError("LLM 调用失败")
 
-        if Config.LLM_TELEMETRY_ENABLED and not served_by_fallback:
+        if (Config.LLM_TELEMETRY_ENABLED or LLMMeter.is_durable_run(run_id)) and not served_by_fallback and self.provider in CLI_PROVIDERS:
             latency_ms = (time.monotonic() - started) * 1000.0
-            usage = self._last_usage
-            if usage:
-                pt, ct = int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0))
-            else:
-                # 无精确 usage（CLI 提供方）→ 按文本长度粗估
-                pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
-                ct = estimate_tokens(result)
+            # CLI compatibility accounting remains logical-call text estimates.
+            pt = sum(estimate_tokens(str(m.get("content", ""))) for m in messages)
+            ct = estimate_tokens(result)
             # 用解析后的 model 计量，使 by_model 维度区分 fast/strong 用量与成本。
             LLMMeter.record(self.provider, model, pt, ct, latency_ms, cached=False, stage=stage, run_id=run_id)
-        if Config.LLM_CACHE_ENABLED and cache_key is not None:
+        if Config.LLM_CACHE_ENABLED and cache_key is not None and not served_by_fallback:
+            # Fallback chat owns its own provider/model cache entry.
             LLMCache.put(cache_key, result)
-        if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
+        if self.provider in CLI_PROVIDERS and (Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD):
             check_budget(run_id)  # 超预算抛 BudgetExceeded
         return result
 
     def _try_fallback(self, messages: List[Dict[str, str]], temperature: float,
                       max_tokens: int, response_format: Optional[Dict],
-                      primary_error: Optional[Exception]) -> Optional[str]:
+                      primary_error: Optional[Exception], *,
+                      primary_provider: Optional[str] = None) -> Optional[str]:
         """QUALITY-OPT S9: retry the request once on a configured fallback provider when the
         primary exhausts retries / hits a content-filter. Off unless LLM_FALLBACK_PROVIDER is
         set; never recurses (the fallback client has failover disabled). Returns text or None."""
+        self._last_usage = None  # A primary receipt cannot describe a fallback response.
+        from .telemetry import BudgetExceeded, LLMMeter, UsageLedgerConflict, UsageLedgerStorageError, check_budget
+        if isinstance(primary_error, (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict)):
+            raise primary_error
+        LLMMeter.assert_accounting_available()
+        check_budget()
         if getattr(self, "_is_fallback", False):
             return None
         fb_provider = (os.environ.get("LLM_FALLBACK_PROVIDER", "") or "").strip().lower()
-        if not fb_provider or fb_provider == self.provider:
+        primary_provider = primary_provider or self.provider
+        if not fb_provider or fb_provider == primary_provider:
             return None
         fb_model = (os.environ.get("LLM_FALLBACK_MODEL", "") or None)
         fb_base_url = (os.environ.get("LLM_FALLBACK_BASE_URL", "") or None)
@@ -548,13 +738,15 @@ class LLMClient:
                     _FB_OPENAI_CLIENTS[_fb_key] = fb._openai_client
                 else:
                     fb._openai_client = _cached
-            logger.warning(f"主提供方 {self.provider} 失败（{_err_brief(primary_error) if primary_error else '?'}），"
+            logger.warning(f"主提供方 {primary_provider} 失败（{_err_brief(primary_error) if primary_error else '?'}），"
                            f"切换到回退提供方 {fb_provider}")
             out = fb.chat(messages, temperature, max_tokens, response_format)
             with _CB_LOCK:
                 _FB_AUTH_UNAVAILABLE_UNTIL.pop(auth_key, None)
             logger.info(f"回退提供方 {fb_provider} 成功接管本次调用")
             return out
+        except (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict):
+            raise
         except Exception as e:  # noqa: BLE001 — fallback failed too; caller raises the primary error
             # 确定性失败（401 凭据坏 / 400 invalid-model 类）进入进程级冷却：重试修不好，
             # 并行 worker 不该反复对同一注定失败的回退发起昂贵调用。服务重启或修好配置自然清零。
@@ -650,17 +842,11 @@ class LLMClient:
             raise RuntimeError("chat_with_tools 仅支持 OpenAI 兼容提供方")
         # LLM-1/RPT-10: 熔断预检——冷却期内直接抛错（调用方 report_agent 捕获后降级 ReAct，
         # ReAct 走 chat() 自带的重试+回退链），不再对被审查/限流的提供方发一次注定失败的原生调用。
-        if _cb_tripped(self.provider):
-            raise RuntimeError(f"chat_with_tools: 提供方 {self.provider} 处于 422/429 熔断冷却，回退 ReAct")
+        self._last_usage = None
+        client, provider, model = self._resolve_openai_route(tier)
+        if _cb_tripped(provider):
+            raise RuntimeError(f"chat_with_tools: 提供方 {provider} 处于 422/429 熔断冷却，回退 ReAct")
         # EXECPLAN2 I-6-2: 解析模型/客户端（默认 strong = 当前模型/主客户端，工具调用行为不变）。
-        model = self._model_for_tier(tier)
-        client = self._openai_client
-        if (not self._is_fallback
-                and getattr(Config, "LLM_TIERED_ROUTING", False)
-                and tier == "fast"):
-            fast_client = self._fast_provider_client()
-            if fast_client is not None:
-                client = fast_client
         kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -669,27 +855,29 @@ class LLMClient:
             "tools": tools_schema,
             "tool_choice": "auto",
         }
-        extra_body = self._apply_reasoning_options(kwargs)
+        extra_body = self._apply_reasoning_options(kwargs, provider=provider)
         # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
-        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
+        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body, provider=provider)
         # LLM-1: 此前原生工具路径完全绕过 chat() 的韧性/观测栈（无重试、无熔断记账、无计量、
         # 无预算门）——REPORT_NATIVE_TOOLS 默认开时每章一次裸调用。对齐 chat()：瞬时错误退避重试、
         # 422 记入熔断、成功后计量+预算检查。原生工具没有 CLI 回退（CLI 无 tools=），最终失败原样
         # 抛出，由 report_agent 的 per-section 捕获降级 ReAct。
-        from .telemetry import LLMMeter, get_run_context, check_budget
-        _run_id, _stage = get_run_context()
-        _started = time.monotonic()
+        from .telemetry import (
+            BudgetExceeded, UsageLedgerConflict, UsageLedgerStorageError,
+        )
         response = None
         last_error: Optional[Exception] = None
         for attempt in range(MAX_RETRIES):
             try:
-                response = client.chat.completions.create(**kwargs)
-                _cb_reset(self.provider)
+                response = self._create_openai_completion(client, provider, model, kwargs)
+                _cb_reset(provider)
                 break
+            except (BudgetExceeded, UsageLedgerStorageError, UsageLedgerConflict):
+                raise
             except (RuntimeError, *_RETRYABLE_API_ERRORS) as exc:
                 last_error = exc
                 if _is_quota(exc):
-                    _cb_record_429(self.provider)
+                    _cb_record_429(provider)
                 if attempt < MAX_RETRIES - 1:
                     delay = _retry_delay(exc, attempt)
                     logger.warning(
@@ -699,23 +887,11 @@ class LLMClient:
             except Exception as exc:  # noqa: BLE001 — 不可重试（如 422 内容审查）：记熔断后快速失败
                 last_error = exc
                 if _is_content_filter(exc):
-                    _cb_record_422(self.provider)
+                    _cb_record_422(provider)
                 logger.warning(f"chat_with_tools 遇不可重试错误: {_err_brief(exc)}")
                 break
         if response is None:
             raise last_error if last_error is not None else RuntimeError("chat_with_tools 调用失败")
-        if Config.LLM_TELEMETRY_ENABLED:
-            try:
-                _u = getattr(response, "usage", None)
-                _pt = int(getattr(_u, "prompt_tokens", 0) or 0) if _u is not None else 0
-                _ct = int(getattr(_u, "completion_tokens", 0) or 0) if _u is not None else 0
-                LLMMeter.record(self.provider, model, _pt, _ct,
-                                (time.monotonic() - _started) * 1000.0,
-                                cached=False, stage=_stage, run_id=_run_id)
-            except Exception:  # noqa: BLE001 — 计量失败不影响返回
-                pass
-        if Config.LLM_RUN_BUDGET_TOKENS or Config.LLM_RUN_BUDGET_USD:
-            check_budget(_run_id)  # 超预算抛 BudgetExceeded
         choice = response.choices[0]
         msg = choice.message
         tool_calls = []
@@ -839,7 +1015,8 @@ class LLMClient:
         """移除推理模型的 <think> 标签。"""
         return re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
 
-    def _coerce_temperature(self, temperature: float, extra_body: Optional[Dict]) -> float:
+    def _coerce_temperature(self, temperature: float, extra_body: Optional[Dict], *,
+                            provider: Optional[str] = None) -> float:
         """按提供方约束修正采样温度。
 
         Kimi K2.7 Code 网关（api.kimi.com/coding，model=kimi-k2.7 / kimi-for-coding）对
@@ -849,12 +1026,13 @@ class LLMClient:
         （graphiti 还做升温重试），全部会被网关拒绝。故在此对 kimi 提供方按本次实际发送的
         ``extra_body``（是否关推理）强制为网关允许值；其它提供方原样返回，行为不变。
         """
-        if self.provider != 'kimi':
+        if (provider or self.provider) != 'kimi':
             return temperature
         thinking_disabled = bool(extra_body and (extra_body.get("thinking") or {}).get("type") == "disabled")
         return 0.6 if thinking_disabled else 1.0
 
-    def _apply_reasoning_options(self, kwargs: Dict[str, Any]) -> Optional[Dict]:
+    def _apply_reasoning_options(self, kwargs: Dict[str, Any], *,
+                                 provider: Optional[str] = None) -> Optional[Dict]:
         """Apply reasoning controls for the provider actually serving this request.
 
         A fallback client intentionally retains the global primary configuration, so request
@@ -862,7 +1040,7 @@ class LLMClient:
         Quotio's Antigravity alias additionally accepts the OpenAI-compatible
         ``reasoning_effort`` field.
         """
-        extra_body = Config.reasoning_extra_body(self.provider)
+        extra_body = Config.reasoning_extra_body(provider or self.provider)
         if extra_body:
             kwargs["extra_body"] = extra_body
         if self._is_fallback:
@@ -887,18 +1065,12 @@ class LLMClient:
         temperature: float,
         max_tokens: int,
         response_format: Optional[Dict] = None,
-        tier: str = "strong"
+        tier: str = "strong",
+        _route=None,
     ) -> str:
         # EXECPLAN2 I-6-2: 解析本次实际模型与客户端。fast tier 指向不同提供方时用第二客户端，
         # 否则同提供方仅切模型名；关闭路由时 model=self.model、client=self._openai_client。
-        model = self._model_for_tier(tier)
-        client = self._openai_client
-        if (not self._is_fallback
-                and getattr(Config, "LLM_TIERED_ROUTING", False)
-                and tier == "fast"):
-            fast_client = self._fast_provider_client()
-            if fast_client is not None:
-                client = fast_client
+        client, provider, model = _route or self._resolve_openai_route(tier)
         kwargs: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -910,22 +1082,12 @@ class LLMClient:
 
         # 推理模型(kimi/minimax/deepseek/qwen/glm)：默认关闭推理，避免 reasoning 吃光
         # max_tokens 导致 content 为空。reasoning_extra_body() 对非推理提供方返回 None。
-        extra_body = self._apply_reasoning_options(kwargs)
+        extra_body = self._apply_reasoning_options(kwargs, provider=provider)
 
         # Kimi K2.7 Code 网关按推理开关硬校验温度（开=1/关=0.6），覆盖调用方温度。
-        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body)
+        kwargs["temperature"] = self._coerce_temperature(temperature, extra_body, provider=provider)
 
-        response = client.chat.completions.create(**kwargs)
-        # 捕获精确 token 用量供计量（I-5-0）；无 usage 字段时留空走粗估。
-        try:
-            _u = getattr(response, "usage", None)
-            if _u is not None:
-                self._last_usage = {
-                    "prompt_tokens": int(getattr(_u, "prompt_tokens", 0) or 0),
-                    "completion_tokens": int(getattr(_u, "completion_tokens", 0) or 0),
-                }
-        except Exception:
-            self._last_usage = None
+        response = self._create_openai_completion(client, provider, model, kwargs)
         choice = response.choices[0]
         content = choice.message.content
         # 推理模型在 content 被推理耗尽时会返回空串/None（finish_reason=length）。
@@ -933,8 +1095,8 @@ class LLMClient:
         if content is None or not content.strip():
             finish = getattr(choice, "finish_reason", None)
             raise RuntimeError(
-                f"OpenAI 兼容提供方({self.provider})返回空 content（finish_reason={finish}）。"
-                f"若为 kimi/minimax 推理模型，请确认已关闭推理(LLM_{self.provider.upper()}_DISABLE_THINKING)或增大 max_tokens。"
+                f"OpenAI 兼容提供方({provider})返回空 content（finish_reason={finish}）。"
+                f"若为 kimi/minimax 推理模型，请确认已关闭推理(LLM_{provider.upper()}_DISABLE_THINKING)或增大 max_tokens。"
             )
         return self._clean_content(content)
 

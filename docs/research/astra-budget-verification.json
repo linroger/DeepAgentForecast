@@ -1,0 +1,336 @@
+{
+  "schema": "astra-budget-verification/v1",
+  "slice": "ASTRA-04b5a",
+  "verified_at": "2026-09-07T22:23:48.795305+00:00",
+  "status": "verified_offline",
+  "baseline_commit": "1c87a2954a3e5230676b5bfbad071cd36ce42030",
+  "scope": "Dedicated cumulative budget read projection, preserving enabled token/cost guard semantics. Parent ASTRA-04b5 and reservations04b5b remain open.",
+  "gates": {
+    "backend": {
+      "passed": 998,
+      "failures": 0,
+      "errors": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_fallback_model.py",
+        "backend/tests/test_graph_cost_containment.py",
+        "backend/tests/test_graph_optimizations.py",
+        "backend/tests/test_wave9_kg.py",
+        "backend/tests/test_report_chart_quality.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py",
+        "backend/tests/test_simulation_shared_usage.py",
+        "backend/tests/test_audit_fixes_runner.py",
+        "backend/tests/test_audit_fixes_runloop.py",
+        "backend/tests/test_simulation_runner_throttle.py",
+        "backend/tests/test_oasis_v1_provenance.py",
+        "backend/tests/test_decision_channel.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_budget_totals.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-budget-evidence-rlmw49dd/backend.xml"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "lint": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "backend/app/utils/usage_ledger.py",
+        "backend/app/utils/telemetry.py",
+        "backend/tests/test_budget_totals.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/scripts/benchmark_budget_guard.py"
+      ],
+      "files": [
+        "backend/app/utils/usage_ledger.py",
+        "backend/app/utils/telemetry.py",
+        "backend/tests/test_budget_totals.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/scripts/benchmark_budget_guard.py"
+      ],
+      "parse": "all_passed",
+      "returncode": 0,
+      "output": "All checks passed!\n"
+    },
+    "diff_check": "passed"
+  },
+  "source_sha256": {
+    "backend/app/utils/usage_ledger.py": "aaf105e828f6916f38110aeae731e080b800b0152f52fe19991e25d54fda543e",
+    "backend/app/utils/telemetry.py": "c9f34e7d15a0e50113130c80843b0d5e7492551db0b9e8e98f87cf605d0e9cdf",
+    "backend/tests/test_budget_totals.py": "182f771b178cbe7d45e4c9093bfcbbc43a099968bc1fde85cb95b08937ad1769",
+    "backend/tests/test_budget_guard_boundary.py": "ad7cc9fdf7d003aa52daf616daea37543ba820af9ebb9ccb710f8f178331f168",
+    "backend/scripts/benchmark_budget_guard.py": "1261b72194ed3a5e83c54b2c1c9cdb1919c19e08af7da03b9728fd9b750a4b93"
+  },
+  "independent_review": {
+    "status": "no_remaining_blocking_findings",
+    "focused_tests": 38,
+    "ledger_tests": 26,
+    "provider_boundary_tests": 12
+  },
+  "comparison": {
+    "path": "docs/research/astra-budget-comparison.json",
+    "sha256": "e731df660e578e79d6bce834bd573edcd84f9a8162b18cb2353c0ac2a0307ae7",
+    "command": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "backend/scripts/benchmark_budget_guard.py",
+        "--output",
+        "docs/research/astra-budget-comparison.json"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements"
+    },
+    "cases": [
+      {
+        "delta_rows": 100,
+        "operation_rows": 100,
+        "recorded_tokens": 15000,
+        "recorded_cost_usd": 0.0173,
+        "guard_modes": {
+          "tokens": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 0.4229
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 0.1388
+            },
+            "reduction_percent": 67.18
+          },
+          "cost": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 0.4196
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 0.2449
+            },
+            "reduction_percent": 41.63
+          },
+          "both": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 0.421
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 0.2544
+            },
+            "reduction_percent": 39.57
+          }
+        }
+      },
+      {
+        "delta_rows": 1000,
+        "operation_rows": 1000,
+        "recorded_tokens": 150000,
+        "recorded_cost_usd": 0.173,
+        "guard_modes": {
+          "tokens": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 2.0981
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 0.4474
+            },
+            "reduction_percent": 78.68
+          },
+          "cost": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 2.1225
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 1.4672
+            },
+            "reduction_percent": 30.87
+          },
+          "both": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 2.1456
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 1.4692
+            },
+            "reduction_percent": 31.52
+          }
+        }
+      },
+      {
+        "delta_rows": 10000,
+        "operation_rows": 10000,
+        "recorded_tokens": 1500000,
+        "recorded_cost_usd": 1.73,
+        "guard_modes": {
+          "tokens": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 21.6447
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 3.6771
+            },
+            "reduction_percent": 83.01
+          },
+          "cost": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 21.6541
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 15.6073
+            },
+            "reduction_percent": 27.92
+          },
+          "both": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 21.5595
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 15.5911
+            },
+            "reduction_percent": 27.68
+          }
+        }
+      },
+      {
+        "delta_rows": 100000,
+        "operation_rows": 100000,
+        "recorded_tokens": 15000000,
+        "recorded_cost_usd": 17.3,
+        "guard_modes": {
+          "tokens": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 279.2175
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 59.2455
+            },
+            "reduction_percent": 78.78
+          },
+          "cost": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 283.4583
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 209.0073
+            },
+            "reduction_percent": 26.27
+          },
+          "both": {
+            "before": {
+              "samples": 20,
+              "median_check_ms": 283.1697
+            },
+            "after": {
+              "samples": 20,
+              "median_check_ms": 209.5792
+            },
+            "reduction_percent": 25.99
+          }
+        }
+      }
+    ]
+  },
+  "historical_evidence": {
+    "path": "docs/research/astra-budget-run-evidence.json",
+    "sha256": "f4936a0752fdc45235eb4819ac8d0109f10e183d57f580981e63e40f304f6d4e",
+    "saved_artifact_hashes_unchanged": 77,
+    "pipeline_state_hashes_unchanged": 32,
+    "bounded_log_hashes_unchanged": 12,
+    "available_meter_files": 20,
+    "current_aggregate_call_range": [
+      0,
+      252
+    ],
+    "present_cumulative_aggregate_calls": [
+      255,
+      335,
+      629
+    ],
+    "physical_ledger_rows": null
+  },
+  "acceptance": {
+    "full_projection_dependency": "Root real SDK boundary scenarios reproduced failure on baseline full-snapshot reads; current token/cost guards operate without invoking full projection or operation-state aggregation.",
+    "provider_boundary": "Shared plain/native-tool and direct CAMEL sync/async calls stop after the first empty response reporting25tokens exceeds token10 or fixturecost2 exceeds USD1; repeated calls produce no further transmissions.",
+    "cost_grouping": "All eight baseline dimensions retain round6 semantics; interleaved fixture yields0.500001 while a flattened sum yields0.5.",
+    "integer_overflow": "1024 valid observations of2**53 tokens in separate groups preserve2**63 total; equal cap passes, one less raises BudgetExceeded with no storage latch.",
+    "recovery": "Legacy import, exact/stale/growing replay, resumed/child cumulative observations, existing-only/read-only compatibility, commit-consistent reads and sticky storage failure are covered.",
+    "disabled": "Both caps0 return without ledger reads; no performance benefit is claimed for default-disabled guards."
+  },
+  "raw_evidence_directory": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-budget-evidence-rlmw49dd",
+  "automation": {
+    "id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE",
+    "cadence": "hourly",
+    "verified_at": "2026-09-07T22:23:48.795305+00:00"
+  },
+  "limits": [
+    "Budget limits default to zero; the unchanged disabled path gets no claimed performance benefit.",
+    "Saved aggregate call counts do not establish physical ledger sizes; 100 is observed-scale adjacency, 1000 is sensitivity, and10000/100000 are scaling stress.",
+    "Read latency is local synthetic performance, not production or whole-workflow speedup.",
+    "Both narrow projections remain linear in the run's delta history; cost grouping is retained for rounding compatibility.",
+    "No schema/index/write-path change, reservations or complete invoice bound is included.",
+    "Historical counts are aggregate observations and overlapping snapshots; they cannot calibrate physical request or delta-row counts.",
+    "No runtime deployment, paid calls, saved-artifact edits, schema/index/write-path change or complete workflow Pareto claim.",
+    "Residual O(delta rows) scanning remains. Materialized totals need separate evidence and migration/rounding/mixed-writer design if selected later."
+  ]
+}

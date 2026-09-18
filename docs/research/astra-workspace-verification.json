@@ -1,0 +1,132 @@
+{
+  "schema": "astra-research-workspace-verification/v1",
+  "verified_at": "2026-09-16T11:43:31.107727+00:00",
+  "baseline_commit": "b2a2e10",
+  "status": "verified_offline",
+  "scope": "Direct research entry, professional accessible workspace, truthful readiness and selected-backend routing",
+  "source_sha256": {
+    "frontend/src/views/ResearchView.vue": "b3d9b2e6aebcfbce49e47da512f531f9bc11c8ce97bb4923c3fb3507a89d5a92",
+    "frontend/src/router/index.js": "d95f68f120ab66a462aa4eff8c0d80b5f89a03abeb0b84863d92bfd9d44c748a",
+    "frontend/src/utils/preflightState.js": "75507a8d00cfa7cfdb4397f7c0695aca2b0fb3f818f4e77bcf2f04a1b22da947",
+    "frontend/devServerConfig.mjs": "5221ce73562fa48cfbb045642e92557ce7b17e48eb2dfec39e638c84176a2446",
+    "frontend/vite.config.js": "01ea1038490084ddc027c42335a688f01a615d00885cbca21608fec513625045",
+    "scripts/start.sh": "2d23512bc5df5d8c5ff4dec2ef09458d179e349a6df8d8aad64624ee72bf1380",
+    "backend/run.py": "69a164356af57a1507b4c54ebd448836ee11055d07edc04092290b59eb7f3476",
+    "backend/tests/test_launcher_backend_port.py": "211281bcdf8fb415d100f7cc840cacb2697a81a250dc114a57db8ff9ea1b5796",
+    "backend/tests/test_start_script_progress.py": "e72ac82488469bda97cb50035d7c9697ad2b3efd3f9edc6d717b672ba09bd269",
+    "frontend/tests/devServerConfig.test.mjs": "2b0b5c5398b0754dc5141fbec09f39bf47b5a0ac75f7594b000bf59196b29fce",
+    "frontend/tests/preflightState.test.mjs": "02b5abe23f422c24edb3fd509233883a75ef38006413e60264367cc34f20b6c8",
+    "frontend/tests/manual/astra-workspace.playwright.js": "7012bfd61427ebf52573164f73f81677639fa96a3b83108b14d21a1039cd945c",
+    "frontend/tests/manual/astra-launch.playwright.js": "6b821e8adf204a7b84607fe854b0a300713e923202c183b57628be9df4b076be"
+  },
+  "backend": {
+    "passed": 3957,
+    "failed": 1,
+    "skipped": 17,
+    "xfailed": 11,
+    "seconds": 163.97,
+    "guarded_python_processes": 143,
+    "network_events": 0,
+    "source_drift": [],
+    "command": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/experience-20260916/offline_pytest.py",
+      "ui-backend-routing-final",
+      "backend/tests"
+    ],
+    "receipt_path": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/ui-backend-routing-final/command-completed.json",
+    "receipt_sha256": "4d7554e2addb7f50381c09782575db94b16c748108c13028dfaebfe4a0122a5b",
+    "junit_sha256": "9e6d329be93564df9cf89de56c65966f9e2957308ef3e8197f7312f017d48c6e",
+    "known_failure": "tests.test_drf2_skills_config.TestConfigYaml::test_skills_path_points_at_drf2_skills"
+  },
+  "frontend": {
+    "passed": 131,
+    "failed": 0,
+    "build_exit_code": 0,
+    "build_seconds": 1.83,
+    "entry_js_kb": 390.44,
+    "entry_js_gzip_kb": 140.34,
+    "baseline_entry_js_kb": 387.47,
+    "baseline_entry_js_gzip_kb": 139.44,
+    "build_log_sha256": "2fd2cf211381dbdf04283d8c7ef5e61e3e53bdd4e93a04bbcc68e170566e1686",
+    "unit_log_sha256": "e0b49ff114a03661d9147317e2e228c8f39b81f02904a7f4e9e8af84dce9b8b3",
+    "compiled_asset_parity": {
+      "files_before": 712,
+      "files_after": 712,
+      "all_built_assets_identical": true
+    }
+  },
+  "browser": {
+    "status": "completed before user requested stopping browser automation",
+    "workspace": {
+      "root_alias_and_brand": true,
+      "keyboard_advanced": true,
+      "history_focus_trap_and_restore": true,
+      "pending_launch_blocked": true,
+      "stale_mode_response_ignored": true,
+      "unavailable_truthful": true,
+      "readiness_retry": true,
+      "mobile_overflow": false,
+      "chinese_mobile_overflow": false,
+      "pipeline_posts": 0,
+      "page_errors": []
+    },
+    "launch_recovery": {
+      "lost_response_get_recovery": true,
+      "post_count_before_reload": 1,
+      "post_count_after_reload": 1,
+      "cross_tab_shared_identity": true,
+      "explicit_new_key": true,
+      "stale_tab_blocked": true,
+      "final_post_count": 2,
+      "mobile_overflow": false,
+      "rejected_payload_retirement": true,
+      "lost_abandon_response_get_recovery": true,
+      "interrupted_saved_run_open": true,
+      "uncertain_new_confirmation": true,
+      "confirmation_focus": true,
+      "page_errors": []
+    },
+    "log_sha256": {
+      "workspace-browser-v2.log": "ab2b1a33ea8f8791717ff8c703ea7aff1cfb0c841b06dd84f907cb1b1d5b9d55",
+      "launch-browser.log": "0a8c8ee1024603189b577b45b5973dd1f88ff297c8620d381a231a2b6a2b06f5"
+    },
+    "screenshots": {
+      "astra-launch-recovered.png": "3eeb4c3e95ea818bdccdd6ebf58990dc42fe200b753759d98e47b0ccb79e5c7d",
+      "astra-before-desktop.png": "f723dc47eda41cf05852b97e4f4c1d5388fc847046b5f177f84316c898ff4df7",
+      "astra-launch-mobile.png": "baa6902e5cf9f98b8b10e59b794f426e083491508d356cff817001f298d7be73",
+      "astra-workspace-mobile.png": "732a192b3ee86e74fd61dd2de0bfbb94222dd33eb88704b4b00b90630364bce4",
+      "astra-before-mobile.png": "85d57826fe5d53689380f69d985740a2f992f0c575ce2eb4afc2281229d0e31d",
+      "astra-after-desktop.png": "d37cf7b0d544f9b3366bb7851b09e9d684dd8a776680ecba9292d4673f65cf93",
+      "astra-workspace-mobile-zh.png": "cb1e7d592659f949b0476a7697fca3dff08c1ae048f0064214bde002c807459d",
+      "astra-launch-uncertain-new.png": "1f2268e862669f80a86ac8d8126c9041b3dcdfd79223cc41e29820ac107d5bb1",
+      "astra-workspace-desktop.png": "6a379ef7a64dfe590e91baeb77afcaed1c70be704e7d4a3c1982c8116378f10a"
+    }
+  },
+  "independent_review": {
+    "initial_finding": "P2 same-product wrong backend could pass generic health identity",
+    "resolution": "Actual resolved /api and /health routing targets must match selected backend; metadata excludes credentials and non-loopback/private targets.",
+    "final_code_only_checks": {
+      "backend_launcher": 43,
+      "frontend_routing": 5,
+      "blocking_findings": 0
+    },
+    "review_receipt": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/ui-entry-independent-review.json"
+  },
+  "original_checkout": "Preserved separate dirty cleanup; ASTRA implementation is not deployed to original main.",
+  "preview": {
+    "url": "http://localhost:3000/",
+    "kind": "frontend only",
+    "script": "/Users/rogerlin/.codex/astra-evidence/experience-20260916/preview.mjs",
+    "backend_started": false
+  },
+  "limits": [
+    "Full backend exits1 for the known drf2 scaffold path mismatch;17skips and11pre-existing xfails remain.",
+    "No production provider, saved pipeline start/resume, deployment or original checkout rewrite.",
+    "Browser automation is stopped per user instruction; existing browser evidence covers byte-identical final built UI assets.",
+    "The UI bundle is modestly larger; no render-speed or workflow-token savings is claimed.",
+    "Graph receipt preservation, market correctness, visualization and remaining workflow recommendations remain open."
+  ],
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/experience-20260916",
+  "implementation_commit": "45a8da856f54159974fdff7f200e045de80c2357"
+}

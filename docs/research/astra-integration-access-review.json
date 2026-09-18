@@ -1,0 +1,115 @@
+{
+  "schema": "astra-integration-independent-review/v1",
+  "reviewed_at": "2026-09-11T13:29:16.748792+00:00",
+  "assessment": "approved_for_scoped_actor_access_slice",
+  "findings": [],
+  "resolves_review": {
+    "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/review.json",
+    "sha256": "1665776ca7fd785d93ff86be0f987c744ab58883a87eaa863dae8510d67ca54d",
+    "finding_priority": "P1",
+    "finding_title": "A denied claim is reintroduced through a second actor public claim"
+  },
+  "source": {
+    "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/services/simulation_config_generator.py",
+    "sha256": "504015fae1a8325c9dcb215fd9e8e2f1251ac6d4d31dc623cbe9fe48ac9c1efd",
+    "denial_collection_lines": [
+      1699,
+      1705
+    ],
+    "final_filter_lines": [
+      1728,
+      1730
+    ]
+  },
+  "tests": {
+    "path": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/tests/test_actor_shared_access.py",
+    "sha256": "35458a70802a95e51fc7bef94a4aba0b02b29088b73512a0726dbfa4bb1128fa",
+    "permanent_cases": 16,
+    "independent_cases": 2
+  },
+  "review_conclusions": [
+    "The selector validates participating canonical context packs and their dossier binding before reading projected source-bound claims; missing packs cannot downgrade into raw dossier reads.",
+    "Literal False at either top-level or qualifier position wins over public visibility and conflicting literal True. Denied identities are accumulated across all validated participating actors/dimensions before the final global filter, making row/actor order irrelevant under the existing shared-claim identity.",
+    "The implementation never mutates canonical packs; permanent duplicate tests revalidate persisted seals, retain modeler audit and preserve other-actor authorized knowledge.",
+    "The original independent two-actor reproducer now passes in both actor orders; the permanent 16-case suite passes independently.",
+    "The exact baseline-selector comparison demonstrates 12 expected failures and 4 positive passes, then 16 current passes; all six channels show zero denied exposure in the current version.",
+    "No blocking correctness finding remains within the exact normalized-claim shared-context slice."
+  ],
+  "verification": [
+    {
+      "phase": "actor-comparison-baseline",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-baseline/command-completed.json",
+      "command_receipt_sha256": "6f3059d27f0fee45693906f128fefca26164a3a6ae8379e8d880690b4c1a4664",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-baseline/results.xml",
+      "junit_sha256": "7a5465c89ce671ee6bbe8f692578324beb4e8807f2446c1cc8597a40b0edcf6c",
+      "tests": 16,
+      "failures": 12,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:26:51.976589+00:00",
+      "exit_code": 1,
+      "network_attempts": [],
+      "changed_sources": []
+    },
+    {
+      "phase": "actor-comparison-current",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-current/command-completed.json",
+      "command_receipt_sha256": "ef355f67f98b48411ffba85eccce24f6c1dd0e45833e0ff2468eb56672905ca0",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-comparison-current/results.xml",
+      "junit_sha256": "1c57d67595d84e8088971688b4bd0d5bae7bdc9b36f61e422214ced381046576",
+      "tests": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:27:04.604289+00:00",
+      "exit_code": 0,
+      "network_attempts": [],
+      "changed_sources": []
+    },
+    {
+      "phase": "actor-review-final-corrected",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-review-final-corrected/command-completed.json",
+      "command_receipt_sha256": "35c55bcc89e8a66902c216e8d8fbc644b41f264218963c06adedc0d156b8ea82",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-review-final-corrected/results.xml",
+      "junit_sha256": "e310170009f89a814f0db58b23dd78649633bc9cec3115a0835e4182e734c5ee",
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:27:33.121058+00:00",
+      "exit_code": 0,
+      "network_attempts": [],
+      "changed_sources": []
+    },
+    {
+      "phase": "actor-final",
+      "command_receipt": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-final/command-completed.json",
+      "command_receipt_sha256": "97c99022c534ec54027428c509c32eae5d797b2183a7628484c95ccd2834fbd5",
+      "junit": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-final/results.xml",
+      "junit_sha256": "002c593e99210c08c093d2c80a55feba464f619728361d68477000b97b2642b7",
+      "tests": 172,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "completed_at": "2026-09-11T13:24:22.788635+00:00",
+      "exit_code": 0,
+      "network_attempts": [],
+      "changed_sources": []
+    }
+  ],
+  "comparison": {
+    "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-access-comparison.json",
+    "sha256": "9df42a235901b6e925bb8e6516dde78b9351abad0836909bcc06b7d01910871f"
+  },
+  "review_harness_correction": "The first final independent run passed all 16 permanent cases but its two older external cases assumed world-brief injection always creates _system_message. Correct denial filtering can make the brief empty, preserving the original message; the harness then raised AttributeError before observing channels. A separate corrected reproducer reads effective message or original fallback. The corrected 18-case run passes; the failed receipt and original reproducer/evidence are preserved. No runtime edit was needed.",
+  "corrected_independent_reproducer": {
+    "path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/test_actor_cross_claim_final_review.py",
+    "sha256": "ffb024570073b8c313aae589c3159ce43378456ddf62dc753ed80bacfc1afe6d"
+  },
+  "remaining_scope": [
+    "This approval covers source-bound canonical shared claim selection and its six offline consumers, not full app acceptance.",
+    "Semantic paraphrase matching, per-recipient public feeds, broader ontology/report integration and production provider behavior are not proven by this change.",
+    "Global suppression is a conservative tradeoff for a universally shared brief; authorized actor-local knowledge remains available.",
+    "No original checkout, runtime/saved-run artifacts or repository code/tests/docs were modified by the reviewer."
+  ]
+}

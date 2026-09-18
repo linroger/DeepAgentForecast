@@ -1,0 +1,212 @@
+{
+  "schema": "astra-reservation-comparison/v1",
+  "baseline_commit": "5924dd46cf18c4f111ecc780b269db5041bac36b",
+  "baseline_llm_client_sha256": "70c44e2e46f71a7ad8cc9c27fe00efb9c32927abaa370d4e575be427891060d1",
+  "baseline_method_ast_sha256": "0f1217ea458e19c6baa71282335a4c81563306fe643c12b9cf0cab22ad892cc2",
+  "current_source_sha256": {
+    "backend/app/utils/llm_client.py": "da6c4779e22ed38d906a6c19450c57aa430b34f5973cc6550f111a2d663cb0bf",
+    "backend/app/utils/telemetry.py": "4a91c2a4ae3c667580dcc909c3f78fcefce32a1d23d186644b2c122fdbf15621",
+    "backend/app/utils/usage_ledger.py": "e56ae77fa30c36006cd6bc9a6e7500111e93ffbd1dc0a9d4ed9ed1300bc528e4",
+    "backend/app/utils/api_budget.py": "e1ad29975c37181bbaabe81a15a27d16aa98f1100344a76c9d27499872d20b37",
+    "backend/scripts/benchmark_api_reservations.py": "26272d504fd62bfa7848d6de31384a3bb501c04a5b25788a9ca2f68eaed10da3"
+  },
+  "runtime_versions": {
+    "openai": "1.109.1",
+    "httpx": "0.28.1"
+  },
+  "provider_requests": 0,
+  "network_requests": 0,
+  "method": "Only the pinned LLMClient._create_openai_completion method is bound to baseline clients. Both sides use the current outer retry loop, meter, full projection and ledger schema in fresh temporary runs.",
+  "fixture_request": {
+    "messages_count": 0,
+    "max_tokens": 10,
+    "estimated_input_tokens": 4,
+    "planned_tokens_per_attempt": 14
+  },
+  "timing_scope": "Only successful synchronous chat calls are timed, with three untimed warm-ups per side and alternating order. Samples include durable admission/settlement writes. Concurrency and timeout cases have no latency claim.",
+  "cases": {
+    "same_owner_concurrency": {
+      "before": {
+        "token_cap": 20,
+        "max_tokens": 10,
+        "mock_transport_requests": 2,
+        "peak_fixture_transports": 2,
+        "first_request": {
+          "outcome": "BudgetExceeded",
+          "content_matches_fixture": null
+        },
+        "competing_request": {
+          "outcome": "success",
+          "content_matches_fixture": true
+        },
+        "while_first_request_pending": {
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "unknown_operations": 0,
+          "in_flight_operations": 1,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": null,
+            "active_operations": 0,
+            "reserved_tokens": 0,
+            "estimated": true
+          }
+        },
+        "recorded_calls": 2,
+        "recorded_tokens": 30,
+        "unknown_operations": 0,
+        "in_flight_operations": 0,
+        "distinct_owner_attempts": 1,
+        "token_reservation_state": {
+          "schema": "token-reservation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "token_limit": null,
+          "active_operations": 0,
+          "reserved_tokens": 0,
+          "estimated": true
+        }
+      },
+      "after": {
+        "token_cap": 20,
+        "max_tokens": 10,
+        "mock_transport_requests": 1,
+        "peak_fixture_transports": 1,
+        "first_request": {
+          "outcome": "success",
+          "content_matches_fixture": true
+        },
+        "competing_request": {
+          "outcome": "BudgetExceeded",
+          "content_matches_fixture": null
+        },
+        "while_first_request_pending": {
+          "recorded_calls": 0,
+          "recorded_tokens": 0,
+          "unknown_operations": 0,
+          "in_flight_operations": 1,
+          "distinct_owner_attempts": 1,
+          "token_reservation_state": {
+            "schema": "token-reservation-state/v1",
+            "coverage": "recorded_llm_api_attempts",
+            "token_limit": 20,
+            "active_operations": 1,
+            "reserved_tokens": 14,
+            "estimated": true
+          }
+        },
+        "recorded_calls": 1,
+        "recorded_tokens": 15,
+        "unknown_operations": 0,
+        "in_flight_operations": 0,
+        "distinct_owner_attempts": 1,
+        "token_reservation_state": {
+          "schema": "token-reservation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "token_limit": 20,
+          "active_operations": 0,
+          "reserved_tokens": 0,
+          "estimated": true
+        }
+      }
+    },
+    "timeout_retries": {
+      "before": {
+        "token_cap": 28,
+        "max_tokens": 10,
+        "mock_transport_requests": 3,
+        "outcome": "APITimeoutError",
+        "content_matches_fixture": null,
+        "recorded_calls": 3,
+        "recorded_tokens": 0,
+        "unknown_operations": 3,
+        "in_flight_operations": 0,
+        "distinct_owner_attempts": 1,
+        "token_reservation_state": {
+          "schema": "token-reservation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "token_limit": null,
+          "active_operations": 0,
+          "reserved_tokens": 0,
+          "estimated": true
+        }
+      },
+      "after": {
+        "token_cap": 28,
+        "max_tokens": 10,
+        "mock_transport_requests": 2,
+        "outcome": "BudgetExceeded",
+        "content_matches_fixture": null,
+        "recorded_calls": 2,
+        "recorded_tokens": 0,
+        "unknown_operations": 2,
+        "in_flight_operations": 0,
+        "distinct_owner_attempts": 1,
+        "token_reservation_state": {
+          "schema": "token-reservation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "token_limit": 28,
+          "active_operations": 2,
+          "reserved_tokens": 28,
+          "estimated": true
+        }
+      }
+    },
+    "successful_request_overhead": {
+      "before": {
+        "token_cap": 1000000,
+        "max_tokens": 10,
+        "mock_transport_requests": 33,
+        "samples": 30,
+        "untimed_warmup_requests": 3,
+        "median_local_elapsed_ms": 2.1434,
+        "all_content_matches_fixture": true,
+        "recorded_calls": 33,
+        "recorded_tokens": 495,
+        "unknown_operations": 0,
+        "in_flight_operations": 0,
+        "distinct_owner_attempts": 1,
+        "token_reservation_state": {
+          "schema": "token-reservation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "token_limit": null,
+          "active_operations": 0,
+          "reserved_tokens": 0,
+          "estimated": true
+        }
+      },
+      "after": {
+        "token_cap": 1000000,
+        "max_tokens": 10,
+        "mock_transport_requests": 33,
+        "samples": 30,
+        "untimed_warmup_requests": 3,
+        "median_local_elapsed_ms": 2.2144,
+        "all_content_matches_fixture": true,
+        "recorded_calls": 33,
+        "recorded_tokens": 495,
+        "unknown_operations": 0,
+        "in_flight_operations": 0,
+        "distinct_owner_attempts": 1,
+        "token_reservation_state": {
+          "schema": "token-reservation-state/v1",
+          "coverage": "recorded_llm_api_attempts",
+          "token_limit": 1000000,
+          "active_operations": 0,
+          "reserved_tokens": 0,
+          "estimated": true
+        }
+      }
+    }
+  },
+  "limits": [
+    "Synthetic fixtures prove admission and usage preservation, not production latency, historical overshoot or invoiced savings.",
+    "Budget caps are enabled for this comparison; default-disabled guards have no claimed benefit.",
+    "The baseline method writes no allowance policy or holds; the current method activates them in otherwise identical current-schema storage.",
+    "Empty messages estimate four input tokens but the fixture reports ten. Reservations are planned allowance, not guaranteed provider tokenization or a complete spend ceiling.",
+    "Timeouts have unknown usage. Zero recorded tokens are not evidence of zero consumption.",
+    "This harness covers shared synchronous LLMClient dispatch. Native asynchronous, process/restart, malformed usage and compatibility cases require separate regressions.",
+    "No CLI subprocess, paid provider, deployment or original saved-run mutation occurs."
+  ]
+}

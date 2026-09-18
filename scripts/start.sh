@@ -42,6 +42,8 @@ BACKEND_PORT="${FLASK_PORT:-5001}"
 FRONTEND_PORT=3000
 BACKEND_URL="http://localhost:${BACKEND_PORT}/health"
 FRONTEND_URL="http://localhost:${FRONTEND_PORT}/"
+FRONTEND_HEALTH_URL="${FRONTEND_URL}health"
+FRONTEND_ROUTING_URL="${FRONTEND_URL}__drf/dev-routing"
 BACKEND_TIMEOUT_SECONDS="${START_BACKEND_TIMEOUT_SECONDS:-60}"
 FRONTEND_TIMEOUT_SECONDS="${START_FRONTEND_TIMEOUT_SECONDS:-30}"
 HEALTH_CURL_TIMEOUT_SECONDS="${START_HEALTH_CURL_TIMEOUT_SECONDS:-2}"
@@ -307,8 +309,8 @@ if [ "$STOP" -eq 1 ]; then
 fi
 
 _backend_ready() {
-  local body
-  body="$(curl -fsS --max-time "$HEALTH_CURL_TIMEOUT_SECONDS" "$BACKEND_URL" 2>/dev/null)" || return 1
+  local body url="${1:-$BACKEND_URL}"
+  body="$(curl -fsS --max-time "$HEALTH_CURL_TIMEOUT_SECONDS" "$url" 2>/dev/null)" || return 1
   "$PYTHON_BIN" -c '
 import json
 import sys
@@ -327,12 +329,41 @@ raise SystemExit(
 ' <<< "$body" >/dev/null 2>&1
 }
 
+_frontend_routing_ready() {
+  local body
+  body="$(curl -fsS --max-time "$HEALTH_CURL_TIMEOUT_SECONDS" "$FRONTEND_ROUTING_URL" 2>/dev/null)" || return 1
+  "$PYTHON_BIN" -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, UnicodeDecodeError):
+    raise SystemExit(1)
+expected = f"http://127.0.0.1:{int(sys.argv[1])}"
+raise SystemExit(
+    0
+    if isinstance(payload, dict)
+    and payload.get("schema") == "drf-dev-routing/v1"
+    and payload.get("service") == "DeepResearchForecast Frontend"
+    and payload.get("api_target") == expected
+    and payload.get("health_target") == expected
+    else 1
+)
+' "$BACKEND_PORT" <<< "$body" >/dev/null 2>&1
+}
+
 _frontend_ready() {
   local body
   body="$(curl -fsS --max-time "$HEALTH_CURL_TIMEOUT_SECONDS" "$FRONTEND_URL" 2>/dev/null)" || return 1
   [[ "$body" == *'<title>DeepResearchForecast'* \
     && "$body" == *'name="description" content="DeepResearchForecast'* \
-    && "$body" == *'id="app"'* ]]
+    && "$body" == *'id="app"'* ]] || return 1
+  # Another healthy DRF instance can have the same /health signature. Require
+  # this frontend's actual API and health targets to match the selected port.
+  _frontend_routing_ready || return 1
+  # A rendered shell alone does not prove that its API proxy reaches the app.
+  _backend_ready "$FRONTEND_HEALTH_URL"
 }
 
 _wait_ready() {
@@ -363,7 +394,8 @@ _start_backend() {
   echo "Starting backend on :$BACKEND_PORT …"
   (
     cd "$BACKEND_DIR" || exit 1
-    nohup "$PYTHON_BIN" run.py > "$BACKEND_LOG" 2>&1 < /dev/null &
+    FLASK_PORT="$BACKEND_PORT" DRF_LAUNCHER_BACKEND_PORT="$BACKEND_PORT" \
+      nohup "$PYTHON_BIN" run.py > "$BACKEND_LOG" 2>&1 < /dev/null &
     printf '%s\n' "$!" > "$BACKEND_PID_FILE"
     disown
   )
@@ -375,7 +407,8 @@ _start_frontend() {
   echo "Starting frontend on :$FRONTEND_PORT …"
   (
     cd "$FRONTEND_DIR" || exit 1
-    nohup npm run dev > "$FRONTEND_LOG" 2>&1 < /dev/null &
+    FLASK_PORT="$BACKEND_PORT" DRF_LAUNCHER_BACKEND_PORT="$BACKEND_PORT" \
+      nohup npm run dev > "$FRONTEND_LOG" 2>&1 < /dev/null &
     printf '%s\n' "$!" > "$FRONTEND_PID_FILE"
     disown
   )
@@ -686,7 +719,7 @@ while true; do
   else
     if [ -z "$FRONTEND_UNHEALTHY_SINCE" ]; then
       FRONTEND_UNHEALTHY_SINCE="$now"
-      echo "[service] WARN: Frontend failed its DeepResearchForecast HTML signature; allowing ${HEALTH_FAILURE_GRACE_SECONDS}s grace." >&2
+      echo "[service] WARN: Frontend failed its DeepResearchForecast UI/API readiness check; allowing ${HEALTH_FAILURE_GRACE_SECONDS}s grace." >&2
     fi
     frontend_unhealthy_for=$((now - FRONTEND_UNHEALTHY_SINCE))
     if [ "$frontend_unhealthy_for" -ge "$HEALTH_FAILURE_GRACE_SECONDS" ]; then

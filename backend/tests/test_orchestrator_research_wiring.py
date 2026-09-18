@@ -668,7 +668,7 @@ def test_missing_legacy_run_summary_is_backfilled_once(monkeypatch, tmp_path):
 
 def _exercise_prepare_run_resume(
         monkeypatch, tmp_path, *, rebuild_prepare, corrupt_run=False,
-        corrupt_prepare_seal=False):
+        corrupt_prepare_seal=False, before_run=None):
     """Run the real orchestrator state machine with every external service faked."""
     pipeline_root = tmp_path / "pipelines"
     simulation_root = tmp_path / "simulations"
@@ -1037,6 +1037,8 @@ def _exercise_prepare_run_resume(
         )
     }
 
+    if before_run is not None:
+        before_run(state)
     _po.PipelineOrchestrator._run(state)
     return SimpleNamespace(
         state=state,

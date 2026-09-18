@@ -18,6 +18,7 @@ import importlib
 import importlib.util
 import json
 import re
+import shutil
 import subprocess
 import sys
 import types as pytypes
@@ -367,9 +368,12 @@ class TestConfigYaml:
 
     def test_skills_path_points_at_drf2_skills(self, cfg):
         path = Path(cfg["skills"]["path"])
-        assert path == SKILLS_ROOT, f"skills.path {path} != {SKILLS_ROOT}"
+        assert not path.is_absolute(), "skills.path must be relative to the caller project root"
+        assert path == Path("drf2/skills")
+        resolved = REPO_ROOT / path
+        assert resolved == SKILLS_ROOT
         # loader 扫 {public,custom} —— custom 必须存在且非空
-        assert (path / "custom").is_dir() and any((path / "custom").iterdir())
+        assert (resolved / "custom").is_dir() and any((resolved / "custom").iterdir())
 
     def test_tool_search_enabled_for_deferred_mcp(self, cfg):
         assert cfg["tool_search"]["enabled"] is True
@@ -378,8 +382,10 @@ class TestConfigYaml:
 class TestRealSchemaValidation:
     """用 harness 自己的 pydantic 模型整体校验两份配置（最强的 schema 契约测试）。"""
 
-    def test_config_yaml_loads_via_real_appconfig(self, deerflow_config_modules):
+    def test_config_yaml_loads_via_real_appconfig(self, deerflow_config_modules, monkeypatch, tmp_path):
         app_config, _ = deerflow_config_modules
+        monkeypatch.setenv("DEER_FLOW_PROJECT_ROOT", str(REPO_ROOT))
+        monkeypatch.chdir(tmp_path)
         cfg = app_config.AppConfig.from_file(str(CONFIG_YAML))
         assert [m.name for m in cfg.models] == ["claude-sonnet", "minimax-m3"]
         assert set(cfg.subagents.custom_agents) == {
@@ -387,7 +393,35 @@ class TestRealSchemaValidation:
         assert cfg.subagents.custom_agents["researcher"].timeout_seconds == 2700
         assert cfg.subagents.custom_agents["sim-configurer"].timeout_seconds == 900
         assert cfg.tool_search.enabled is True
-        assert Path(cfg.skills.path) == SKILLS_ROOT
+        assert Path(cfg.skills.path) == Path("drf2/skills")
+        assert cfg.skills.get_skills_path() == SKILLS_ROOT.resolve()
+
+    @pytest.mark.parametrize("launch_location", ["vendor_backend", "outside_project"])
+    def test_skills_resolve_in_relocated_project(
+        self, deerflow_config_modules, monkeypatch, tmp_path, launch_location,
+    ):
+        app_config, _ = deerflow_config_modules
+        project_root = tmp_path / "relocated-checkout"
+        relocated_config = project_root / "drf2" / "config" / "config.yaml"
+        relocated_skills = project_root / "drf2" / "skills"
+        relocated_config.parent.mkdir(parents=True)
+        shutil.copyfile(CONFIG_YAML, relocated_config)
+        shutil.copytree(SKILLS_ROOT, relocated_skills)
+        if launch_location == "vendor_backend":
+            launch_dir = project_root / "deer-flow-2.0.0" / "backend"
+        else:
+            launch_dir = tmp_path / "outside-project"
+        launch_dir.mkdir(parents=True)
+        monkeypatch.setenv("DEER_FLOW_PROJECT_ROOT", str(project_root))
+        monkeypatch.chdir(launch_dir)
+
+        cfg = app_config.AppConfig.from_file(str(relocated_config))
+
+        assert Path(cfg.skills.path) == Path("drf2/skills")
+        resolved = cfg.skills.get_skills_path()
+        assert resolved == relocated_skills.resolve()
+        assert resolved != SKILLS_ROOT.resolve()
+        assert {p.parent.name for p in resolved.glob("custom/*/SKILL.md")} == EXPECTED_SKILLS
 
     def test_extensions_json_loads_via_real_schema(self, deerflow_config_modules):
         _, extensions_config = deerflow_config_modules

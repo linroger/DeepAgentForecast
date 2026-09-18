@@ -8,6 +8,7 @@ OASIS Agent Profile生成器
 3. 区分个人实体和抽象群体实体
 """
 
+import contextvars
 import json
 import os
 import random
@@ -2401,10 +2402,11 @@ class OasisProfileGenerator:
         print(f"{'='*60}\n")
         
         # 使用线程池并行执行
+        parent_context = contextvars.copy_context()
         with concurrent.futures.ThreadPoolExecutor(max_workers=parallel_count) as executor:
             # 提交所有任务
             future_to_entity = {
-                executor.submit(generate_single_profile, idx, entity): (idx, entity)
+                executor.submit(parent_context.copy().run, generate_single_profile, idx, entity): (idx, entity)
                 for idx, entity in enumerate(entities)
             }
             

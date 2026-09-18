@@ -1,0 +1,139 @@
+{
+  "schema": "astra-integration-verification/v1",
+  "verified_at": "2026-09-11T13:33:46.827991+00:00",
+  "scope": "ASTRA-INTEGRATION-01: shared actor-access denial; wider application audit remains in progress",
+  "baseline_commit": "ef8c419de0d1bc65e84f4f40fd384ac4255edc6e",
+  "source_sha256": {
+    "backend/app/services/simulation_config_generator.py": "504015fae1a8325c9dcb215fd9e8e2f1251ac6d4d31dc623cbe9fe48ac9c1efd",
+    "backend/app/services/actor_context.py": "ff9dd29047c139edca8b46bbda74eecdfe2dc2329e425ad9822d6023e188e024",
+    "backend/app/services/actor_role_prompt.py": "ddd46f53df939fb24c86507f86e69f6b74167371f25c4c088a73efc49278e83e",
+    "backend/scripts/run_parallel_simulation.py": "01fcb83305e9b5e883d59ffaf422bea0f6e1e38f9f9d0b417740aea76ee403de",
+    "backend/tests/test_actor_shared_access.py": "35458a70802a95e51fc7bef94a4aba0b02b29088b73512a0726dbfa4bb1128fa",
+    "backend/tests/test_ontology_context_transfer.py": "f885f919b8151e01c1f40efdf2ac7e59f646d4a76968507c7e04b7acacbff7ba",
+    "backend/tests/test_utils_security.py": "8f73d0c177c61fafeeb7f869b67cd1d1bcf727158d813abd681d9fa102dbff96"
+  },
+  "backend_full": {
+    "passed": 3896,
+    "failed": 1,
+    "skipped": 17,
+    "xfailed": 16,
+    "guarded_python_processes": 69,
+    "blocked_network_events": 0,
+    "changed_sources": [],
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/integration-20260911/offline_pytest.py",
+      "backend-final-offline",
+      "backend/tests"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/backend-final-offline/results.xml",
+    "junit_sha256": "820520167b87cf64947dbfb9e71b1d883aee1b24ecc052906a6b650a03ccb046",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/backend-final-offline/command-completed.json",
+    "command_receipt_sha256": "e4c8d6d6292d410da93d0e60c86001b10ae47817ccca573949e2337323707602",
+    "started_at": "2026-09-11T13:29:44.268947+00:00",
+    "completed_at": "2026-09-11T13:31:58.302315+00:00",
+    "failures": [
+      "tests.test_drf2_skills_config.TestConfigYaml::test_skills_path_points_at_drf2_skills"
+    ]
+  },
+  "actor_focused": {
+    "passed": 172,
+    "failed": 0,
+    "skipped": 0,
+    "xfailed": 0,
+    "guarded_python_processes": 1,
+    "blocked_network_events": 0,
+    "changed_sources": [],
+    "argv": [
+      "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+      "/Users/rogerlin/.codex/astra-evidence/integration-20260911/offline_pytest.py",
+      "actor-final",
+      "backend/tests/test_actor_shared_access.py",
+      "backend/tests/test_actor_context_runtime.py",
+      "backend/tests/test_actor_role_prompt.py",
+      "backend/tests/test_actor_cast_discipline.py",
+      "backend/tests/test_simulation_config_seal.py",
+      "backend/tests/test_sim_context_persona.py",
+      "backend/tests/test_sim_config_v1_provenance.py",
+      "backend/tests/test_oasis_v1_provenance.py"
+    ],
+    "junit_path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-final/results.xml",
+    "junit_sha256": "002c593e99210c08c093d2c80a55feba464f619728361d68477000b97b2642b7",
+    "command_receipt_path": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/actor-final/command-completed.json",
+    "command_receipt_sha256": "97c99022c534ec54027428c509c32eae5d797b2183a7628484c95ccd2834fbd5",
+    "started_at": "2026-09-11T13:24:15.332422+00:00",
+    "completed_at": "2026-09-11T13:24:22.788635+00:00",
+    "failures": []
+  },
+  "independent_actor_review": {
+    "passed": 18,
+    "blocking_findings": 0,
+    "artifact": "docs/research/astra-integration-access-review.json"
+  },
+  "comparison": {
+    "denied_case_channel_observations_before": 71,
+    "denied_case_channel_observations_after": 0,
+    "positive_controls_before": 24,
+    "positive_controls_after": 24,
+    "pack_sets_unchanged": 16,
+    "authorized_duplicate_actor_knowledge_preserved": 4,
+    "artifact": "docs/research/astra-integration-access-comparison.json",
+    "limits": "Synthetic selector substitution only; no production latency, savings or semantic paraphrase-detection claim."
+  },
+  "frontend": {
+    "unit_passed": 113,
+    "failed": 0,
+    "build_exit_code": 0,
+    "build_seconds": 2.32,
+    "entry_js_kb": 387.47,
+    "entry_js_gzip_kb": 139.44,
+    "unit_log": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/frontend-unit.log",
+    "unit_log_sha256": "e9d11e5d6d42dc03000f950539ae8d8a3772247e31754e2a203c040a325e971b",
+    "build_log": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/frontend-build.log",
+    "build_log_sha256": "07f162be13e14765a9615309f7c87791999697ec0bca8cd9bf4810a4a6c67bfc",
+    "output_dir": "/Users/rogerlin/.codex/astra-evidence/integration-20260911/frontend-dist"
+  },
+  "lint": {
+    "findings": [],
+    "compiled_sources": [
+      "backend/app/services/simulation_config_generator.py",
+      "backend/tests/test_actor_shared_access.py",
+      "backend/tests/test_ontology_context_transfer.py",
+      "backend/tests/test_utils_security.py"
+    ]
+  },
+  "saved_run_refresh": {
+    "unchanged_artifacts": 77,
+    "unchanged_pipeline_states": 32,
+    "unchanged_bounded_logs": 12,
+    "artifact": "docs/research/astra-integration-run-evidence.json",
+    "production_benchmark": false
+  },
+  "known_failures": [
+    {
+      "id": "ASTRA-INTEGRATION-11",
+      "count": 1,
+      "scope": "drf2 pre-cutover scaffold checkout path portability"
+    },
+    {
+      "id": "ASTRA-INTEGRATION-02",
+      "count": 5,
+      "scope": "Ontology context truncation before sampling",
+      "status": "strict xfail; unresolved, not counted as acceptance passes"
+    }
+  ],
+  "limits": [
+    "3896 passing tests do not prove every component works in production.",
+    "17 skips and 16 expected failures remain, including 5 newly reproduced ontology failures.",
+    "The September9 nested-launcher broad result is invalid; the first September11 broad gate had three DNS fixture failures subsequently fixed without runtime security changes.",
+    "Ontology reuse, report context closure and the other tracked integration issues remain open.",
+    "Original checkout cleanup preserved. No live providers, real pipeline launch/resume, deployment, saved-run changes or rejected-auth retry."
+  ],
+  "artifact_sha256": {
+    "docs/research/astra-integration-access-comparison.json": "9df42a235901b6e925bb8e6516dde78b9351abad0836909bcc06b7d01910871f",
+    "docs/research/astra-integration-access-review.json": "4ce8a52191f0518fcd9ef7418bd948482605b07bbc8057470688f04ba71b72fc",
+    "docs/research/astra-integration-run-evidence.json": "1055236e2bce127779a2dccf6117879513160771e4dcf1bb0f51e0a88e541f1c"
+  },
+  "evidence_vault": "/Users/rogerlin/.codex/astra-evidence/integration-20260911",
+  "implementation_commit": "ef4f795fd7588df7ae16e89ddd34c41e7677bf87"
+}

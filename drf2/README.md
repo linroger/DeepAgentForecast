@@ -72,16 +72,23 @@ engine sources): KG — `kg_add_episode`, `kg_search`, `kg_get_entities`,
 ### 3.2 Start the harness with this config
 
 ```bash
-cd deer-flow-2.0.0
-export DEER_FLOW_CONFIG_PATH=/Users/rogerlin/Downloads/DeepResearchForecast/drf2/config/config.yaml
-export DEER_FLOW_EXTENSIONS_CONFIG_PATH=/Users/rogerlin/Downloads/DeepResearchForecast/drf2/config/extensions_config.json
-export PYTHONPATH=/Users/rogerlin/Downloads/DeepResearchForecast:$PYTHONPATH
+# Start in the DeepResearchForecast checkout root.
+export DEER_FLOW_PROJECT_ROOT="$(pwd -P)"
+export DEER_FLOW_CONFIG_PATH="$DEER_FLOW_PROJECT_ROOT/drf2/config/config.yaml"
+export DEER_FLOW_EXTENSIONS_CONFIG_PATH="$DEER_FLOW_PROJECT_ROOT/drf2/config/extensions_config.json"
+export PYTHONPATH="$DEER_FLOW_PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+cd "$DEER_FLOW_PROJECT_ROOT/deer-flow-2.0.0"
 make dev        # gateway :8001, UI :3000, nginx :2026
 ```
 
-(Or copy the two config files to the deer-flow project root instead of exporting
-the path vars. `config.yaml` pins `skills.path` to this repo's `drf2/skills` with
-an absolute path — adjust it if the repo lives elsewhere.)
+`skills.path: drf2/skills` is resolved by the harness's
+`SkillsConfig.get_skills_path()` relative to `DEER_FLOW_PROJECT_ROOT`, not the
+config file's directory. Keep that variable set to the DeepResearchForecast
+checkout root when launching from the vendor directory or another working
+directory. Without it, the harness uses the current working directory. This
+keeps skill resolution portable when the checkout moves; the engine interpreter
+and `PYTHONPATH` entries in `extensions_config.json` still need to point to the
+intended checkout before starting engines.
 
 ### 3.3 Drive a forecast
 
@@ -127,6 +134,9 @@ parser/validator (path-injected from `deer-flow-2.0.0/`; skipped cleanly if that
 tree is absent), validates `config.yaml` structure + `$ENV` placeholders +
 sub-agent wiring, validates `extensions_config.json`, and unit-tests the Polymarket
 tool's pure logic with mocked fetches. No network, no LLM, no engines needed.
+The real `AppConfig` checks also resolve skills in a relocated temporary checkout
+from both a vendor backend directory and an unrelated working directory, using
+an explicit `DEER_FLOW_PROJECT_ROOT`.
 
 ### Verified import paths
 
@@ -164,9 +174,9 @@ Done in this tree:
 - Engine env contracts (FalkorDB/Graphiti/LLM keys) in `extensions_config.json`
   are a best-guess passthrough; finalize against the engines' real config surface
   (see `drf2/engines/*/README.md`).
-- Absolute paths in `config.yaml` (skills.path) and `extensions_config.json`
-  (venv python, PYTHONPATH) are pinned to this machine's checkout; parametrize or
-  re-point at deployment.
+- Absolute paths in `extensions_config.json` (venv python, PYTHONPATH) are still
+  pinned to this machine's checkout; parametrize or re-point at deployment.
+  Skill resolution uses the project-root-relative configuration described in §3.2.
 - No live end-to-end run has been performed through the harness; the deliverable
   gates (research floor, hollow-sim, conviction) live in the driver and are not
   exercised by the offline tests.

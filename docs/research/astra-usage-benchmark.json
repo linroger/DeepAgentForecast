@@ -1,0 +1,67 @@
+{
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "python": "3.12.6",
+    "python_implementation": "CPython",
+    "sqlite": "3.46.0",
+    "synchronous": "FULL"
+  },
+  "inputs": {
+    "guard_checks": 30,
+    "operations": 500,
+    "replayed_operations": 500,
+    "snapshot_reads": 30,
+    "synthetic_usage_per_operation": {
+      "calls": 1,
+      "completion_tokens": 100,
+      "cost_usd": 0.0,
+      "latency_ms": 1.0,
+      "prompt_tokens": 1000
+    }
+  },
+  "limitations": [
+    "Local single-writer run; does not estimate provider latency or production savings.",
+    "Timing depends on machine, filesystem and OS caches; power-loss durability is not tested.",
+    "Only the database is temporary; an explicitly requested JSON report is retained."
+  ],
+  "measured_at_utc": "2026-09-07T17:45:24.742705+00:00",
+  "measurement": "synthetic_local_instrumentation_overhead",
+  "production_gain_measured": false,
+  "schema_version": "astra-usage-benchmark/v1",
+  "temporary_database_bytes": 413696,
+  "timings": {
+    "aggregate_snapshot_read": {
+      "median_ms": 0.941062,
+      "p95_ms": 1.030125,
+      "samples": 30
+    },
+    "availability_guard": {
+      "median_ms": 0.105708,
+      "p95_ms": 0.185417,
+      "samples": 30
+    },
+    "identical_snapshot_replay": {
+      "median_ms": 0.398396,
+      "p95_ms": 0.537958,
+      "samples": 500
+    },
+    "operation_write": {
+      "median_ms": 0.479355,
+      "p95_ms": 0.62975,
+      "samples": 500
+    }
+  },
+  "verification": {
+    "duplicate_added_tokens": 0,
+    "exact_totals": {
+      "calls": 500,
+      "completion_tokens": 50000,
+      "prompt_tokens": 500000,
+      "total_tokens": 550000
+    },
+    "passed": true,
+    "repeated_snapshots_unchanged": true,
+    "temporary_database_removed": true
+  }
+}

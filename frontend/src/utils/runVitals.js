@@ -24,7 +24,7 @@ function isPlainObject(value) {
 
 /** Coerce to a finite non-negative number; anything else → null. */
 function nonNegativeNumber(value) {
-  if (value === null || value === undefined || value === '') return null
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
   const n = Number(value)
   if (!Number.isFinite(n) || n < 0) return null
   return n
@@ -145,35 +145,45 @@ export function buildRunVitalsModel(live, context = {}) {
 
   const liveness = deriveLiveness(live, terminal)
 
-  // Spend: only when the backend actually metered something (it already omits
-  // the all-zero case, but stay defensive about zero-filled payloads).
+  // Explicit availability preserves a registered zero; legacy zero-filled
+  // payloads still carry no evidence that accounting was initialized.
   let spendTokens = null
   let spendCostUsd = null
+  let spendUnknown = false
+  let usageComplete = null
+  let spendCoverage = null
   if (isPlainObject(live.spend_so_far)) {
-    const tokens = nonNegativeInt(live.spend_so_far.tokens)
-    const cost = nonNegativeNumber(live.spend_so_far.cost_usd)
-    if ((tokens !== null && tokens > 0) || (cost !== null && cost > 0)) {
+    const spend = live.spend_so_far
+    const tokens = nonNegativeInt(spend.tokens)
+    const cost = nonNegativeNumber(spend.cost_usd)
+    spendUnknown = spend.available === false
+      || (spend.available === true && tokens === null && cost === null)
+    usageComplete = typeof spend.usage_complete === 'boolean' ? spend.usage_complete : null
+    spendCoverage = typeof spend.coverage === 'string' ? spend.coverage : null
+    if (!spendUnknown && (spend.available === true || tokens > 0 || cost > 0)) {
       spendTokens = tokens
       spendCostUsd = cost
     }
   }
 
-  // Budget: requires a positive limit; spent defaults to 0, remaining to the
-  // unspent difference, and the fill percentage is clamped to [0, 100].
+  // Unknown spend cannot imply zero usage or an untouched budget. Only an
+  // omitted remaining field may be derived from a known recorded total.
   let budget = null
   if (isPlainObject(live.budget)) {
     const limitTokens = nonNegativeInt(live.budget.limit_tokens)
     if (limitTokens !== null && limitTokens > 0) {
-      const spentTokens = nonNegativeInt(live.budget.spent_tokens) ?? 0
-      const remainingTokens = nonNegativeInt(live.budget.remaining_tokens)
-        ?? Math.max(0, limitTokens - spentTokens)
-      const ratio = spentTokens / limitTokens
+      const spentTokens = live.budget.available === false
+        ? null : nonNegativeInt(live.budget.spent_tokens)
+      const remainingTokens = spentTokens === null ? null
+        : live.budget.remaining_tokens === undefined ? Math.max(0, limitTokens - spentTokens)
+          : nonNegativeInt(live.budget.remaining_tokens)
+      const ratio = spentTokens === null ? null : spentTokens / limitTokens
       budget = {
         limitTokens,
         spentTokens,
         remainingTokens,
-        pctUsed: Math.max(0, Math.min(100, Math.round(ratio * 100))),
-        critical: ratio > 0.9
+        pctUsed: ratio === null ? null : Math.max(0, Math.min(100, Math.round(ratio * 100))),
+        critical: ratio !== null && ratio > 0.9
       }
     }
   }
@@ -185,6 +195,9 @@ export function buildRunVitalsModel(live, context = {}) {
     liveness,
     spendTokens,
     spendCostUsd,
+    spendUnknown,
+    usageComplete,
+    spendCoverage,
     budget,
     // Raw ages for the liveness tooltip (native title with the raw seconds).
     heartbeatAgeS: nonNegativeInt(live.heartbeat_age_s),
@@ -198,6 +211,7 @@ export function buildRunVitalsModel(live, context = {}) {
     && model.etaSeconds === null
     && model.liveness === null
     && !hasSpend
+    && !model.spendUnknown
     && !model.budget
   ) return null
   return model

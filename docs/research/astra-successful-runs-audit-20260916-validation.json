@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-09-16T10:42:00.515257+00:00",
+  "validation": "independent reread of saved states, source hashes and reference child/report arithmetic",
+  "successful_ids_match": 26,
+  "stage_endpoints_verified": 156,
+  "selected_runtime_logs_present": 254,
+  "source_receipts_still_match": 597,
+  "changed_sources": [],
+  "reference_recomputed_tokens": 89340365,
+  "audit_sha256": "08318adaf45d2d42474a2baa1b848c842719852194c4323ca8a39935643bd97f",
+  "markdown_sha256": "bdcf4b8ecd8cf10702b5b6b8e177fe05c31729965d9396aa79d6a4a0db01f262"
+}

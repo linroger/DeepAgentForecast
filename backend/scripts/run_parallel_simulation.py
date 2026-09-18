@@ -71,6 +71,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import argparse
 import asyncio
+import contextvars
 import hashlib
 import inspect
 import json
@@ -2110,41 +2111,56 @@ def _wrap_llm_client_usage(client: Any) -> Any:
     try:
         from app.utils.oasis_llm import _estimate_tokens_of
 
+        # chat_json calls the wrapped chat once or twice for JSON repair. Each
+        # nested chat owns its usage; the outer JSON wrapper must not record the
+        # last response again. This counter follows one synchronous invocation
+        # tree, independently in every thread/context, and resets at its root.
+        invocation_count = contextvars.ContextVar("sim_llm_usage_invocations", default=0)
+
         def _wrap_method(name: str) -> None:
             orig = getattr(client, name, None)
             if not callable(orig):
                 return
 
             def _wrapped(messages, *args, **kwargs):
+                before = invocation_count.get()
+                token = invocation_count.set(before + 1)
                 try:
-                    result = orig(messages, *args, **kwargs)
-                except Exception:
-                    _record_sim_llm_error()
-                    raise
-                try:
-                    model = str(
-                        getattr(client, "model", "")
-                        or getattr(client, "provider", "")
-                        or "unknown"
-                    )
-                    usage = getattr(client, "_last_usage", None)
-                    if isinstance(usage, dict) and (
-                        usage.get("prompt_tokens") or usage.get("completion_tokens")
-                    ):
-                        _record_sim_llm_usage(
-                            "provider", model,
-                            usage.get("prompt_tokens", 0),
-                            usage.get("completion_tokens", 0),
+                    try:
+                        result = orig(messages, *args, **kwargs)
+                    except Exception:
+                        if invocation_count.get() == before + 1:
+                            _record_sim_llm_error()
+                        raise
+                    if invocation_count.get() != before + 1:
+                        return result  # Inner calls already recorded their own outcomes.
+                    try:
+                        model = str(
+                            getattr(client, "model", "")
+                            or getattr(client, "provider", "")
+                            or "unknown"
                         )
-                    else:
-                        _record_sim_llm_usage(
-                            "estimate", model,
-                            _estimate_tokens_of(messages),
-                            _estimate_tokens_of(result),
-                        )
-                except Exception:  # noqa: BLE001 — 计量绝不影响调用结果
-                    pass
-                return result
+                        usage = getattr(client, "_last_usage", None)
+                        if isinstance(usage, dict) and (
+                            usage.get("prompt_tokens") or usage.get("completion_tokens")
+                        ):
+                            _record_sim_llm_usage(
+                                "provider", model,
+                                usage.get("prompt_tokens", 0),
+                                usage.get("completion_tokens", 0),
+                            )
+                        else:
+                            _record_sim_llm_usage(
+                                "estimate", model,
+                                _estimate_tokens_of(messages),
+                                _estimate_tokens_of(result),
+                            )
+                    except Exception:  # noqa: BLE001 — 计量绝不影响调用结果
+                        pass
+                    return result
+                finally:
+                    if before == 0:
+                        invocation_count.reset(token)
 
             setattr(client, name, _wrapped)
 
@@ -2196,6 +2212,11 @@ def _write_sim_llm_telemetry(simulation_dir: str,
             "wall_s": round(max(0.0, time.time() - _SIM_LLM_METER_STARTED), 3),
             "written_at": datetime.now().isoformat(),
         }
+        from app.utils.simulation_usage import current_authority
+        usage_authority = current_authority()
+        if usage_authority is not None:
+            payload["usage_authority"] = usage_authority
+            payload["diagnostic_only"] = True
         write_json_atomic(
             os.path.join(simulation_dir, SIM_LLM_TELEMETRY_FILE), payload)
         if log_info:
@@ -5061,6 +5082,11 @@ async def main():
         str(validated_config_manifest.get("simulation_config_sha256") or "") or None,
     )
     _SIM_LLM_TELEMETRY_SINK["config"] = config  # DEFECT-3: 落盘时解析 provider/model
+    from app.utils.simulation_usage import bootstrap
+    usage_authority = bootstrap(args.config)
+    if usage_authority is not None:
+        global _SIM_LLM_METER_RUN_TOKEN
+        _SIM_LLM_METER_RUN_TOKEN = usage_authority["launch_token"]
     wait_for_commands = not args.no_wait
     
     # 初始化日志配置（禁用 OASIS 日志，清理旧文件）
@@ -5237,6 +5263,9 @@ async def main():
         except Exception as _dc_err:  # noqa: BLE001
             log_manager.error(f"决策通道演化失败（已隔离，不影响模拟结果）: {_dc_err}")
 
+    from app.utils.simulation_usage import assert_complete
+    assert_complete()
+
     # 是否进入等待命令模式
     if wait_for_commands:
         log_manager.info("")
@@ -5345,6 +5374,8 @@ if __name__ == "__main__":
     setup_signal_handlers()
     try:
         asyncio.run(main())
+        from app.utils.simulation_usage import assert_complete
+        assert_complete()
     except KeyboardInterrupt:
         print("\n程序被中断")
     except SystemExit:

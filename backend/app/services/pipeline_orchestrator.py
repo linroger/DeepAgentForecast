@@ -1277,19 +1277,16 @@ def _graph_research_chunks(text: Any, label: str) -> list[str]:
     split only the safe text, and wrap *every* resulting episode in its own
     explicit non-executable data boundary.
 
-    The cap is derived from the input length rather than a presentation budget:
-    graph ingestion must retain the full safe evidence corpus.  Normal graph
-    chunk size/overlap still provide the actual per-episode bound.
+    Graph ingestion must retain the full safe evidence corpus, including growth
+    from Unicode normalization and unsafe-line replacement. Normal graph chunk
+    size/overlap still provide the actual per-episode bound.
     """
     raw = _strip_data_uri_images(str(text or ""))
     if not raw.strip():
         return []
     safe_document = sanitize_untrusted_research_text(
         raw,
-        # An unsafe one-word line expands to a stable omission marker. Reserve
-        # that worst-case per-line growth so security replacement never
-        # truncates neighbouring evidence before the normal chunker runs.
-        max_chars=max(1, len(raw) + (raw.count("\n") + 1) * 64),
+        max_chars=None,
     )
     raw_chunks = TextProcessor.split_text(
         safe_document,
@@ -1413,11 +1410,17 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
         # otherwise drift exactly like deerflow_research.py did; mirror that guard here.
         for _tool_mod in (
             "market_tools.py", "search_tools.py", "cached_fetch.py",
-            "research_budget.py", "linear_research.py"
+            "research_budget.py", "linear_research.py", "research_compaction.py",
         ):
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
                 pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
+                if _tool_mod == "research_compaction.py":
+                    # The native Gateway starts in backend/ with PYTHONPATH=.;
+                    # keep its helper identical to the root bridge's import.
+                    pairs.append((
+                        _tool_src, os.path.join(deerflow_dir, "backend", _tool_mod),
+                    ))
         # LOOP-009 provider-call admission and middleware-internal model calls
         # must be reproducible from the tracked bridge overlay. ``deer-flow/``
         # is gitignored, so syncing only the root bridge script would leave a
@@ -1847,6 +1850,45 @@ def _synthesis_provider_unavailable(error: Any) -> bool:
     return any(marker in text for marker in _SYNTHESIS_PROVIDER_UNAVAILABLE_MARKERS)
 
 
+class _ResearchCompactionStopped(RuntimeError):
+    """A producer-confirmed stop that cannot be retried or salvaged implicitly."""
+
+    code = "research_compaction_failed"
+
+    def __init__(self, reason: str = "compaction_failed", thread_id: str = ""):
+        self.reason = (
+            reason if isinstance(reason, str)
+            and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", reason)
+            else "compaction_failed"
+        )
+        self.thread_id = thread_id if isinstance(thread_id, str) else ""
+        super().__init__(f"{self.code}: {self.reason}")
+
+
+def _raise_current_research_compaction_stop(
+    handoff_dir: str, process_attempt_id: str, exit_code: Optional[int] = None,
+) -> None:
+    """Read this launch's typed stop, including when failure metadata cannot save.
+
+    Exit code 4 is reserved by the trusted bridge for a compaction stop. It is
+    the fallback if the archive and metadata share a full/read-only filesystem;
+    ordinary stdout text never becomes stop authority.
+    """
+    meta = _read_json(os.path.join(handoff_dir, "meta.json"))
+    if (
+        isinstance(meta, dict) and process_attempt_id
+        and meta.get("research_process_attempt_id") == process_attempt_id
+        and meta.get("status") == "failed"
+    ):
+        stop = meta.get("compaction_stop")
+        if isinstance(stop, dict) and stop.get("code") == _ResearchCompactionStopped.code:
+            raise _ResearchCompactionStopped(
+                stop.get("reason"), stop.get("thread_id"),
+            )
+    if exit_code == 4:
+        raise _ResearchCompactionStopped()
+
+
 def _configure_research_budget_env(
     env: dict[str, str],
     handoff_dir: str,
@@ -1859,10 +1901,12 @@ def _configure_research_budget_env(
 ) -> None:
     """Inject the shared LOOP-007 ledger contract into one research process.
 
-    All descendants inherit these values.  Disabling the feature removes any
-    stale variables copied from the backend process so an operator can reliably
-    turn the control plane off for a diagnostic run.
+    All descendants inherit these values. Disabling budgets removes inherited
+    budget variables but preserves the independent compaction evidence archive.
+    Its handoff-local path is stable across budget epochs and process resumes.
     """
+    env["RESEARCH_COMPACTION_DB"] = os.path.join(
+        handoff_dir, "research_compaction.sqlite3")
     if not bool(getattr(Config, "RESEARCH_BUDGET_ENABLED", True)):
         for key in _RESEARCH_BUDGET_ENV_KEYS:
             env.pop(key, None)
@@ -1896,36 +1940,84 @@ def _configure_research_budget_env(
         Config, "RESEARCH_NEGATIVE_CACHE_RETRIES", 1))
 
 
+def _research_process_usage(telemetry: dict[str, Any]) -> dict[str, Any]:
+    """Small immutable-identity snapshot; never includes question or provider text."""
+    observation = {key: telemetry.get(key) for key in (
+        "process_attempt_id", "model", "tokens_in", "tokens_out", "wall_s",
+    )}
+    observation.update(
+        cache_read_tokens=telemetry.get("cache_read_tokens", 0),
+        cache_write_tokens=telemetry.get("cache_write_tokens", 0),
+        cache_partition="unknown",
+    )
+    return observation
+
+
+def _record_research_process_usage(
+    telemetry: dict[str, Any], run_id: Optional[str], *, status: str,
+) -> bool:
+    """Commit emitted process coverage before final synthetic rollups can repeat it."""
+    from ..utils.telemetry import LLMMeter, get_run_context
+    rid = run_id or get_run_context()[0]
+    operation_id = telemetry.get("process_attempt_id")
+    if not rid or not operation_id or not LLMMeter.is_durable_run(rid):
+        return False
+    model = str(telemetry.get("model") or Config.DEERFLOW_MODEL)
+    provider = f"{model}-cli" if model in ("claude", "codex") else model
+    LLMMeter.record_snapshot(
+        source="research_process", operation_id=str(operation_id), provider=provider,
+        model=model, prompt_tokens=int(telemetry.get("tokens_in") or 0),
+        completion_tokens=int(telemetry.get("tokens_out") or 0),
+        latency_ms=float(telemetry.get("wall_s") or 0) * 1000,
+        run_id=rid, stage=STAGE_RESEARCH, calls=1, status=status,
+        cache_read_tokens=telemetry.get("cache_read_tokens", 0),
+        cache_write_tokens=telemetry.get("cache_write_tokens", 0),
+        # These are partial cache observations already included in input usage.
+        # Their absence or remainder cannot establish uncached-token usage.
+        uncached_tokens=None,
+        # Stdout aggregates do not prove complete request-level/provider usage.
+        usage_source="unknown", billing_basis="subscription" if provider.endswith("-cli") else "estimated_api",
+    )
+    return True
+
+
+def _merged_research_process_usage(telemetries: list[dict]) -> list[dict]:
+    """Carry source operations through lane/global summaries instead of recharging totals."""
+    snapshots = []
+    for telemetry in telemetries:
+        if isinstance(telemetry.get("process_usage_snapshots"), list):
+            snapshots.extend(telemetry["process_usage_snapshots"])
+        elif telemetry.get("process_attempt_id"):
+            snapshots.append(_research_process_usage(telemetry))
+    return snapshots
+
+
 def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
                                          attempt_status: str,
                                          run_id: Optional[str] = None) -> bool:
-    """DEFECT-2：把一次**未成功**研究 attempt 已累计的 token 花费计入统一计量。
+    """Reconcile emitted usage on failure, retaining legacy unbound behavior.
 
-    审计取证（31.9M 实耗 vs 5.35M 入账）：per-attempt 的 _tok_in/_tok_out 在每次研究
-    子进程启动时清零、research_telemetry 只在成功路径构建、_record_research_telemetry
-    是研究花费进 LLMMeter 的唯一入口——失败/超时/SIGTERM/取消把整个 attempt 的账直接
-    丢掉。本函数由 :meth:`DeerFlowResearchRunner.run` 包装层在异常出口调用，向 LLMMeter
-    写一条 stage='research' 的合成记录（provider/model 映射与 _record_research_telemetry
-    完全一致）。
-
-    恰好一次 / 不与成功路径重复：``spend['flushed']`` 置位保证幂等；包装层只在异常出口
-    调用（成功 return 的 attempt 仍由调用方经 _record_research_telemetry 入账，成功路径
-    逐字节不变）。LLMMeter 记录 schema 无附加字段位，attempt_status 无法进计量行——以
-    告警日志留痕（含 status 与 token 数）作可审计标签。
-
-    返回是否真的写了计量记录（无 token / 计量关闭 / 已 flush → False）。
+    Bound pipelines stream durable process snapshots while the child runs. This
+    failure observation updates the same operation; duplicate credit is impossible.
+    Unbound callers retain one synthetic attempt record. Emitted token coverage
+    does not prove complete provider usage or historical billing.
     """
     if not isinstance(spend, dict) or spend.get("flushed"):
         return False
-    spend["flushed"] = True
     t_in = int(spend.get("tokens_in") or 0)
     t_out = int(spend.get("tokens_out") or 0)
-    if t_in <= 0 and t_out <= 0:
+    if (t_in <= 0 and t_out <= 0
+            and not spend.get("cache_read_tokens") and not spend.get("cache_write_tokens")):
         return False  # 该研究模型未报 usage → 无可计量 token
     if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
         return False
     try:
         from ..utils.telemetry import LLMMeter
+        current = dict(spend)
+        current["wall_s"] = max(0.0, time.time() - float(spend.get("t_start") or time.time()))
+        if _record_research_process_usage(current, run_id, status="failed"):
+            spend["flushed"] = True
+            return True
         model = str(spend.get("model") or getattr(Config, "DEERFLOW_MODEL", "claude"))
         # 与 _record_research_telemetry 相同的计价 provider 映射：CLI 订阅类（claude/
         # codex）边际成本 0，其余复用同名 provider 的定价表（缺失则成本 0，仍记 token）。
@@ -1944,6 +2036,7 @@ def _flush_failed_research_attempt_spend(spend: Optional[dict[str, Any]],
             stage=STAGE_RESEARCH,
             run_id=str(run_id) if run_id else None,  # None → contextvar/单活跃 run 回退
         )
+        spend["flushed"] = True
         logger.warning(
             "研究 attempt 以 %s 终止，已消耗 tokens in=%d out=%d（model=%s）——"
             "已计入 stage='research' 合成计量，不再随失败丢账",
@@ -1982,6 +2075,8 @@ class DeerFlowResearchRunner:
         """
         spend: dict[str, Any] = {
             "tokens_in": 0, "tokens_out": 0, "tokens_total": 0,
+            "cache_read_tokens": 0, "cache_write_tokens": 0,
+            "cache_partition": "unknown",
             "t_start": time.time(),
             "model": model or Config.DEERFLOW_MODEL,
             "flushed": False,
@@ -2078,6 +2173,11 @@ class DeerFlowResearchRunner:
                 return None
 
         artifact_before = _artifact_fingerprint(expected_artifact_path)
+        from ..utils.telemetry import LLMMeter
+        LLMMeter.assert_accounting_available(budget_run_id)
+        process_attempt_id = uuid.uuid4().hex
+        if _spend is not None:
+            _spend["process_attempt_id"] = process_attempt_id
 
         def _fresh_expected_artifact() -> bool:
             current = _artifact_fingerprint(expected_artifact_path)
@@ -2122,6 +2222,7 @@ class DeerFlowResearchRunner:
             cmd += ["--synthesis-manifest", str(synthesis_manifest_path)]
 
         env = dict(os.environ)
+        env["RESEARCH_PROCESS_ATTEMPT_ID"] = process_attempt_id
         env.setdefault("PYTHONUNBUFFERED", "1")
         # Checkpoint identity is parent-owned per launch; never inherit an
         # ambient value from the backend process into a different handoff.
@@ -2313,6 +2414,7 @@ class DeerFlowResearchRunner:
         # I-5-7: 结构化研究阶段遥测（token/工具量/壁钟）。bridge 已在 stdout 发出 [usage] 行，
         # 此前只用于推进进度启发，token 数字被丢弃；这里顺带累加，使最贵的研究阶段也进入统一计量。
         _tok_in = _tok_out = _tok_total = 0
+        _cache_read = _cache_write = 0
         _result_events = 0
         _t_start = time.time()
         if _spend is not None:
@@ -2325,41 +2427,59 @@ class DeerFlowResearchRunner:
                     continue
                 last_line = line
                 local = estimator.observe(line)
+                event = _RESEARCH_LOG_EVENT_RE.match(line)
+                event_kind = event.group("kind") if event else None
                 # 解析进度日志的事件类型 [tool]/[result]/[stage]/[ok]/[done]/[error]/[usage]
-                if "[tool]" in line:
+                if event_kind == "tool":
                     tool_events += 1
                     on_progress(local, _tail(line))
-                elif "[result]" in line:
+                elif event_kind == "result":
                     _result_events += 1
                     on_progress(local, _tail(line))
-                elif "[stage]" in line:
+                elif event_kind == "stage":
                     # ResearchProgressEstimator already reserves honest bands for
                     # synthesis/extraction/finalization.  The legacy 92 cap would
                     # now regress a 95% track when triangulation emits [stage].
                     on_progress(local, _tail(line))
-                elif "[usage]" in line:
+                elif event_kind == "usage":
                     # I-5-7: 仅累加 token，不动进度（usage 行非进度信号）。
                     parsed = _parse_usage_line(line)
                     if parsed is not None:
                         _i, _o, _t = parsed
+                        _read, _write = _parse_usage_cache_line(line)
                         _tok_in += _i
                         _tok_out += _o
                         _tok_total += (_t if _t else _i + _o)
+                        _cache_read += _read
+                        _cache_write += _write
                         if _spend is not None:
                             # DEFECT-2：同步进 attempt 级共享 tally，异常出口不丢账。
                             _spend["tokens_in"] = _tok_in
                             _spend["tokens_out"] = _tok_out
                             _spend["tokens_total"] = _tok_total
-                elif "[ok]" in line or "[done]" in line:
+                            _spend["cache_read_tokens"] = _cache_read
+                            _spend["cache_write_tokens"] = _cache_write
+                        _record_research_process_usage({
+                            "process_attempt_id": process_attempt_id,
+                            "model": model or Config.DEERFLOW_MODEL,
+                            "tokens_in": _tok_in, "tokens_out": _tok_out,
+                            "cache_read_tokens": _cache_read,
+                            "cache_write_tokens": _cache_write,
+                            "cache_partition": "unknown",
+                            "wall_s": time.time() - _t_start,
+                        }, budget_run_id, status="running")
+                elif event_kind in {"ok", "done"}:
                     on_progress(local, _tail(line))
-                elif "[error]" in line:
+                elif event_kind == "error":
                     on_progress(local, _tail(line))
-                elif "[init]" in line:
+                elif event_kind == "init":
                     on_progress(max(local, 4), _tail(line))
                 if timed_out["hit"] or time.time() > deadline:
                     break
             try:
                 returncode = proc.wait(timeout=30)
+                _raise_current_research_compaction_stop(
+                    handoff_dir, process_attempt_id, returncode)
             except subprocess.TimeoutExpired:
                 # W9-4：stdout 已经 EOF 但子进程组 30s 内没退出（bridge 的孙子进程/线程收尾慢）。
                 # 旧行为让 TimeoutExpired 直接冒泡 → 整条轨被当失败丢弃——pipe_0f2bee 因此把
@@ -2371,6 +2491,8 @@ class DeerFlowResearchRunner:
                     returncode = proc.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     returncode = -9  # 进程组已被 SIGKILL，wait 仍超时视作强杀
+                _raise_current_research_compaction_stop(
+                    handoff_dir, process_attempt_id, returncode)
                 _fresh = _fresh_expected_artifact()
                 _evidence_survived = evidence_only and _fresh
                 _report_survived = (
@@ -2495,15 +2617,20 @@ class DeerFlowResearchRunner:
         timeline = _read_json(os.path.join(handoff_dir, "timeline.json"))
         # I-5-7: 汇总研究阶段遥测。token 行可能整轮缺失（某些研究模型不报 usage）→ 全 0/None。
         research_telemetry = {
+            "process_attempt_id": process_attempt_id,
             "model": (model or Config.DEERFLOW_MODEL),
             "depth": effective_depth,
             "tokens_in": _tok_in,
             "tokens_out": _tok_out,
             "tokens_total": _tok_total or (_tok_in + _tok_out),
+            "cache_read_tokens": _cache_read,
+            "cache_write_tokens": _cache_write,
+            "cache_partition": "unknown",
             "tool_calls": tool_events,
             "results": _result_events,
             "wall_s": round(time.time() - _t_start, 1),
         }
+        research_telemetry["process_usage_snapshots"] = [_research_process_usage(research_telemetry)]
         on_progress(
             100,
             f"研究完成（{'证据包' if evidence_only else '报告'} {len(report)} 字）",
@@ -2524,14 +2651,26 @@ class DeerFlowResearchRunner:
 # I-5-7: 解析 DeerFlow bridge 已发出的「[usage] tokens in=.. out=.. total=..」行
 # （deerflow_research.py:ProgressLog.write('usage', ...)）。容错：out/total 可能为 None
 # 时 bridge 会打印字面 "None"，故各组匹配数字或 None；no-match → 该行不计入。
-_USAGE_RE = re.compile(
-    r"tokens in=(?P<in>\d+|None)\s+out=(?P<out>\d+|None)\s+total=(?P<total>\d+|None)"
+_RESEARCH_LOG_EVENT_RE = re.compile(
+    r"^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00:00[ \t]+)?"
+    r"\[(?P<kind>[a-z][a-z0-9_-]*)\][ \t]+"
 )
+_USAGE_RE = re.compile(
+    r"tokens in=(?P<in>\d+|None)[ \t]+out=(?P<out>\d+|None)[ \t]+total=(?P<total>\d+|None)(?=\s|$)"
+)
+_USAGE_CACHE_RE = re.compile(r"(?:^|\s)cache_(read|write)=(\d+)(?=\s|$)")
 
 
 def _parse_usage_line(line: str) -> Optional[tuple[int, int, int]]:
     """从一行 [usage] 日志解析 (in, out, total) token；解析不出返回 None。"""
-    m = _USAGE_RE.search(line)
+    event = _RESEARCH_LOG_EVENT_RE.match(line)
+    if event is not None:
+        if event.group("kind") != "usage":
+            return None
+        line = line[event.end():]
+    # Direct callers may provide bare counters. Never scan source content or
+    # skip a malformed usage header to find a later, unrelated token string.
+    m = _USAGE_RE.match(line)
     if not m:
         return None
 
@@ -2539,6 +2678,16 @@ def _parse_usage_line(line: str) -> Optional[tuple[int, int, int]]:
         return int(s) if s and s.isdigit() else 0
 
     return _num(m.group("in")), _num(m.group("out")), _num(m.group("total"))
+
+
+def _parse_usage_cache_line(line: str) -> tuple[int, int]:
+    """Read optional cache observations; legacy logs establish no partition.
+
+    The base usage tuple remains unchanged for existing callers. Cache tokens
+    are already included in input tokens and are never added to that total.
+    """
+    values = {kind: int(value) for kind, value in _USAGE_CACHE_RE.findall(line)}
+    return values.get("read", 0), values.get("write", 0)
 
 
 def _tail(s: str, limit: int = 160) -> str:
@@ -7160,10 +7309,13 @@ class PipelineOrchestrator:
         self._partial_scan_at: dict[str, float] = {}
         # W9-3: run_telemetry.json 增量落盘状态（attempt 起点由 _init_telemetry_flush 填充）。
         self._tel_lock = threading.Lock()
+        self._simulation_usage_lock = threading.Lock()
         self._tel_path: Optional[str] = None
         self._tel_prev: Optional[dict] = None
         self._tel_prev_cum: Optional[dict] = None
         self._tel_last_flush_calls: int = 0
+        self._tel_legacy_sim: Optional[dict] = None
+        self._tel_initialized = False
 
     # -- W9-3: run 遥测增量落盘 --------------------------------------------
     # 两条失败跑的教训：LLMMeter 是进程内存累加器，重启即清零；run_telemetry.json 只在
@@ -7177,20 +7329,65 @@ class PipelineOrchestrator:
     def _init_telemetry_flush(self, state: "PipelineState") -> None:
         """attempt 起点：定位 run_telemetry.json 并捕获上一 attempt 的账作为合并基底。"""
         self._tel_path = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
+        self._tel_initialized = False
         self._tel_prev = None
         self._tel_prev_cum = None
         self._tel_last_flush_calls = 0
+        self._tel_legacy_sim = None
+        prev = None
         try:
             prev = _read_json(self._tel_path)
-            if isinstance(prev, dict) and (prev.get("total") or {}).get("calls"):
+            if isinstance(prev, dict) and (prev.get("cumulative_total") or prev.get("total")):
                 self._tel_prev = {
                     "total": prev.get("total"),
                     "report_id": prev.get("report_id"),
                     "status": prev.get("status"),
                 }
                 self._tel_prev_cum = prev.get("cumulative_total") or prev.get("total") or {}
-        except Exception:  # noqa: BLE001 — 基底捕获失败按首写处理
-            pass
+        except Exception:  # noqa: BLE001 — validated against durable storage below
+            prev = None
+        from ..utils.telemetry import LLMMeter
+        from ..utils.usage_ledger import read_snapshot, UsageLedgerStorageError
+        # Derive storage from the actual pipeline directory, including isolated
+        # test roots. Never open a second Config-derived runtime tree implicitly.
+        ledger_path = os.path.join(os.path.dirname(os.path.dirname(self._tel_path)), "usage_ledger.sqlite3")
+        foreign_snapshot = isinstance(prev, dict) and any(
+            prev[key] != state.pipeline_id for key in ("run_id", "pipeline_id") if key in prev)
+        requires_existing = (
+                foreign_snapshot
+                or
+                (os.path.exists(self._tel_path) and not isinstance(prev, dict))
+                or (isinstance(prev, dict) and not (
+                    isinstance(prev.get("cumulative_total"), dict) or isinstance(prev.get("total"), dict)))
+                or (isinstance(prev, dict) and prev.get("durable"))
+                or state.options.get("usage_attempt_id"))
+        # Fresh runs enter the transactional initializer directly. A speculative
+        # read could otherwise see another cold initializer's uncommitted schema.
+        if requires_existing and read_snapshot(ledger_path, state.pipeline_id) is None:
+            raise UsageLedgerStorageError(
+                "Prior usage storage is missing or unreadable; cannot restart accounting at zero")
+        legacy = prev if isinstance(prev, dict) and not prev.get("durable") and not foreign_snapshot else None
+        attempt_id = LLMMeter.attach_durable_run(
+            state.pipeline_id, ledger_path, attempt_id=state.task_id or None,
+            legacy_snapshot=legacy,
+        )
+        state.options["usage_attempt_id"] = attempt_id
+        if legacy and isinstance(state.options.get("sim_llm_telemetry_recorded"), dict):
+            self._tel_legacy_sim = {
+                "marker": dict(state.options["sim_llm_telemetry_recorded"]),
+                "summary": dict(state.options.get("sim_llm_telemetry") or {}),
+            }
+            marker = self._tel_legacy_sim["marker"]
+            summary = self._tel_legacy_sim["summary"]
+            if not summary or not marker.get("simulation_id") or not marker.get("meter_run_token"):
+                raise UsageLedgerStorageError(
+                    "Legacy child usage marker lacks a snapshot or stable identity")
+            # Seed migration high-water before any durable JSON projection can
+            # replace the old baseline marker, including a crash before RUN.
+            self._record_durable_sim_usage(state, str(marker["simulation_id"]), {
+                **summary, "meter_run_token": marker["meter_run_token"],
+            })
+        self._tel_initialized = True
 
     def _flush_run_telemetry(self, state: "PipelineState", *, final: bool = False,
                              extra: Optional[dict] = None) -> None:
@@ -7200,7 +7397,7 @@ class PipelineOrchestrator:
         初始化（_tel_path 为 None）时为 no-op。
         """
         tpath = self._tel_path
-        if not tpath:
+        if not tpath or not self._tel_initialized:
             return
         from ..utils.telemetry import LLMMeter
         from ..utils.atomic import write_json_atomic
@@ -7216,8 +7413,25 @@ class PipelineOrchestrator:
                     data.update(extra)
                 if not final:
                     data["in_flight"] = True  # 运行中快照标记（终版落盘时消失）
+                cumulative = LLMMeter.cumulative_snapshot(state.pipeline_id)
+                if cumulative is not None:
+                    data["cumulative_total"] = cumulative["total"]
+                    data["cumulative_by_stage"] = cumulative.get("by_stage", {})
+                    # A response may settle between the attempt and cumulative
+                    # reads. Both operation-state views belong to this read.
+                    data["api_operation_state"] = cumulative.get("api_operation_state")
+                    data["token_reservation_state"] = cumulative.get("token_reservation_state")
+                    data["cost_coverage"] = cumulative.get("cost_coverage")
+                    data["usage_accounting"] = {
+                        key: cumulative.get(key) for key in (
+                            "coverage", "usage_complete", "usage_by_class", "cache_partition_known",
+                            "legacy_baseline_present", "legacy_baseline_ambiguous",
+                            "api_operation_state", "token_reservation_state", "cost_coverage",
+                        )
+                    }
                 if self._tel_prev:
                     data["previous_attempt"] = self._tel_prev
+                if self._tel_prev and cumulative is None:
                     base = self._tel_prev_cum or {}
                     cur = data.get("total") or {}
                     cum: dict[str, Any] = {}
@@ -7537,7 +7751,7 @@ class PipelineOrchestrator:
             pass
 
     @classmethod
-    def start(
+    def _new_launch_state(
         cls,
         prompt: str,
         *,
@@ -7548,16 +7762,8 @@ class PipelineOrchestrator:
         language: Optional[str] = None,
         model: Optional[str] = None,
     ) -> PipelineState:
-        """创建管线记录并在后台线程启动。立即返回（含 pipeline_id / task_id）。"""
+        """Build an admission snapshot without files, tasks, or background work."""
         pipeline_id = f"pipe_{uuid.uuid4().hex[:12]}"
-        PipelineManager.ensure_dirs(pipeline_id)
-
-        task_manager = TaskManager()
-        task_id = task_manager.create_task(
-            task_type=f"pipeline:{mode}",
-            metadata={"pipeline_id": pipeline_id},
-        )
-
         bands = RESEARCH_ONLY_BANDS if mode == "research_only" else STAGE_BANDS
         stages = {name: StageState(name=name) for name in bands.keys()}
 
@@ -7565,9 +7771,11 @@ class PipelineOrchestrator:
             pipeline_id=pipeline_id,
             prompt=prompt,
             mode=mode,
-            status="running",
-            task_id=task_id,
+            status="pending",
             handoff_dir=PipelineManager.handoff_dir(pipeline_id),
+            owner_pid=os.getpid(),
+            owner_boot_id=_BOOT_ID,
+            heartbeat_at=_utcnow(),
             stages=stages,
         )
         state.options.update({
@@ -7585,6 +7793,31 @@ class PipelineOrchestrator:
         # Foglamp WP1 (1B)：新管线在准入时钉住安全政策快照——服务重载/环境变量漂移
         # 不得让一条已准入的运行悄悄改变图谱反馈/种子/extremize/模拟影响语义。
         state.options["safety_policy_v1"] = capture_safety_policy_v1("admission")
+        return state
+
+    @classmethod
+    def start(
+        cls,
+        prompt: str,
+        *,
+        mode: str = "full",
+        project_name: Optional[str] = None,
+        depth: Optional[str] = None,
+        max_rounds: Optional[int] = None,
+        language: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> PipelineState:
+        """创建管线记录并在后台线程启动。立即返回（含 pipeline_id / task_id）。"""
+        state = cls._new_launch_state(
+            prompt, mode=mode, project_name=project_name, depth=depth,
+            max_rounds=max_rounds, language=language, model=model,
+        )
+        pipeline_id = state.pipeline_id
+        PipelineManager.ensure_dirs(pipeline_id)
+        state.task_id = TaskManager().create_task(
+            task_type=f"pipeline:{mode}", metadata={"pipeline_id": pipeline_id},
+        )
+        state.status = "running"
         PipelineManager.save(state)
 
         cls._cancel_events[pipeline_id] = threading.Event()
@@ -7597,6 +7830,150 @@ class PipelineOrchestrator:
         cls._threads[pipeline_id] = t
         t.start()
         return state
+
+    @classmethod
+    def _launch_intent_result(cls, record: dict[str, Any], *, replayed: bool) -> dict[str, Any]:
+        """Project current execution state without reconciling or restarting it."""
+        if record["launch_status"] == "abandoned":
+            return {
+                "pipeline_id": None, "task_id": None, "mode": None,
+                "status": "cancelled", "launch_status": "abandoned",
+                "replayed": replayed, "recovery_required": False,
+            }
+        pipeline_id = record["pipeline_id"]
+        initial = record["initial_state"]
+        try:
+            data = PipelineManager.load(pipeline_id)
+            readable = (
+                isinstance(data, dict)
+                and PipelineManager.is_incompatible(data) is None
+                and data.get("pipeline_id") == pipeline_id
+                and data.get("status") in {"pending", "running", "completed", "failed", "cancelled"}
+            )
+        except (OSError, ValueError, TypeError, KeyError):
+            data, readable = None, False
+        launch_status = record["launch_status"] if readable else "unavailable"
+        return {
+            "pipeline_id": pipeline_id,
+            "task_id": data.get("task_id") if readable else initial.get("task_id"),
+            "mode": data.get("mode", initial.get("mode", "full")) if readable else initial.get("mode", "full"),
+            "status": data["status"] if readable else "failed",
+            "launch_status": launch_status,
+            "replayed": replayed,
+            # Admission is at-most-once. Ambiguous dispatch requires an explicit
+            # same-ID recovery decision; a response retry never makes it.
+            "recovery_required": launch_status != "dispatched",
+        }
+
+    @classmethod
+    def lookup_launch_intent(
+        cls, key: str, canonical_request: Optional[dict[str, Any]] = None,
+    ) -> Optional[dict[str, Any]]:
+        """Look up a launch before model/preflight checks, including after reload."""
+        from .launch_intents import LaunchIntentStore
+        record = LaunchIntentStore(Config.PIPELINE_DATA_DIR).lookup(key, canonical_request)
+        return cls._launch_intent_result(record, replayed=True) if record is not None else None
+
+    @classmethod
+    def abandon_launch_intent(cls, key: str) -> dict[str, Any]:
+        """Retire an unadmitted key, or disclose an admission that already won."""
+        from .launch_intents import LaunchIntentStore
+        record, created = LaunchIntentStore(Config.PIPELINE_DATA_DIR).abandon(key)
+        return cls._launch_intent_result(record, replayed=not created)
+
+    @classmethod
+    def _run_admitted_launch(cls, state: PipelineState) -> None:
+        """Fence a delayed initial thread against an explicit same-ID recovery."""
+        with cls._lifecycle_lock:
+            data = PipelineManager.load(state.pipeline_id)
+            if (not isinstance(data, dict) or PipelineManager.is_incompatible(data) is not None
+                    or data.get("task_id") != state.task_id or data.get("status") != "running"):
+                return
+            # A same-process resume holds this lock while replacing task_id.
+            # Either it won first and this stale initial worker exits, or this
+            # thread is now alive and resume's live-thread guard rejects overlap.
+        cls._run(state)
+
+    @classmethod
+    def start_idempotent(
+        cls, key: str, canonical_request: dict[str, Any], **launch_kwargs: Any,
+    ) -> dict[str, Any]:
+        """Admit one durable identity and at most one initial dispatch per key.
+
+        The SQLite reservation commits before task/state/thread side effects.
+        Existing reservations are never reclaimed, including when the state is
+        unavailable. Only an explicit same-ID resume may perform recovery.
+        """
+        from .launch_intents import LaunchIntentStore, LaunchIntentStorageError
+        store = LaunchIntentStore(Config.PIPELINE_DATA_DIR)
+        initial_state = cls._new_launch_state(**launch_kwargs)
+        record, created = store.reserve(key, canonical_request, initial_state.to_dict())
+        if not created:
+            return cls._launch_intent_result(record, replayed=True)
+
+        state = initial_state
+        pipeline_id = state.pipeline_id
+        thread = None
+        started = False
+        start_attempted = False
+        start_interrupted = False
+        try:
+            with cls._lifecycle_lock:
+                state.task_id = TaskManager().create_task(
+                    task_type=f"pipeline:{state.mode}", metadata={"pipeline_id": pipeline_id},
+                )
+                state.status = "running"
+                cls._cancel_events[pipeline_id] = threading.Event()
+                thread = threading.Thread(
+                    target=cls._run_admitted_launch, args=(state,), name=f"pipeline-{pipeline_id}", daemon=True,
+                )
+                # Register before saving running state so startup reconciliation
+                # in this process cannot reclaim the admission-to-start window.
+                cls._threads[pipeline_id] = thread
+                PipelineManager.save(state)
+                record = store.transition(key, "dispatching")
+                start_attempted = True
+                thread.start()
+                started = True
+                try:
+                    record = store.transition(key, "dispatched")
+                except LaunchIntentStorageError:
+                    # Work already started. Never mark it failed or launch again
+                    # merely because the dispatch acknowledgement could not save.
+                    return cls._launch_intent_result(record, replayed=False)
+        except Exception:
+            if started or (thread is not None and thread.ident is not None):
+                # Thread.start itself can be interrupted after the worker is
+                # alive. That is an ambiguous acknowledgement, not permission
+                # to fail the live worker or discard its ownership registry.
+                return cls._launch_intent_result(record, replayed=False)
+            # Preserve identity and report a resumable failure where state
+            # storage remains available; raw exception text may contain secrets.
+            try:
+                PipelineManager.mark_failed(pipeline_id, "Pipeline launch was interrupted before dispatch")
+            except Exception:
+                pass
+            if state.task_id:
+                TaskManager().fail_task(state.task_id, "Pipeline launch was interrupted before dispatch")
+            try:
+                record = store.transition(key, "failed", error_code="launch_dispatch_failed")
+            except LaunchIntentStorageError:
+                pass
+            return cls._launch_intent_result(record, replayed=False)
+        except BaseException:
+            # CPython may create the OS thread before assigning its ident. An
+            # interrupt in that window is ambiguous: retain the handle, and let
+            # the guarded worker entry reject any superseded admission task.
+            start_interrupted = start_attempted
+            raise
+        finally:
+            if not started and not start_interrupted and (thread is None or thread.ident is None):
+                # Also clean process-local registrations on a simulated crash
+                # (BaseException). The durable admission survives unchanged.
+                if cls._threads.get(pipeline_id) is thread:
+                    cls._threads.pop(pipeline_id, None)
+                cls._cancel_events.pop(pipeline_id, None)
+        return cls._launch_intent_result(record, replayed=False)
 
     @classmethod
     def cancel(cls, pipeline_id: str) -> dict[str, Any]:
@@ -8425,53 +8802,59 @@ class PipelineOrchestrator:
                                Config.SIM_GRAPH_FEEDBACK) and graph_id:
             run_kwargs["enable_graph_memory_update"] = True
             run_kwargs["graph_id"] = graph_id
-        SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
-        cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
-        last_progress_at = time.monotonic()
-        last_round = -1
         try:
-            stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
-        except (TypeError, ValueError):
-            stall_s = 1800.0
-        # W9-2：种子轮询内的心跳刷新节律（与看护线程同参）。
-        try:
-            _hb_interval = float(getattr(Config, "PIPELINE_HEARTBEAT_INTERVAL_S", 30) or 30)
-        except (TypeError, ValueError):
-            _hb_interval = 30.0
-        _last_hb = time.monotonic()
-        while True:
-            if cancel_ev is not None and cancel_ev.is_set():
-                try:
-                    SimulationRunner.stop_simulation(sim_id)
-                except Exception:  # noqa: BLE001
-                    pass
-                raise PipelineCancelled("多种子集成期间被取消")
-            rs = SimulationRunner.get_run_state(sim_id)
-            if rs is None:
-                raise RuntimeError("集成种子模拟运行状态丢失")
-            cur = getattr(rs, "current_round", 0) or 0
-            if cur != last_round:
-                last_round = cur
-                last_progress_at = time.monotonic()
-            if rs.runner_status == RunnerStatus.COMPLETED:
-                break
-            if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
-                raise RuntimeError(f"集成种子模拟未正常结束: {rs.runner_status}")
-            if stall_s > 0 and (time.monotonic() - last_progress_at) > stall_s:
-                try:
-                    SimulationRunner.stop_simulation(sim_id)
-                except Exception:  # noqa: BLE001
-                    pass
-                raise RuntimeError(f"集成种子模拟约 {int(stall_s)}s 无进展，看门狗终止")
-            # W9-2：种子轮询期间按心跳节律刷新 heartbeat_at——集成窗口内心跳不再冻结，
-            # 别的进程的 reconcile_orphans 能看到「这条管线还活着」。
-            if (time.monotonic() - _last_hb) >= _hb_interval:
-                _last_hb = time.monotonic()
-                try:
-                    PipelineManager.touch_heartbeat(state.pipeline_id, pid=os.getpid())
-                except Exception:  # noqa: BLE001
-                    pass
-            time.sleep(5)
+            from ..utils.telemetry import LLMMeter
+            LLMMeter.assert_accounting_available(state.pipeline_id)
+            run_kwargs["usage_context"] = self._simulation_usage_context(state, sim_id)
+            SimulationRunner.start_simulation(simulation_id=sim_id, **run_kwargs)
+            cancel_ev = type(self)._cancel_events.get(state.pipeline_id)
+            last_progress_at = time.monotonic()
+            last_round = -1
+            try:
+                stall_s = float(getattr(Config, "PIPELINE_RUN_STALL_S", 1800) or 1800)
+            except (TypeError, ValueError):
+                stall_s = 1800.0
+            # W9-2：种子轮询内的心跳刷新节律（与看护线程同参）。
+            try:
+                _hb_interval = float(getattr(Config, "PIPELINE_HEARTBEAT_INTERVAL_S", 30) or 30)
+            except (TypeError, ValueError):
+                _hb_interval = 30.0
+            _last_hb = time.monotonic()
+            while True:
+                if cancel_ev is not None and cancel_ev.is_set():
+                    try:
+                        SimulationRunner.stop_simulation(sim_id)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    raise PipelineCancelled("多种子集成期间被取消")
+                rs = SimulationRunner.get_run_state(sim_id)
+                if rs is None:
+                    raise RuntimeError("集成种子模拟运行状态丢失")
+                cur = getattr(rs, "current_round", 0) or 0
+                if cur != last_round:
+                    last_round = cur
+                    last_progress_at = time.monotonic()
+                if rs.runner_status == RunnerStatus.COMPLETED:
+                    break
+                if rs.runner_status in (RunnerStatus.FAILED, RunnerStatus.STOPPED):
+                    raise RuntimeError(f"集成种子模拟未正常结束: {rs.runner_status}")
+                if stall_s > 0 and (time.monotonic() - last_progress_at) > stall_s:
+                    try:
+                        SimulationRunner.stop_simulation(sim_id)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    raise RuntimeError(f"集成种子模拟约 {int(stall_s)}s 无进展，看门狗终止")
+                # W9-2：种子轮询期间按心跳节律刷新 heartbeat_at——集成窗口内心跳不再冻结，
+                # 别的进程的 reconcile_orphans 能看到「这条管线还活着」。
+                if (time.monotonic() - _last_hb) >= _hb_interval:
+                    _last_hb = time.monotonic()
+                    try:
+                        PipelineManager.touch_heartbeat(state.pipeline_id, pid=os.getpid())
+                    except Exception:  # noqa: BLE001
+                        pass
+                time.sleep(5)
+        finally:
+            self._record_sim_run_telemetry(state, sim_id)
         # 反馈写入器排空（与主跑一致），保证报告读到完整图谱（Foglamp 1B：读钉住政策）
         if self._pinned_safety(state, "sim_graph_feedback",
                                Config.SIM_GRAPH_FEEDBACK) and graph_id:
@@ -8660,10 +9043,14 @@ class PipelineOrchestrator:
         state.global_progress = self._global_from_stage(
             state.mode, stage, 100, state.options.get("dynamic_bands")
         )
-        try:
-            self._record_stage_artifacts(state, stage)  # T6.3
-        except Exception:
-            pass
+        # A reused ontology was checked against its original registration.
+        # Re-reading the path here could bless a replacement made after that
+        # check, and would overwrite the original generation's provenance.
+        if not (reused and stage == STAGE_ONTOLOGY):
+            try:
+                self._record_stage_artifacts(state, stage)  # T6.3
+            except Exception:
+                pass
         PipelineManager.save(state)
         # W9-3：阶段转换必落一版遥测账（重启只丢「上一次阶段边界之后」的增量）。
         self._flush_run_telemetry(state)
@@ -9415,6 +9802,113 @@ class PipelineOrchestrator:
 
     # -- 内部：产物完整性校验（复用前守卫） (I-4-3) ------------------------
 
+    def _require_ontology_reuse(self, state: PipelineState, ontology: Any) -> None:
+        """Require cached project/file consistency without creating new proof.
+
+        Validate and parse the same ontology bytes. Missing legacy files and
+        an explicit validation opt-out retain their existing reuse behavior;
+        neither those cases nor a valid artifact prove research-input freshness.
+        Invalid reuse stops before regeneration, which needs a separate durable
+        downstream invalidation/ownership boundary.
+        """
+        hd = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
+        path = os.path.join(hd, "ontology.json")
+        validation: dict[str, Any] = {
+            "scope": "artifact_consistency_only",
+            "input_freshness": "unverified",
+        }
+        state.options["ontology_reuse_validation"] = validation
+
+        def reject(reason: str) -> None:
+            validation.update(status="rejected", reason=reason)
+            state.current_stage = STAGE_ONTOLOGY
+            raise RuntimeError(
+                f"Ontology reuse rejected: {reason}. Reconcile the saved project "
+                "and handoff before resuming; existing artifacts are preserved."
+            )
+
+        if not bool(getattr(Config, "PIPELINE_VALIDATE_ARTIFACTS", True)):
+            validation["status"] = "disabled"
+            if os.path.isfile(path):
+                state.artifacts["ontology"] = path
+            return
+
+        # Read strictly here: the general loader intentionally degrades corrupt
+        # manifests to {}, which would erase registered proof on the next write.
+        # Scenario forks can share their base's handoff while keeping a local
+        # manifest. Every available registration must agree with the same file;
+        # an empty or newer child manifest cannot override the owner's proof.
+        manifest_paths = dict.fromkeys(os.path.realpath(candidate) for candidate in (
+            PipelineManager.artifact_manifest_path(state.pipeline_id),
+            os.path.join(hd, "manifest.json"),
+        ))
+        entries: list[dict[str, Any]] = []
+        for manifest_path in manifest_paths:
+            try:
+                with open(manifest_path, encoding="utf-8") as stream:
+                    manifest = json.load(stream)
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError):
+                reject("artifact_manifest_unreadable")
+            if not isinstance(manifest, dict):
+                reject("artifact_manifest_invalid")
+            if "ontology" not in manifest:
+                continue
+            entry = manifest["ontology"]
+            if not isinstance(entry, dict):
+                reject("ontology_registration_invalid")
+            declared = entry.get("path")
+            if declared not in (None, "") and (
+                not isinstance(declared, str)
+                or os.path.realpath(declared) != os.path.realpath(path)
+            ):
+                reject("ontology_registration_path_mismatch")
+            entries.append(entry)
+        try:
+            with open(path, "rb") as stream:
+                raw = stream.read()
+        except FileNotFoundError:
+            if entries:
+                reject("registered_ontology_missing")
+            validation["status"] = "legacy_project_only"
+            return
+        except OSError:
+            reject("ontology_unreadable")
+
+        validation.update(
+            registrations_checked=len(entries), sha256_checked=False, size_checked=False,
+        )
+        for entry in entries:
+            expected_size, expected_sha = entry.get("bytes"), entry.get("sha256")
+            if expected_size is not None and (
+                type(expected_size) is not int or expected_size != len(raw)
+            ):
+                reject("ontology_size_mismatch")
+            if expected_sha not in (None, "") and (
+                not isinstance(expected_sha, str)
+                or hashlib.sha256(raw).hexdigest() != expected_sha
+            ):
+                reject("ontology_hash_mismatch")
+            validation["sha256_checked"] |= bool(expected_sha)
+            validation["size_checked"] |= expected_size is not None
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            if (not isinstance(payload, dict)
+                    or not isinstance(payload.get("entity_types"), list)
+                    or not payload["entity_types"]
+                    or ("edge_types" in payload and not isinstance(payload["edge_types"], list))):
+                reject("ontology_schema_invalid")
+            canonical = {"sort_keys": True, "ensure_ascii": False, "allow_nan": False}
+            matches_project = json.dumps(payload, **canonical) == json.dumps(ontology, **canonical)
+        except (ValueError, TypeError, UnicodeError):
+            reject("ontology_json_invalid")
+        if not matches_project:
+            reject("project_ontology_mismatch")
+        validation["status"] = "registered" if entries else "legacy_file_match"
+        state.artifacts["ontology"] = path
+        state.artifacts.pop("ontology_partial", None)
+
     def _validate_reuse(self, state: PipelineState, stage: str) -> bool:
         """I-4-3: 复用一个标记 completed 的阶段前，按产物清单核验其产物未被半写/截断/篡改。
 
@@ -9920,30 +10414,80 @@ class PipelineOrchestrator:
         return out
 
     def heartbeat_status(self, state: PipelineState) -> dict[str, Any]:
-        """I-4-1/I-5-6: 汇总 ETA/staleness 心跳 + （计量开启时）当前累计花费，供状态 API 透出。
+        """Read heartbeat and cumulative recorded spend without attaching a meter.
 
-        spend_so_far 来自 LLMMeter.snapshot（进程内累计，仅对本进程在飞的管线有数据；
-        重启后或别的 worker 的管线读不到 → 省略该字段，不臆造）。整体 best-effort。
+        A registered ledger's zero is meaningful. Missing/corrupt accounting is
+        unavailable, and must never become a fresh process's zero-filled meter.
+        Old saved snapshots are partial fallback evidence only before cutover.
         """
+        import math
+        from ..utils.usage_ledger import read_snapshot, UsageLedgerStorageError
+
         info = self.estimate_eta(state)
         # owner/心跳液体性（reconcile 也用同一判据，这里只读不改）。
         info["owner_pid"] = state.owner_pid
         info["owner_alive"] = _pid_alive(state.owner_pid) if state.owner_pid else None
         hb_age = _age_seconds(state.heartbeat_at)
         info["heartbeat_age_s"] = int(hb_age) if hb_age is not None else None
-        if bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
-            try:
-                from ..utils.telemetry import LLMMeter
-                snap = LLMMeter.snapshot(state.pipeline_id)
-                tot = snap.get("total") or {}
-                # 仅在确有计量数据时透出（全 0 视为「本进程无数据」省略）。
-                if tot.get("total_tokens") or tot.get("cost_usd"):
-                    info["spend_so_far"] = {
-                        "tokens": tot.get("total_tokens"),
-                        "cost_usd": tot.get("cost_usd"),
-                    }
-            except Exception:  # noqa: BLE001
-                pass
+        spend = {"available": False, "tokens": None, "cost_usd": None,
+                 "source": None, "coverage": "unavailable", "usage_complete": False,
+                 "unavailable_reason": "not_recorded"}
+        info["spend_so_far"] = spend
+        try:
+            run_dir = PipelineManager._dir(state.pipeline_id)
+            ledger_path = os.path.join(os.path.dirname(run_dir), "usage_ledger.sqlite3")
+            snap = read_snapshot(
+                ledger_path, state.pipeline_id,
+                current_attempt_id=state.options.get("usage_attempt_id") or None,
+            )
+            if snap is None:
+                if state.options.get("usage_attempt_id"):
+                    raise UsageLedgerStorageError("Previously registered usage ledger is missing")
+                try:
+                    with open(os.path.join(run_dir, "run_telemetry.json"), encoding="utf-8") as f:
+                        snap = json.load(f)
+                except FileNotFoundError:
+                    return info
+                if (not isinstance(snap, dict) or snap.get("durable")
+                        or snap.get("ledger_schema") or "usage_accounting" in snap):
+                    raise UsageLedgerStorageError("Saved telemetry is invalid or requires its durable ledger")
+                identities = [snap[key] for key in ("pipeline_id", "run_id") if key in snap]
+                if not identities or any(identity != state.pipeline_id for identity in identities):
+                    raise UsageLedgerStorageError("Saved telemetry does not identify this run")
+                total = snap.get("cumulative_total") if "cumulative_total" in snap else snap.get("total")
+                source, coverage = "legacy_snapshot", "legacy_saved_snapshot"
+            else:
+                total = snap.get("total")
+                source, coverage = "durable_ledger", snap.get("coverage", "recorded_observations")
+            if not isinstance(total, dict):
+                raise UsageLedgerStorageError("Saved telemetry has no accounting total")
+
+            def recorded_number(key: str, *, integer: bool = False):
+                value = total.get(key)
+                if value is None:
+                    return None
+                if (isinstance(value, bool) or not isinstance(value, (int, float))
+                        or not math.isfinite(value) or value < 0
+                        or (integer and int(value) != value)):
+                    raise UsageLedgerStorageError("Saved telemetry has an invalid accounting total")
+                return int(value) if integer else value
+
+            tokens = recorded_number("total_tokens", integer=True)
+            cost = recorded_number("cost_usd")
+            if tokens is None and cost is None:
+                raise UsageLedgerStorageError("Saved telemetry has no recorded spend")
+            spend.update({"available": True, "tokens": tokens, "cost_usd": cost,
+                          "source": source, "coverage": coverage, "unavailable_reason": None,
+                          "cost_basis": snap.get("cost_basis", "unknown"),
+                          "cost_estimated": snap.get("cost_estimated", True)})
+            for key in ("usage_by_class", "cache_partition_known",
+                        "legacy_baseline_present", "legacy_baseline_ambiguous",
+                        "api_operation_state", "token_reservation_state", "cost_coverage"):
+                if key in snap:
+                    spend[key] = snap[key]
+        except Exception as exc:  # noqa: BLE001 — status stays available, accounting fails closed
+            spend["unavailable_reason"] = "storage_unavailable"
+            logger.debug("[%s] Status usage accounting unavailable: %s", state.pipeline_id, exc)
         return info
 
     # -- 内部：心跳看护线程 (I-4-1) ----------------------------------------
@@ -10049,20 +10593,32 @@ class PipelineOrchestrator:
 
     def _record_research_telemetry(self, state: PipelineState,
                                    telemetry: Optional[dict[str, Any]]) -> None:
-        """I-5-7: 把 DeerFlowResearchRunner 返回的研究遥测纳入统一计量。
+        """Persist final research diagnostics and reconcile source process observations.
 
-        (1) 始终 stash 到 state.options['research_telemetry']（即使计量关闭，也是免费观测）；
-        (2) 计量开启且确有 token 时，向 LLMMeter 写一条 stage='research' 的合成记录，
-            让 run_telemetry.json 的整轮 token/成本 rollup 把最贵的研究阶段也算进去。
-        resume 路径无遥测（telemetry=None）→ 直接跳过，保持旧行为。
+        Bound pipelines retain each lane and synthesis process identity, so final
+        aggregate publication cannot credit their streaming usage a second time.
+        Unbound legacy callers retain their synthetic research-stage record.
         """
         if not isinstance(telemetry, dict):
             return
+        from ..utils.telemetry import LLMMeter
+        durable = LLMMeter.is_durable_run(state.pipeline_id)
+        if durable:
+            # Child observations were already credited while streaming. Reconcile
+            # their final high-water values; never add the merged lane total again.
+            observations = _merged_research_process_usage([telemetry])
+            for observation in observations:
+                _record_research_process_usage(observation, state.pipeline_id,
+                                               status="completed")
+            if not observations:
+                state.options["research_usage_gap"] = "missing_process_attempt_identity"
         try:
             state.options["research_telemetry"] = telemetry
             PipelineManager.save(state)
         except Exception:  # noqa: BLE001 — stash 失败不影响主流程
             pass
+        if durable:
+            return
         if not bool(getattr(Config, "LLM_TELEMETRY_ENABLED", True)):
             return
         t_in = int(telemetry.get("tokens_in") or 0)
@@ -10090,23 +10646,130 @@ class PipelineOrchestrator:
 
     # -- 内部：模拟阶段遥测 (DEFECT-3) -------------------------------------
 
+    def _simulation_usage_context(self, state: PipelineState, simulation_id: str) -> Optional[dict]:
+        """Persist launch ownership before the runner can dispatch a child."""
+        from ..utils.telemetry import LLMMeter
+        from ..utils.simulation_usage import SCHEMA, authority
+        from ..utils.oasis_output_policy import configured_output_policy, validate_output_policy
+        from ..utils.usage_ledger import UsageLedgerConflict
+        context = LLMMeter.durable_binding(state.pipeline_id)
+        if context is None:
+            if state.options.get("usage_attempt_id"):
+                from ..utils.usage_ledger import UsageLedgerStorageError
+                raise UsageLedgerStorageError("Durable parent binding is missing before simulation launch")
+            return None
+        context.update({
+            "schema": SCHEMA, "simulation_id": simulation_id,
+            "launch_token": uuid.uuid4().hex,
+            "pipeline_state_path": os.path.abspath(os.path.join(
+                PipelineManager._dir(state.pipeline_id), "pipeline_state.json")),
+            "budget_tokens": int(Config.LLM_RUN_BUDGET_TOKENS or 0),
+            "budget_usd": float(Config.LLM_RUN_BUDGET_USD or 0),
+            "native_output_policy": configured_output_policy(),
+        })
+        with self._simulation_usage_lock:
+            # Main and ensemble calls on this orchestrator share one state object.
+            launches = state.options.setdefault("simulation_usage_launches", {})
+            for previous in launches.values():
+                if (not isinstance(previous, dict) or previous.get("simulation_id") != simulation_id
+                        or "native_output_policy" not in previous):
+                    continue
+                try:
+                    previous_policy = validate_output_policy(previous["native_output_policy"])
+                except (TypeError, ValueError) as exc:
+                    raise UsageLedgerConflict("Saved simulation native output policy is invalid") from exc
+                if previous_policy != context["native_output_policy"]:
+                    raise UsageLedgerConflict("Native output policy changed for an existing simulation")
+            launches[context["launch_token"]] = authority(context)
+            PipelineManager.save(state)
+        return context
+
+    def _record_durable_sim_usage(self, state: PipelineState, simulation_id: str,
+                                  telemetry: dict[str, Any]) -> None:
+        """Reconcile a child high-water snapshot before writing compatibility markers."""
+        from ..utils.telemetry import LLMMeter
+        token = str(telemetry.get("meter_run_token") or "")
+        launches = state.options.get("simulation_usage_launches") or {}
+        shared_simulation = any(isinstance(item, dict) and item.get("simulation_id") == simulation_id
+                                for item in launches.values())
+        claimed = telemetry.get("usage_authority")
+        if not token and not shared_simulation and claimed is None:
+            # File hashes change as a snapshot grows and cannot identify a launch.
+            state.options["simulation_usage_gap"] = "missing_meter_run_token"
+            return
+        launch = launches.get(token)
+        if shared_simulation or launch is not None or claimed is not None:
+            from ..utils.usage_ledger import UsageLedgerConflict
+            if (not isinstance(launch, dict) or launch != claimed
+                    or launch.get("run_id") != state.pipeline_id
+                    or launch.get("simulation_id") != simulation_id
+                    or telemetry.get("simulation_id") != simulation_id):
+                raise UsageLedgerConflict("Simulation usage authority does not match its admitted launch")
+            # Spend is already durable, including failures with no child JSON.
+            # These success-only compatibility totals must never be added again.
+            state.options["sim_llm_telemetry"] = {**telemetry, "diagnostic_only": True}
+            state.options["sim_llm_telemetry_recorded"] = {
+                "simulation_id": simulation_id, "meter_run_token": token,
+                "recorded_at": _utcnow(), "authority": "shared_usage_ledger",
+            }
+            PipelineManager.save(state)
+            return
+        provider = str(telemetry.get("provider") or "unknown")
+        model = str(telemetry.get("model") or "unknown")
+        if provider == "unknown" and model in ("claude", "codex"):
+            provider = f"{model}-cli"
+
+        def reconcile(snapshot: dict, *, baseline_included: bool = False) -> None:
+            LLMMeter.record_snapshot(
+                source="simulation_process", operation_id=f"{simulation_id}:{token}",
+                provider=provider,
+                # The producer's model label is the current dominant model and
+                # can change within one process. Keep aggregate identity stable;
+                # exact per-model diagnostics remain in the compatibility data.
+                model="simulation-aggregate",
+                prompt_tokens=snapshot.get("prompt_tokens", 0),
+                completion_tokens=snapshot.get("completion_tokens", 0),
+                latency_ms=float(snapshot.get("wall_s") or 0) * 1000,
+                calls=snapshot.get("calls", 0), run_id=state.pipeline_id,
+                stage=STAGE_RUN, usage_source="unknown",
+                billing_basis="subscription" if provider.endswith("-cli") else "estimated_api",
+                baseline_included=baseline_included,
+            )
+
+        legacy = self._tel_legacy_sim
+        if legacy and legacy["marker"].get("simulation_id") == simulation_id and (
+                legacy["marker"].get("meter_run_token") == token):
+            summary = legacy["summary"]
+            if summary:
+                # Old marker-first imports cannot prove whether credit happened.
+                # Seed their saved value, flag ambiguity, then accept only growth.
+                reconcile(summary, baseline_included=True)
+            else:
+                state.options["simulation_usage_gap"] = "legacy_marker_without_snapshot"
+                return
+        reconcile(telemetry)
+        summary = {key: telemetry.get(key) for key in (
+            "provider", "model", "calls", "errors", "prompt_tokens",
+            "completion_tokens", "total_tokens", "by_source", "by_model", "wall_s",
+        )}
+        state.options["sim_llm_telemetry"] = summary
+        state.options["sim_llm_telemetry_recorded"] = {
+            "simulation_id": simulation_id, "meter_run_token": token,
+            "recorded_at": _utcnow(), "authority": "usage_ledger",
+        }
+        # A cache write failure is replayable: the ledger already owns the credit.
+        PipelineManager.save(state)
+
     def _record_sim_run_telemetry(
         self, state: PipelineState, simulation_id: Optional[str]
     ) -> None:
-        """DEFECT-3: 把模拟子进程落盘的 sim_llm_telemetry.json 纳入统一计量（恰好一次）。
+        """Import detached simulation usage at success, failure, and reuse boundaries.
 
-        RUN 的 LLM 调用发生在 detached 子进程——contextvars 与 LLMMeter 都不跨进程，
-        这是 run_telemetry.json 拿到模拟花费的唯一入口。镜像 _record_research_telemetry：
-        (1) 始终 stash 摘要到 state.options['sim_llm_telemetry']（计量关闭也是免费观测）；
-        (2) 计量开启且确有 token 时，向 LLMMeter 写一条 stage='run' 的合成记录
-            （provider/model 取快照自报值；缺失时按研究路径同款映射兜底——CLI 订阅类
-            claude/codex → 'claude-cli' 边际成本 0，其余复用同名 provider 定价表）。
-
-        恰好一次（跨 attempt 持久）：state.options['sim_llm_telemetry_recorded'] 记住
-        快照的 ``meter_run_token``（每次子进程启动铸新、同进程重写不变）。同一场运行的
-        后续边界调用（成功收尾、后续 resume 的复用路径）全部跳过；重跑产生新 token →
-        新一笔真实花费照记。标记先持久化、计量后写：中间窗口崩溃宁可少记（诚实下限），
-        绝不双计。成功、复用与失败边界各调用一次；全程 degrade-safe，绝不抛出。
+        Bound pipelines reconcile monotonic process snapshots transactionally.
+        Compatibility markers are diagnostics, written after ledger credit.
+        Missing child identity is an explicit coverage gap. Storage failures stop
+        new bound provider work; a JSON projection failure is safely replayable.
+        The marker-based path below is retained only for unbound legacy callers.
         """
         try:
             if not simulation_id:
@@ -10116,6 +10779,10 @@ class PipelineOrchestrator:
                 "sim_llm_telemetry.json")
             tel = _read_json(tel_path)
             if not isinstance(tel, dict):
+                return
+            from ..utils.telemetry import LLMMeter
+            if LLMMeter.is_durable_run(state.pipeline_id):
+                self._record_durable_sim_usage(state, str(simulation_id), tel)
                 return
             token = str(tel.get("meter_run_token") or "") or (
                 _sha256_file(tel_path) or "")
@@ -10177,6 +10844,9 @@ class PipelineOrchestrator:
                 state.pipeline_id, provider, model, calls, t_in, t_out,
             )
         except Exception as e:  # noqa: BLE001 — 计量是观测增益，绝不放大失败
+            from ..utils.usage_ledger import UsageLedgerConflict, UsageLedgerStorageError
+            if isinstance(e, (UsageLedgerConflict, UsageLedgerStorageError)):
+                raise
             logger.debug("[%s] 模拟阶段合成计量跳过: %s", state.pipeline_id, e)
 
     # -- 内部：研究覆盖度/质量记分牌 (I-0-3) -------------------------------
@@ -10595,6 +11265,11 @@ class PipelineOrchestrator:
                 )
                 shutil.rmtree(synthesis_dir, ignore_errors=True)
                 raise
+            except _ResearchCompactionStopped:
+                state.research_pid = None
+                # Keep the actual checkpoint/archive directory for an explicit
+                # resume; a new temporary attempt would strand its lineage.
+                raise
             except Exception as exc:  # noqa: BLE001 - bounded retry
                 detail = f"{type(exc).__name__}: {exc}"
                 errors.append(detail)
@@ -10858,9 +11533,26 @@ class PipelineOrchestrator:
 
         results: dict[int, tuple] = {}
         cancelled: Optional[PipelineCancelled] = None
+        compaction_failures: list[_ResearchCompactionStopped] = []
+
+        def _run_track_with_stop(*args):
+            # Set this before a worker returns to its executor, so queued lanes
+            # cannot launch another process while the parent handles fan-in.
+            with prog_lock:
+                if compaction_failures:
+                    stopped = compaction_failures[0]
+                    raise _ResearchCompactionStopped(stopped.reason, stopped.thread_id)
+            try:
+                return _run_track(*args)
+            except _ResearchCompactionStopped as stopped:
+                with prog_lock:
+                    if not compaction_failures:
+                        compaction_failures.append(stopped)
+                raise
+
         with ThreadPoolExecutor(
                 max_workers=outer_workers, thread_name_prefix="research-track") as ex:
-            futs = {ex.submit(_run_track, i, angles[i][1], angles[i][2]): i for i in range(n)}
+            futs = {ex.submit(_run_track_with_stop, i, angles[i][1], angles[i][2]): i for i in range(n)}
             for fut in as_completed(futs):
                 i = futs[fut]
                 try:
@@ -10868,6 +11560,12 @@ class PipelineOrchestrator:
                     results[idx] = (angle_title, track_dir, res)
                 except PipelineCancelled as pc:
                     cancelled = pc  # 取消须穿透，不当作「可跳过的轨失败」
+                except _ResearchCompactionStopped:
+                    for pending in futs:
+                        pending.cancel()
+                    # A compaction stop is stage-wide, never a disposable lane.
+                    # Already-running siblings are allowed to preserve their work.
+                    raise
                 except Exception as te:  # noqa: BLE001 — 单轨失败用存活轨继续
                     logger.warning("[%s] 研究轨 %d 失败（跳过，用存活轨继续）: %s",
                                    state.pipeline_id, i + 1, te)
@@ -11146,6 +11844,10 @@ class PipelineOrchestrator:
                     )
                     shutil.rmtree(synthesis_dir, ignore_errors=True)
                     raise
+                except _ResearchCompactionStopped:
+                    state.research_pid = None
+                    # Preserve the stopped attempt and do not start attempt two.
+                    raise
                 except Exception as synthesis_error:  # noqa: BLE001 — bounded retry
                     _preserve_research_attempt_progress(
                         synthesis_dir,
@@ -11218,12 +11920,16 @@ class PipelineOrchestrator:
                 return sum(int(tel.get(key) or 0) for tel in all_tels)
 
             merged_tel = {
+                "process_usage_snapshots": _merged_research_process_usage(all_tels),
                 "model": final_tel.get("model") or Config.DEERFLOW_MODEL,
                 "depth": final_tel.get("depth"),
                 "tokens_in": _sum_tel("tokens_in"),
                 "tokens_out": _sum_tel("tokens_out"),
                 "tokens_total": _sum_tel("tokens_total") or (
                     _sum_tel("tokens_in") + _sum_tel("tokens_out")),
+                "cache_read_tokens": _sum_tel("cache_read_tokens"),
+                "cache_write_tokens": _sum_tel("cache_write_tokens"),
+                "cache_partition": "unknown",
                 "tool_calls": _sum_tel("tool_calls"),
                 "results": _sum_tel("results"),
                 # Research lanes overlap; the one global synthesis follows them.
@@ -11415,11 +12121,15 @@ class PipelineOrchestrator:
             return sum(int(t.get(key) or 0) for t in tels)
 
         merged_tel = {
+            "process_usage_snapshots": _merged_research_process_usage(tels),
             "model": (tels[0].get("model") if tels else None) or Config.DEERFLOW_MODEL,
             "depth": tels[0].get("depth") if tels else None,
             "tokens_in": _sum("tokens_in"),
             "tokens_out": _sum("tokens_out"),
             "tokens_total": _sum("tokens_total") or (_sum("tokens_in") + _sum("tokens_out")),
+            "cache_read_tokens": _sum("cache_read_tokens"),
+            "cache_write_tokens": _sum("cache_write_tokens"),
+            "cache_partition": "unknown",
             "tool_calls": _sum("tool_calls"),
             "results": _sum("results"),
             "wall_s": max((float(t.get("wall_s") or 0.0) for t in tels), default=0.0),
@@ -11506,8 +12216,6 @@ class PipelineOrchestrator:
         # 并确保 LLMClient.chat 的进程级探针在位（幂等、自愈；无熔断器时完全透传）。
         if _register_outage_breaker(state.pipeline_id) is not None:
             _install_llm_outage_probe()
-        # W9-3: attempt 起点初始化遥测增量落盘（捕获上一 attempt 的账作合并基底）。
-        self._init_telemetry_flush(state)
         # I-8-1: 管线起飞即写首版 run.json（解析后的研究深度/模型/图谱/环境指纹），
         # 后续每阶段进入时把热切换出的报告/模拟 provider 钉入。
         self._write_run_manifest(state)
@@ -11515,6 +12223,19 @@ class PipelineOrchestrator:
         # 心跳让 reconcile_orphans 把「死管线」与「慢但活（深研究/persona 静默数分钟）」区分开。
         hb_stop = self._start_heartbeat(state)
         try:
+            # Ledger initialization is inside the failure/cleanup boundary: a
+            # storage failure must not strand a running task or launch research.
+            self._init_telemetry_flush(state)
+            # A fresh process must reconcile another attempt's unfinished API
+            # work before starting a stage, including paths that reuse artifacts.
+            LLMMeter.assert_accounting_available(state.pipeline_id)
+            # Check cached ontology before RESEARCH completion can update the
+            # shared artifact manifest. A corrupt manifest must not degrade to
+            # {} and lose its old ontology proof during unrelated bookkeeping.
+            if state.mode != "research_only" and state.project_id:
+                cached_project = ProjectManager.get_project(state.project_id)
+                if cached_project is not None and cached_project.ontology:
+                    self._require_ontology_reuse(state, cached_project.ontology)
             # ---- Stage 0: RESEARCH ----
             upd = self._make_stage_updater(state, STAGE_RESEARCH)
             handoff_dir = state.handoff_dir or PipelineManager.handoff_dir(state.pipeline_id)
@@ -11901,6 +12622,7 @@ class PipelineOrchestrator:
             )
 
             if state.mode == "research_only":
+                LLMMeter.assert_accounting_settled(state.pipeline_id)
                 state.status = "completed"
                 state.global_progress = 100
                 PipelineManager.save(state)
@@ -11919,6 +12641,7 @@ class PipelineOrchestrator:
             project_name = state.options.get("project_name") or f"研究预测 {state.pipeline_id}"
             project = ProjectManager.get_project(state.project_id) if state.project_id else None
             if project is not None and project.ontology:
+                self._require_ontology_reuse(state, project.ontology)
                 upd(100, "复用已有本体…")
                 self._complete_stage(state, STAGE_ONTOLOGY, "本体已恢复", reused=True)
             else:
@@ -12595,6 +13318,8 @@ class PipelineOrchestrator:
                                       Config.SIM_GRAPH_FEEDBACK) and graph_id:
                     run_kwargs["enable_graph_memory_update"] = True
                     run_kwargs["graph_id"] = graph_id
+                LLMMeter.assert_accounting_available(state.pipeline_id)
+                run_kwargs["usage_context"] = self._simulation_usage_context(state, sim_state.simulation_id)
                 SimulationRunner.start_simulation(simulation_id=sim_state.simulation_id, **run_kwargs)
                 # 轮询直到完成
                 cancel_ev = cls._cancel_events.get(state.pipeline_id)
@@ -12952,6 +13677,7 @@ class PipelineOrchestrator:
             # Hard-fails (raises → status=failed) on an empty/placeholder report or missing
             # forecast.json; records a degraded health block otherwise. Makes broken runs visible.
             self._enforce_pipeline_health(state)
+            LLMMeter.assert_accounting_settled(state.pipeline_id)
             state.status = "completed"
             state.global_progress = 100
             PipelineManager.save(state)
@@ -13005,6 +13731,8 @@ class PipelineOrchestrator:
                 hb_stop.set()
             # EXECPLAN2 I-5-1: 落盘本次管线的 LLM 计量（token/成本/延迟，按阶段/模型），便于复盘。
             try:
+                if not self._tel_initialized:
+                    raise RuntimeError("Accounting initialization failed; preserving prior telemetry artifacts")
                 tpath = os.path.join(PipelineManager._dir(state.pipeline_id), "run_telemetry.json")
                 _tel_extra: dict[str, Any] = {
                     "pipeline_id": state.pipeline_id,
@@ -13089,9 +13817,10 @@ class PipelineOrchestrator:
                                         _rpath, _existing.rstrip() + "\n\n" + _appendix.rstrip() + "\n")
                 except Exception as _ste:  # noqa: BLE001 — 阶段遥测为观测增益，失败不影响管线终态
                     logger.debug(f"[{state.pipeline_id}] 阶段级遥测处理失败（忽略）: {_ste}")
-                LLMMeter.reset(state.pipeline_id)
             except Exception as _te:
                 logger.debug(f"[{state.pipeline_id}] 写入 run_telemetry 失败（忽略）: {_te}")
+            finally:
+                LLMMeter.reset(state.pipeline_id)
             # DEFECT-1：本 attempt 的中断熔断器随线程终结注销（下一 attempt 重新注册，
             # 计数不跨 attempt 遗留；注册表清空后探针对全进程完全透传）。
             _clear_outage_breaker(state.pipeline_id)

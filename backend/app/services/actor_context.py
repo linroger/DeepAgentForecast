@@ -1272,11 +1272,34 @@ def _validate_actor_intelligence_contract(
                 "actor intelligence contract has missing or duplicate actor identities"
             )
         actor_ids.append(actor_id)
-    expected_ids_sha = hashlib.sha256(
-        "\n".join(sorted(actor_ids)).encode("utf-8")
-    ).hexdigest()
-    if contract["actor_ids_sha256"] != expected_ids_sha:
-        raise ValueError("actor intelligence actor roster fingerprint mismatch")
+    if any(key in contract for key in (
+        "actor_ids_multiset_sha256", "actor_ids_ordered_sha256"
+    )):
+        # Current producer seals bind both multiplicity and order; the older
+        # field name aliases the multiset digest. Duplicate IDs were rejected
+        # above, so every admitted identity has multiplicity one.
+        expected_multiset_sha = canonical_json_sha256(dict.fromkeys(actor_ids, 1))
+        expected_ordered_sha = hashlib.sha256(
+            "\n".join(actor_ids).encode("utf-8")
+        ).hexdigest()
+        for key, expected in (
+            ("actor_ids_sha256", expected_multiset_sha),
+            ("actor_ids_multiset_sha256", expected_multiset_sha),
+            ("actor_ids_ordered_sha256", expected_ordered_sha),
+        ):
+            if contract.get(key) != expected:
+                raise ValueError(
+                    f"actor intelligence actor roster fingerprint mismatch: {key}"
+                )
+    else:
+        # Legacy v1 seals had only the sorted newline-delimited digest. Field
+        # presence, not truthiness, selects current validation above: missing or
+        # malformed current proofs must never fall back to this compatibility path.
+        expected_ids_sha = hashlib.sha256(
+            "\n".join(sorted(actor_ids)).encode("utf-8")
+        ).hexdigest()
+        if contract["actor_ids_sha256"] != expected_ids_sha:
+            raise ValueError("actor intelligence actor roster fingerprint mismatch")
     if type(contract.get("actor_count")) is not int or contract["actor_count"] != len(actor_rows):
         raise ValueError("actor intelligence actor_count binding mismatch")
     if (

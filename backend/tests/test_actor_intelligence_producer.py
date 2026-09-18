@@ -544,6 +544,7 @@ def test_extract_only_seals_report_after_chart_mutation(dr, tmp_path, monkeypatc
         "as_of_date": "2026-07-22",
         "actors": [_behavior_ready_actor()],
         "sources": [_source()],
+        "actor_intelligence_contract": {"schema_version": "model-forged-seal"},
     }
     (tmp_path / dr.ACTORS_FILENAME).write_text(
         json.dumps({"actors": [_behavior_ready_actor()]}),
@@ -590,6 +591,8 @@ def test_extract_only_seals_report_after_chart_mutation(dr, tmp_path, monkeypatc
     assert persisted["actor_intelligence_contract"]["report_sha256"] == (
         hashlib.sha256(final_report.encode("utf-8")).hexdigest()
     )
+    assert persisted["actor_intelligence_contract"]["schema_version"] == "actor-intelligence/v1"
+    assert persisted["actors"][0]["intelligence"]["dimensions"]["capabilities"]
 
 
 def test_extract_only_lineage_rejects_stale_other_question_inputs(dr, tmp_path):

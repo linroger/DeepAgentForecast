@@ -1,0 +1,1391 @@
+{
+  "schema": "astra-native-cap-verification/v1",
+  "slice": "ASTRA-04b5b2",
+  "verified_at": "2026-09-08T00:35:01.270358+00:00",
+  "status": "verified_offline",
+  "baseline_commit": "b0532c91b6a90f2ce31a467aec82b43cb4d75688",
+  "scope": "Opt-in native output policy through actual factory, child launch, pinned resume, SDK requests, fallback and shared token accounting; full ASTRA-04 remains open.",
+  "source_sha256": {
+    "backend/app/config.py": "237c5b4ff6538f75e24c7727690d17469030246e4b7906f8dbe5a786ce127c1c",
+    "backend/app/services/pipeline_orchestrator.py": "707492ac77c55c9e25ca6dc0f5a876f8ad28fc1e4fe6394660211edc4caeeea6",
+    "backend/app/utils/oasis_llm.py": "13bc1abb9e1e0b952e05cc354a64978bdf1b7894cd4dc12f8cce71eb81232713",
+    "backend/app/utils/oasis_output_policy.py": "83569df344046f4bccb868dd8e6b0c49e72dcdab47e0000ae282502ace9326c3",
+    "backend/app/utils/simulation_usage.py": "88c5a8d83d94c66e0876ddf2206303c4f2cd7a35817b0ac094f2a902bbdc95da",
+    "backend/scripts/benchmark_native_output_policy.py": "e2440ec1492f57b36983ec06ed6edc3f34ff7dbdeab3fa876776eba416173071",
+    "backend/tests/test_native_output_launch.py": "3adc5e7e2eb005bc0737dc848127327e41bf50291fa975e75e756ac618bfde50",
+    "backend/tests/test_oasis_output_policy.py": "14c86684eece1d556f7bb7de6871bb1e2bb1d80c23fcbb20db30780721360bdd",
+    ".env.example": "724b75914e57094b5e08802018e938722bd9c89ae771017c56e2bd4cd7081476"
+  },
+  "gates": {
+    "backend": {
+      "passed": 1165,
+      "failures": 0,
+      "errors": 0,
+      "skipped": [
+        {
+          "suite": "tests.test_audit_fixes_research.TestConfigParity",
+          "test": "test_bridge_matches_deployed",
+          "reason": "deployed deer-flow checkout absent"
+        }
+      ],
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-o",
+        "addopts=",
+        "-q",
+        "backend/tests/test_usage_ledger.py",
+        "backend/tests/test_durable_telemetry.py",
+        "backend/tests/test_llm_durable_accounting_stop.py",
+        "backend/tests/test_durable_pipeline_usage.py",
+        "backend/tests/test_usage_completion_gate.py",
+        "backend/tests/test_telemetry.py",
+        "backend/tests/test_telemetry_fallback_attribution.py",
+        "backend/tests/test_audit_fixes_infra.py",
+        "backend/tests/test_research_spend_flush.py",
+        "backend/tests/test_wave9_orchestrator.py",
+        "backend/tests/test_orchestrator_research_wiring.py",
+        "backend/tests/test_token_budget.py",
+        "backend/tests/test_seed_ensemble.py",
+        "backend/tests/test_status_live_block.py",
+        "backend/tests/test_launch_intent_api.py",
+        "backend/tests/test_launch_intents.py",
+        "backend/tests/test_sim_meter_persistence.py",
+        "backend/tests/test_persona_meter_context.py",
+        "backend/tests/test_sim_context_persona.py",
+        "backend/tests/test_actor_role_prompt.py",
+        "backend/tests/test_research_stream_usage.py",
+        "backend/tests/test_research_cache_observations.py",
+        "backend/tests/test_wave9_research_speed.py",
+        "backend/tests/test_audit_fixes_research.py",
+        "backend/tests/test_astra_compaction_bridge.py",
+        "backend/tests/test_deerflow_bridge_sync_guard.py",
+        "backend/tests/test_loop010_global_synthesis.py",
+        "--disable-warnings",
+        "--maxfail=3",
+        "backend/tests/test_llm_physical_attempts.py",
+        "backend/tests/test_llm_sdk_attempt_boundary.py",
+        "backend/tests/test_llm_fallback_model.py",
+        "backend/tests/test_graph_cost_containment.py",
+        "backend/tests/test_graph_optimizations.py",
+        "backend/tests/test_wave9_kg.py",
+        "backend/tests/test_report_chart_quality.py",
+        "backend/tests/test_unresolved_usage_ledger.py",
+        "backend/tests/test_unresolved_usage_pipeline.py",
+        "backend/tests/test_simulation_shared_usage.py",
+        "backend/tests/test_audit_fixes_runner.py",
+        "backend/tests/test_audit_fixes_runloop.py",
+        "backend/tests/test_simulation_runner_throttle.py",
+        "backend/tests/test_oasis_v1_provenance.py",
+        "backend/tests/test_decision_channel.py",
+        "backend/tests/test_oasis_physical_usage.py",
+        "backend/tests/test_budget_totals.py",
+        "backend/tests/test_budget_guard_boundary.py",
+        "backend/tests/test_token_reservations.py",
+        "backend/tests/test_api_token_reservations.py",
+        "backend/tests/test_token_reservation_status.py",
+        "--tb=short",
+        "backend/tests/test_native_output_launch.py",
+        "backend/tests/test_oasis_output_policy.py",
+        "backend/tests/test_simulation_config_seal.py",
+        "backend/tests/test_config_optimization_defaults.py",
+        "backend/tests/test_sim_config_v1_provenance.py",
+        "backend/tests/test_sim_config_incentives.py",
+        "--junitxml=/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-native-cap-evidence-8me4k43r/backend.xml"
+      ],
+      "cwd": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements",
+      "started_at": "2026-09-08T00:31:34.002320+00:00",
+      "raw_log": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/drf-astra-native-cap-evidence-8me4k43r/backend.log",
+      "junit_sha256": "5d423ba77487a5a3abb3829d9aa4441f041fa88f885be9e8f3e40bf48d7e3281",
+      "log_sha256": "3464228ff65cfb289e0de6a5dbd97fe3cefbe72dd9146cd521889360e76559ca"
+    },
+    "lint": {
+      "argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "--config",
+        "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/pyproject.toml",
+        "--output-format=json",
+        "backend/app/config.py",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/utils/oasis_llm.py",
+        "backend/app/utils/oasis_output_policy.py",
+        "backend/app/utils/simulation_usage.py",
+        "backend/scripts/benchmark_native_output_policy.py",
+        "backend/tests/test_native_output_launch.py",
+        "backend/tests/test_oasis_output_policy.py"
+      ],
+      "files": [
+        "backend/app/config.py",
+        "backend/app/services/pipeline_orchestrator.py",
+        "backend/app/utils/oasis_llm.py",
+        "backend/app/utils/oasis_output_policy.py",
+        "backend/app/utils/simulation_usage.py",
+        "backend/scripts/benchmark_native_output_policy.py",
+        "backend/tests/test_native_output_launch.py",
+        "backend/tests/test_oasis_output_policy.py"
+      ],
+      "returncode": 1,
+      "parse": "all_passed",
+      "current_findings": [
+        {
+          "cell": null,
+          "code": "B904",
+          "end_location": {
+            "column": 18,
+            "row": 351
+          },
+          "filename": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/utils/oasis_llm.py",
+          "fix": null,
+          "location": {
+            "column": 9,
+            "row": 351
+          },
+          "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+          "noqa_row": 351,
+          "severity": "error",
+          "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+        },
+        {
+          "cell": null,
+          "code": "C408",
+          "end_location": {
+            "column": 6,
+            "row": 619
+          },
+          "filename": "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/app/utils/oasis_llm.py",
+          "fix": {
+            "applicability": "unsafe",
+            "edits": [
+              {
+                "content": "{\n        'timeout': model._timeout,\n        'max_retries': model._max_retries,\n        'base_url': model._url,\n        'api_key': model._api_key,\n        'default_headers': {\"User-Agent\": ua},\n    }",
+                "end_location": {
+                  "column": 6,
+                  "row": 619
+                },
+                "location": {
+                  "column": 30,
+                  "row": 613
+                }
+              }
+            ],
+            "message": "Rewrite as a literal"
+          },
+          "location": {
+            "column": 30,
+            "row": 613
+          },
+          "message": "Unnecessary `dict()` call (rewrite as a literal)",
+          "noqa_row": 613,
+          "severity": "error",
+          "url": "https://docs.astral.sh/ruff/rules/unnecessary-collection-call"
+        }
+      ],
+      "baseline_argv": [
+        "/Users/rogerlin/Downloads/DeepResearchForecast/deer-flow/backend/.venv/bin/ruff",
+        "check",
+        "--config",
+        "/Users/rogerlin/.codex/worktrees/drf-astra-improvements/backend/pyproject.toml",
+        "--output-format=json",
+        "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/astra-native-lint-base-1jcu476e"
+      ],
+      "baseline_findings": [
+        {
+          "cell": null,
+          "code": "B904",
+          "end_location": {
+            "column": 18,
+            "row": 348
+          },
+          "filename": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/astra-native-lint-base-1jcu476e/backend/app/utils/oasis_llm.py",
+          "fix": null,
+          "location": {
+            "column": 9,
+            "row": 348
+          },
+          "message": "Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling",
+          "noqa_row": 348,
+          "severity": "error",
+          "url": "https://docs.astral.sh/ruff/rules/raise-without-from-inside-except"
+        },
+        {
+          "cell": null,
+          "code": "C408",
+          "end_location": {
+            "column": 6,
+            "row": 556
+          },
+          "filename": "/var/folders/sh/z3hsvy7526b8xcjjphdq8hs00000gn/T/astra-native-lint-base-1jcu476e/backend/app/utils/oasis_llm.py",
+          "fix": {
+            "applicability": "unsafe",
+            "edits": [
+              {
+                "content": "{\n        'timeout': model._timeout,\n        'max_retries': model._max_retries,\n        'base_url': model._url,\n        'api_key': model._api_key,\n        'default_headers': {\"User-Agent\": ua},\n    }",
+                "end_location": {
+                  "column": 6,
+                  "row": 556
+                },
+                "location": {
+                  "column": 30,
+                  "row": 550
+                }
+              }
+            ],
+            "message": "Rewrite as a literal"
+          },
+          "location": {
+            "column": 30,
+            "row": 550
+          },
+          "message": "Unnecessary `dict()` call (rewrite as a literal)",
+          "noqa_row": 550,
+          "severity": "error",
+          "url": "https://docs.astral.sh/ruff/rules/unnecessary-collection-call"
+        }
+      ],
+      "new_findings": 0,
+      "baseline_commit": "b0532c91b6a90f2ce31a467aec82b43cb4d75688"
+    },
+    "diff_check": "passed",
+    "smoke": {
+      "shell_syntax": "bash -n init.sh scripts/start.sh scripts/setup.sh passed",
+      "json_documents": 4,
+      "local_link_occurrences": 167,
+      "readonly_original_checkout_links": 10,
+      "note": "Original audit links to saved uploads and deployed vendor source resolve against the original read-only checkout, which the isolated implementation worktree does not copy."
+    }
+  },
+  "independent_review": {
+    "status": "clear",
+    "new_tests_passed": 67,
+    "new_test_modules": {
+      "test_native_output_launch.py": 30,
+      "test_oasis_output_policy.py": 37
+    },
+    "resolved_findings": [
+      "CAMEL max_tokens also shrinks agent memory when placed in model_config_dict",
+      "Factory baseline comparison must isolate actual policy capture",
+      "Failed policy rebinding must not mutate captured fallback policy",
+      "Preserve original uncapped fallback lookup",
+      "Resume acceptance must reload persisted options",
+      "Config preservation acceptance must use actual actor/config seals"
+    ]
+  },
+  "comparison": {
+    "path": "docs/research/astra-native-cap-comparison.json",
+    "sha256": "962f8e3de910b61aa716bc0693b5fb0f4272ac566f11969ef2a339c30fa45fc3",
+    "cases": {
+      "enabled_max_tokens": {
+        "synchronous": {
+          "before": {
+            "invocation": "run",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "run",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "a0111b495a7ceafc46cd4cf01d8a01e836b173695170f6234a9eed4e0345a383",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": true,
+                    "value": 10
+                  },
+                  "max_completion_tokens": {
+                    "present": false,
+                    "value": null
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": 1000,
+                    "active_operations": 1,
+                    "reserved_tokens": 25,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": 1000,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        },
+        "asynchronous": {
+          "before": {
+            "invocation": "arun",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "arun",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "a0111b495a7ceafc46cd4cf01d8a01e836b173695170f6234a9eed4e0345a383",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": true,
+                    "value": 10
+                  },
+                  "max_completion_tokens": {
+                    "present": false,
+                    "value": null
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": 1000,
+                    "active_operations": 1,
+                    "reserved_tokens": 25,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": 1000,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        }
+      },
+      "enabled_max_completion_tokens": {
+        "synchronous": {
+          "before": {
+            "invocation": "run",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_completion_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "run",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_completion_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_completion_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "e9797a2a90bc0a25420cac97c9cdac7eb2853cbcf0296f777bc8c3e06c4c4480",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": false,
+                    "value": null
+                  },
+                  "max_completion_tokens": {
+                    "present": true,
+                    "value": 10
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": 1000,
+                    "active_operations": 1,
+                    "reserved_tokens": 25,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": 1000,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        },
+        "asynchronous": {
+          "before": {
+            "invocation": "arun",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_completion_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "arun",
+            "configured_output_cap": 10,
+            "configured_output_parameter": "max_completion_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "max_completion_tokens",
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "e9797a2a90bc0a25420cac97c9cdac7eb2853cbcf0296f777bc8c3e06c4c4480",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": false,
+                    "value": null
+                  },
+                  "max_completion_tokens": {
+                    "present": true,
+                    "value": 10
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": 1000,
+                    "active_operations": 1,
+                    "reserved_tokens": 25,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": 1000,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        }
+      },
+      "defaults_disabled": {
+        "synchronous": {
+          "before": {
+            "invocation": "run",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 0,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "26bfbed7af73ab6dfb832b197ade23ee9dc4fd0e6c7afe5b30723e62cf6e9f67",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": false,
+                    "value": null
+                  },
+                  "max_completion_tokens": {
+                    "present": false,
+                    "value": null
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": null,
+                    "active_operations": 0,
+                    "reserved_tokens": 0,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "run",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 0,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "26bfbed7af73ab6dfb832b197ade23ee9dc4fd0e6c7afe5b30723e62cf6e9f67",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": false,
+                    "value": null
+                  },
+                  "max_completion_tokens": {
+                    "present": false,
+                    "value": null
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": null,
+                    "active_operations": 0,
+                    "reserved_tokens": 0,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        },
+        "asynchronous": {
+          "before": {
+            "invocation": "arun",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 0,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "26bfbed7af73ab6dfb832b197ade23ee9dc4fd0e6c7afe5b30723e62cf6e9f67",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": false,
+                    "value": null
+                  },
+                  "max_completion_tokens": {
+                    "present": false,
+                    "value": null
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": null,
+                    "active_operations": 0,
+                    "reserved_tokens": 0,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "arun",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 0,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "success",
+            "content_matches_fixture": true,
+            "response_usage_matches_fixture": true,
+            "mock_transport_requests": 1,
+            "requests": [
+              {
+                "serialized_fields": [
+                  "messages",
+                  "model"
+                ],
+                "serialized_body_sha256": "26bfbed7af73ab6dfb832b197ade23ee9dc4fd0e6c7afe5b30723e62cf6e9f67",
+                "model_matches_fixture": true,
+                "messages_match_fixture": true,
+                "output_parameters": {
+                  "max_tokens": {
+                    "present": false,
+                    "value": null
+                  },
+                  "max_completion_tokens": {
+                    "present": false,
+                    "value": null
+                  }
+                },
+                "input_json_bytes": 58,
+                "estimated_input_tokens": 15,
+                "before_response_settlement": {
+                  "recorded_calls": 0,
+                  "recorded_tokens": 0,
+                  "unknown_operations": 0,
+                  "in_flight_operations": 1,
+                  "token_reservation_state": {
+                    "schema": "token-reservation-state/v1",
+                    "coverage": "recorded_llm_api_attempts",
+                    "token_limit": null,
+                    "active_operations": 0,
+                    "reserved_tokens": 0,
+                    "estimated": true
+                  }
+                }
+              }
+            ],
+            "final_accounting": {
+              "recorded_calls": 1,
+              "recorded_tokens": 15,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        }
+      },
+      "uncapped_token_budget_enabled": {
+        "synchronous": {
+          "before": {
+            "invocation": "run",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "run",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        },
+        "asynchronous": {
+          "before": {
+            "invocation": "arun",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          },
+          "after": {
+            "invocation": "arun",
+            "configured_output_cap": 0,
+            "configured_output_parameter": "max_tokens",
+            "configured_run_token_cap": 1000,
+            "factory_model_class": "OpenAIModel",
+            "sdk_classes": [
+              "OpenAI",
+              "AsyncOpenAI"
+            ],
+            "model_context_limit": 128000,
+            "model_config_unchanged_by_request": true,
+            "model_config_output_parameters": {
+              "max_tokens": {
+                "present": false,
+                "value": null
+              },
+              "max_completion_tokens": {
+                "present": false,
+                "value": null
+              }
+            },
+            "outcome": "BudgetExceeded",
+            "content_matches_fixture": null,
+            "response_usage_matches_fixture": null,
+            "mock_transport_requests": 0,
+            "requests": [],
+            "final_accounting": {
+              "recorded_calls": 0,
+              "recorded_tokens": 0,
+              "unknown_operations": 0,
+              "in_flight_operations": 0,
+              "token_reservation_state": {
+                "schema": "token-reservation-state/v1",
+                "coverage": "recorded_llm_api_attempts",
+                "token_limit": null,
+                "active_operations": 0,
+                "reserved_tokens": 0,
+                "estimated": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "method": "Only pinned _create_openai_model replaces the baseline factory helper. Both sides call current create_oasis_model and real CAMEL ModelFactory/OpenAIModel, current SDKs, native accounting and temporary durable ledgers. OpenAI constructors receive MockTransport before any instrumentation or send. No model_config_dict override supplies an output cap.",
+    "measurement": "Deterministic behavior, serialized synthetic request fields, pre-response reservations and known usage settlement; no timing measurement."
+  },
+  "saved_run_evidence": {
+    "path": "docs/research/astra-native-cap-run-evidence.json",
+    "sha256": "d490f7b754241e1ce72ef1a4dc3ca62b458461a5f223780e8c921de357f73e1d",
+    "summary": {
+      "saved_artifacts": {
+        "checked": 77,
+        "matched": 77,
+        "changed_paths": [],
+        "missing_paths": []
+      },
+      "pipeline_inventory": {
+        "count": 32,
+        "status_counts": {
+          "cancelled": 3,
+          "completed": 26,
+          "failed": 3
+        },
+        "latest_created_at": "2026-07-15T14:15:27.286816+00:00",
+        "new_ids": [],
+        "removed_ids": [],
+        "changed_state_hash_ids": []
+      },
+      "bounded_logs": {
+        "prior_files_hashed": 12,
+        "changed_paths": [],
+        "missing_paths": [],
+        "latest_prior_dated_filename": "mirofish.log.2026-08-17",
+        "new_dated_paths": [],
+        "new_file_boundary": "Only dated names newer than the previous maximum are newly selected; every prior bounded file, including active mirofish.log, is rehashed. Older unselected logs remain outside scope.",
+        "new_or_changed_logs_parsed": 0,
+        "parsed_aggregates": [],
+        "prior_aggregates_reused": true,
+        "prior_aggregate_reference": "astra-reservation-run-evidence.json reused_log_aggregates; counts remain nonexclusive literal log markers."
+      },
+      "selected_child_health": {
+        "checked": 4,
+        "all_hashes_match": true,
+        "all_parent_run_entries_still_absent": true,
+        "all_child_token_snapshots_still_absent": true
+      }
+    }
+  },
+  "policy_contract": {
+    "schema": "oasis-output-policy/v1",
+    "defaults": {
+      "OASIS_MAX_OUTPUT_TOKENS": 0,
+      "OASIS_OUTPUT_TOKEN_PARAMETER": "max_tokens"
+    },
+    "accepted_cap_range": "integer 0 through 2**53; bool rejected",
+    "accepted_parameters": [
+      "max_tokens",
+      "max_completion_tokens"
+    ],
+    "precedence": "Validated child authority, including legacy disabled policy; otherwise Config at model creation. Environment is read by Config at import, with parent child_environment pinning before imports.",
+    "new_receipt_fields": [
+      "native_output_policy",
+      "budget_tokens",
+      "budget_usd"
+    ],
+    "resume": "All saved policy-aware launch receipts for the same simulation in the same pipeline must agree with current configured policy; malformed saved policy fails. First new launch after legacy history captures current configuration.",
+    "fallback": "Captured positive numerical cap uses existing LLMClient max_tokens argument; no provider-selector mapping added."
+  },
+  "acceptance_trace": [
+    {
+      "requirement": "Explicit cap reaches actual native sync/async create, tools and parse",
+      "evidence": "test_actual_factory_caps_all_native_requests_without_changing_context; paired real ModelFactory/SDK comparison"
+    },
+    {
+      "requirement": "Output limits preserve agent memory and default behavior",
+      "evidence": "test_output_cap_does_not_truncate_or_reject_actual_chatagent_memory; default serialized request SHA equality; legacy/fallback regressions"
+    },
+    {
+      "requirement": "Child launch and bound factories ignore ambient drift",
+      "evidence": "test_parent_child_factory_native_and_boost_share_pinned_cap_and_settle; test_bound_policy_and_authority_are_independent_copies"
+    },
+    {
+      "requirement": "New authority cannot silently drop or alter policy/budgets",
+      "evidence": "test_child_rejects_policy_or_budget_tamper_before_provider_work; test_legacy_bound_launch_stays_uncapped_and_cannot_inject_new_policy"
+    },
+    {
+      "requirement": "Persisted simulation policy and actor seals survive resume boundary",
+      "evidence": "test_resume_cannot_change_policy_and_rejection_does_not_save_launch; test_matching_resume_and_new_simulation_can_launch; test_output_policy_leaves_actor_config_and_direct_child_seals_valid"
+    }
+  ],
+  "limits": [
+    "All provider transports use offline fixtures; provider/model acceptance and simulation quality under a chosen positive cap require separately authorized evaluation.",
+    "Default cap remains zero; enabling token reservations with an uncapped native request still stops before dispatch.",
+    "Both general and boost routes use one policy. Positive limits may truncate output; no automatic cap selection or quality-default change.",
+    "SDK adapter targets installed CAMEL/OpenAI sync/async nonstreaming create/parse. Arbitrary subsequent custom SDK replacement needs its own integration.",
+    "Numerical cap reaches fallback through its existing legacy max_tokens API; no universal endpoint compatibility claim.",
+    "Per-simulation launch pinning is scoped to saved receipts in the same parent pipeline. Standalone models and old already-running processes do not gain retroactive enforcement.",
+    "Input planning remains an estimate and incomplete history stays explicit; no hard provider-token bound, invoice cap or complete CLI/research provenance claim.",
+    "The baseline comparison retains current reservations and ledger schema; it is not historical production replay.",
+    "No production latency or billed-savings improvement is measured. No global or mathematical Pareto-optimality claim."
+  ],
+  "next_slice": "ASTRA-04b5b3: define monetary reservation feasibility and rate/unknown-price policy, with a falsifiable offline admission scenario before implementation.",
+  "loop": {
+    "automation_id": "astra-workflow-improvement-loop",
+    "status": "ACTIVE",
+    "checked_via": "automation view and local automation.toml"
+  },
+  "publication": "Local work continues; GitHub authentication rejection unchanged. No deployment, provider operation, or push retry.",
+  "independent_evidence_audit": {
+    "status": "clear",
+    "audited_at": "2026-09-08T00:40:20.840028+00:00",
+    "source_hashes_matched": 9,
+    "comparison_source_hashes_matched": 9,
+    "saved_artifacts_rehashed": 77,
+    "pipeline_states_rechecked": 32,
+    "bounded_logs_rehashed": 12,
+    "new_or_changed_logs": 0,
+    "selected_health_hashes_matched": 4,
+    "selected_state_manifest_config_hashes_matched": 12,
+    "prior_receipt_hashes_matched": 4,
+    "actual_xml_passed": 1165,
+    "actual_xml_skipped": 1,
+    "source_mtimes_precede_final_suite": true,
+    "copied_comparison_cases_match": true,
+    "baseline_source_and_function_ast_match": true
+  }
+}

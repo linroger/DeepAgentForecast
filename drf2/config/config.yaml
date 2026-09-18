@@ -380,7 +380,8 @@ subagents:
 # ============================================================================
 
 skills:
-  path: /Users/rogerlin/Downloads/DeepResearchForecast/drf2/skills
+  # Relative to DEER_FLOW_PROJECT_ROOT (the DeepResearchForecast checkout root).
+  path: drf2/skills
   container_path: /mnt/skills
 
 title:

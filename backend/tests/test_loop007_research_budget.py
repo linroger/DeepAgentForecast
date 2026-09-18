@@ -765,6 +765,8 @@ def test_orchestrator_injects_shared_paths_lane_and_defaults(monkeypatch, tmp_pa
         budget_run_id="pipe-123",
     )
     assert env["RESEARCH_BUDGET_DB"] == str(tmp_path / "shared.sqlite3")
+    assert env["RESEARCH_COMPACTION_DB"] == str(
+        tmp_path / "track_2" / "research_compaction.sqlite3")
     assert env["RESEARCH_BUDGET_TELEMETRY_PATH"] == str(
         tmp_path / "research_budget.json"
     )
@@ -921,6 +923,23 @@ def test_orchestrator_disable_removes_inherited_budget_env(monkeypatch, tmp_path
     env = dict.fromkeys(po._RESEARCH_BUDGET_ENV_KEYS, "stale")
     po._configure_research_budget_env(env, str(tmp_path))
     assert not any(key in env for key in po._RESEARCH_BUDGET_ENV_KEYS)
+    assert env["RESEARCH_COMPACTION_DB"] == str(
+        tmp_path / "research_compaction.sqlite3")
+
+
+def test_compaction_archive_survives_budget_epoch_rotation(monkeypatch, tmp_path):
+    monkeypatch.setattr(po.Config, "RESEARCH_BUDGET_ENABLED", True)
+    env = {"RESEARCH_COMPACTION_DB": "inherited-other-run.sqlite3"}
+    paths = []
+    for epoch in ("attempt-1", "attempt-2"):
+        po._configure_research_budget_env(
+            env, str(tmp_path / "handoff"),
+            budget_db_path=str(tmp_path / f"{epoch}.sqlite3"),
+            budget_epoch=epoch,
+        )
+        paths.append(env["RESEARCH_COMPACTION_DB"])
+        assert env["RESEARCH_BUDGET_DB"] == str(tmp_path / f"{epoch}.sqlite3")
+    assert paths == [str(tmp_path / "handoff" / "research_compaction.sqlite3")] * 2
 
 
 def test_research_budget_telemetry_is_a_stage_artifact(tmp_path):
