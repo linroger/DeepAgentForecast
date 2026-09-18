@@ -1,8 +1,8 @@
 # Handoff: workflow rearchitecture
 
 Last updated (UTC): 2026-09-18T17:19:21.129195+00:00
-Status: In Progress — approved RX-00 integration and prerequisite repairs.
-Current focus: RX-00 is verified; implement the approved RX-01 read-only stage dependency/reuse planner.
+Status: Current implementation unit Complete (RX-00/RX-01); overall rearchitecture In Progress.
+Current focus: Commit and publish the verified unit; next source slice is RX-02 ontology input binding followed by RX-03 owned invalidation.
 
 ## 1) Request and context
 Study backend, deerflow_bridge, drf2, and deployed DeerFlow backend/harness; rearchitect and optimize every stage and its connections on a new branch. The earlier request also asks for an evidence-based recurring-workflow shortlist and only high-confidence missing assets.
@@ -17,7 +17,7 @@ The branch is codex/workflow-rearchitecture-2026-09-19 in an isolated worktree b
 | End-to-end understanding | Trace API, state owner, stage inputs/outputs, recovery, and alternate entry points with source anchors | architecture.md and specialist reports |
 | Practical rearchitecture | Plan bounded slices with producer/consumer contracts, rollback, and scenario checks | root PLANS.md |
 | Reuse prior work | Compare existing ASTRA branch, skills, custom agents and automations | reuse report and workflow shortlist |
-| Implementation | Begin only after plan approval; red/green scenario evidence and review for each slice | Pending plan approval |
+| Implementation | Use approved scope, red/green scenario evidence and independent review for each slice | RX-00/RX-01 verified; later slices remain open |
 
 ## 3) Plan and decomposition
 1. Preserve baseline and isolate the branch.
@@ -29,10 +29,10 @@ The branch is codex/workflow-rearchitecture-2026-09-19 in an isolated worktree b
 ## 4) Progress ledger
 - [x] Read current source status, recent history, existing harness and handoff excerpts.
 - [x] Create isolated branch and record baseline.
-- [ ] Complete structural inventory and detailed stage review.
-- [ ] Reconcile previous improvements and workflow packaging.
-- [ ] Produce reviewed concrete plan.
-- [ ] Obtain plan approval and implement approved slices.
+- [x] Complete structural inventory and six detailed stage reports, with honest per-file reading depth.
+- [x] Reconcile existing improvements and workflow packaging; reuse sufficient existing assets.
+- [x] Produce the reviewed concrete plan and obtain explicit user approval.
+- [x] Implement and verify RX-00/RX-01. RX-02 through RX-12 remain planned.
 
 ## 5) Findings, decisions and assumptions
 The main checkout has unrelated deletions and edits. DeerFlow is an ignored deployed tree rather than tracked application source. Existing ASTRA improvements must be inspected before any rewrite or cherry-pick. A structural inventory is not an exhaustive behavioral review; coverage will be labeled honestly.
@@ -63,3 +63,19 @@ Finish source investigation and plan, then obtain the required approval. Next-se
 - 2026-09-18T19:32:06.168054+00:00: Roster producer→consumer regression now repaired in actor_context.py with19new scenarios and169related checks passing; independent rereview requested. DRF2 portable skills root and relocation tests reviewed locally. Source atlas and all6specialist reports complete at stated depth;1430local link occurrences validate after removing invalid line1 anchors from four empty native modules. Original880Python source hashes still match the intake census.
 
 - 2026-09-18T20:03:32.852142+00:00: RX-00 final acceptance:4016backendpass/0fail/12skip/11existingxfail;143guarded Python processes,0networkattempts,0source drift. Frontend131pass/buildpass; init.shpass. Independent bridge review24pass plus4real-thread probes closed RX00-R1. Roster/portability/OASIS review23pass. Ruff on99changed/importedPythonfiles has107inherited findings and0introduced vs exact main+ASTRA parents; recorded as RX-LINT, no rule suppression. Ready to commit integration then implement RX-01.
+
+- 2026-09-18T20:49:37.891201+00:00: RX-00 committed61636e5; documentation normalization c57089e. RX-01 core+read-only API implemented. Focused179checks passed, and6new/changedPythonfiles pass Ruff with no findings. Five real terminal saved runs were inspected via Flask testclient with lifecycle/write methods forbidden:HTTP200, correct hypothetical graph descendant closure, source states unchanged,0network. Initial probe had a fixture setup mistake (static SimulationRunner root not redirected with Config); preserved its receipt and corrected all roots in fresh v2. Reviewer notified. No saved runs or active services were changed. RX-01 independent review and final broad gate precede its commit.
+
+- 2026-09-18T21:35:39.090142+00:00: RX-01 complete locally: fullgate4158pass/0fail/12skip/11xfail; finalstaged189pass includes all7new/changedPythonfiles in sourcehash snapshot;0network/source drift. Independentreview11pass closed descriptor-race and malformed-stage findings. Five realterminal savedstates read-only accepted with unchangedhashes. init.sh and RX01Ruff pass. Featurelistappend alone markedtrue; priorentriesexactlypreserved. Entireprogram remainsinprogress, nextRX02/RX03. No newskills/agents/automations created; strongestrecurringworkflows alreadycovered.
+
+## Current verification and scope
+
+RX-00 and RX-01 are complete as local, independently reviewed implementation units. The final backend gate passed 4,158 tests with zero failures, 12 skips and 11 existing xfails. A separate final staged run passed 189 focused checks, with every new source/test file in its source snapshot. Both runs recorded zero network attempts and no source drift in their recorded scope. The frontend passed 131 tests and built successfully during RX-00; it has not changed since that gate. `init.sh` and the seven-file RX-01 Ruff gate passed. The inherited 107 Ruff findings remain explicit in `rx00-lint-comparison.json`.
+
+Five existing terminal saved pipelines returned HTTP 200 through the diagnostic without any saved-state changes or network calls. The first manual probe omitted a static simulation-root override; that fixture error was corrected and final acceptance uses `rx01-saved-readonly-final/result.json`. All introduced review findings are closed. Runtime provider behavior, deployment, production performance and full rearchitecture completion have not been established by these offline checks.
+
+## Next-session prompt
+
+Read this handoff, root `PLANS.md` and `docs/research/workflow-rearchitecture-20260919/architecture.md` in `/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919`. The user approved the incremental plan on 2026-09-19; do not request that approval again. RX-00/RX-01 are independently reviewed and verified offline. Inspect current branch state and ownership before editing. Continue RX-02 ontology input receipts and publication, followed by RX-03 durable owned invalidation. Do not wire the advisory planner into automatic reuse before those contracts are ready.
+
+Preserve actor/source semantics, base-fork immutability, and missing-versus-corrupt distinctions. Keep provider execution, real pipeline starts/resumes, deployment, and saved-run mutation outside this offline scope. Read `issue-ledger.json` and the specialist reports before choosing one bounded failing-to-passing slice. Preserve the original dirty checkout and the paused ASTRA automation. Use the existing interpreter at `/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python`; native test sources were copied into this worktree, and no deployment was changed.

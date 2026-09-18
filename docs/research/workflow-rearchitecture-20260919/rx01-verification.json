@@ -1,0 +1,51 @@
+{
+  "schema": "rearchitecture-verification/v1",
+  "slice": "RX-01",
+  "status": "passed-offline",
+  "recorded_at": "2026-09-18T21:35:39.090142+00:00",
+  "backend": {
+    "passed": 4158,
+    "failed": 0,
+    "skipped": 12,
+    "expected_failures": 11,
+    "duration_seconds": 226.64585854198958,
+    "guard_processes": 143,
+    "network_attempts": 0,
+    "tracked_source_drift": [],
+    "receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx01-backend-final/command-completed.json"
+  },
+  "final_targeted": {
+    "passed": 189,
+    "failed": 0,
+    "all_new_and_changed_files_in_source_snapshot": true,
+    "source_drift": [],
+    "network_attempts": 0,
+    "receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx01-staged-final/command-completed.json"
+  },
+  "real_saved_state_probe": {
+    "cases": 5,
+    "http_200": 5,
+    "all_states_unchanged": true,
+    "network_attempts": 0,
+    "receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx01-saved-readonly-final/result.json"
+  },
+  "independent_review": "rx01-review.md: both replacement-race and malformed-state findings closed; 11 final independent regressions passed",
+  "lint": "All seven RX01 Python source/test files passed configured Ruff; existing RX00 inherited debt remains separately recorded.",
+  "smoke": "init.sh passed",
+  "source_sha256": {
+    "backend/app/api/research.py": "af5eb3c642536e0a6b0d37cdfe0f7f8116ae251a756a9711fcf931149d227057",
+    "backend/app/services/pipeline_contracts.py": "bce250469a3f5151b333594d31470a3ca13256a125a8fe7d2bb2a426fc3756be",
+    "backend/app/services/pipeline_reuse.py": "c9ee4159401f8f9c9262ad2d54ed650138c8af74bec14851415b82f0430aa047",
+    "backend/app/services/pipeline_inspection.py": "5094f60acc563a8c9e3abae65834ca8c1223688d833d16bac802a37c79dc3478",
+    "backend/tests/test_pipeline_reuse.py": "ba696405cb0d498fbaa8eb4678214e9813c21089c5f733438ce54a8d1c20787f",
+    "backend/tests/test_pipeline_reuse_api.py": "bd8a374d0a5ee513bf7a791ca1a47ea690a23c4a69e430700e653cb0a369dd95",
+    "backend/tests/test_pipeline_inspection_races.py": "47e27922203ab6a49b7cb38c57cd624ab30fde2d49aa04cd597be0ff379eee35"
+  },
+  "limits": [
+    "Diagnostics only; no runtime reuse/invalidation policy changed",
+    "Legacy adapter cannot create authenticated generation/input receipts",
+    "No live pipeline/provider/service deployment",
+    "Domain schemas and graph database contents are not validated by this diagnostic",
+    "Full suite snapshot covers tracked source; final targeted run after staging covers every new source/test file"
+  ]
+}

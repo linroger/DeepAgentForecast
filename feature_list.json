@@ -158,5 +158,20 @@
       "Record exact results and decide the next single improvement slice from measured residual bottlenecks."
     ],
     "passes": false
+  },
+  {
+    "id": "feature_pipeline_reuse_diagnostics",
+    "category": "observability",
+    "description": "Explain stage dependencies and registered artifact integrity through a read-only advisory API without inventing input freshness or executing a pipeline.",
+    "steps": [
+      "Read an existing pipeline through GET /api/research/<pipeline_id>/reuse-plan and verify advisory=true and execution_authorized=false without changing stored bytes.",
+      "Preview a graph change and verify only graph, prepare, run and report are affected; preview a report change and verify upstream stages remain untouched.",
+      "Inspect healthy completed legacy state and matching output hashes, and verify they remain legacy_unverified without producer input receipts.",
+      "Inspect missing, corrupt, wrong-owner and malformed registered artifacts and verify explicit rebuild/reject decisions reach the dependent stages.",
+      "Inspect a scenario fork with shared base artifacts and verify the base remains unchanged.",
+      "Reject external paths and nonregular manifest files without opening them, and do not read active or unselected stage artifacts.",
+      "Exercise the API with lifecycle, preflight and write methods forbidden; verify deterministic output and no provider/network calls."
+    ],
+    "passes": true
   }
 ]

@@ -18,12 +18,14 @@
       "id": "RX-01",
       "title": "Explain stage reuse and downstream dependencies without executing work",
       "category": "proposed-feature",
-      "status": "approved-planned",
+      "status": "done-offline-verified",
       "source_review": "orchestration.md",
       "acceptance": "implementation-plan.md",
-      "implemented": false,
+      "implemented": true,
       "fresh_runtime_reproduction": false,
-      "remote_issue": null
+      "remote_issue": null,
+      "evidence": "rx01-verification.json",
+      "scope_note": "Advisory planner/API complete; producer receipt publication and runtime invalidation remain RX02/RX03."
     },
     {
       "id": "RX-02",
@@ -205,6 +207,20 @@
       "evidence": "rx00-lint-comparison.json",
       "implemented": false,
       "remote_issue": null
+    },
+    {
+      "id": "RX01-R1",
+      "title": "Bind allowed-root checks to actual descriptors before content read",
+      "status": "done-offline-verified",
+      "implemented": true,
+      "evidence": "rx01-review.md"
+    },
+    {
+      "id": "RX01-R2",
+      "title": "Return a structured conflict for malformed stage containers",
+      "status": "done-offline-verified",
+      "implemented": true,
+      "evidence": "rx01-review.md"
     }
   ]
 }

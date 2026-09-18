@@ -3,6 +3,7 @@
 **Plan ID:** DRF-RX-20260919
 **Status:** Approved by the user on 2026-09-19. Implement one verified slice at a time.
 **Branch:** `codex/workflow-rearchitecture-2026-09-19`
+**Progress:** RX-00 integration and RX-01 advisory diagnostics are verified. RX-02 through RX-12 remain planned; the complete rearchitecture is not finished.
 **Scope:** Research, ontology, graph, preparation, simulation, reporting, and the Python integration boundaries in the four requested source trees.
 
 The complete current plan is [implementation-plan.md](docs/research/workflow-rearchitecture-20260919/implementation-plan.md). It defines invariants, thirteen ordered slices, proposed input/output contracts, the first implementation unit, scenario acceptance, migration and rollback.

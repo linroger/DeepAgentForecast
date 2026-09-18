@@ -382,6 +382,59 @@ def clean_pipelines():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@research_bp.route('/<pipeline_id>/reuse-plan', methods=['GET'])
+def pipeline_reuse_plan(pipeline_id: str):
+    """Explain an advisory reuse plan without preflight, dispatch, or writes."""
+    from pathlib import Path
+
+    from ..services.pipeline_contracts import STAGES
+    from ..services.pipeline_inspection import inspect_pipeline_reuse, read_observation_json
+    from ..services.pipeline_orchestrator import PIPELINE_SCHEMA_VERSION
+    from ..services.report_agent import ReportManager
+    from ..services.simulation_runner import SimulationRunner
+
+    changed = [part.strip() for value in request.args.getlist('changed') for part in value.split(',')]
+    if any(stage not in STAGES for stage in changed):
+        return jsonify({'success': False, 'error': 'Unknown or empty changed stage'}), 400
+    try:
+        state_path = Path(PipelineManager.state_path(pipeline_id)).resolve()
+    except (ValueError, OSError, RuntimeError):
+        return jsonify({'success': False, 'error': '管线不存在'}), 404
+    if not state_path.is_relative_to(Path(Config.PIPELINE_DATA_DIR).resolve()):
+        return jsonify({'success': False, 'error': 'Pipeline state path is outside its root'}), 409
+    try:
+        data = read_observation_json(str(state_path), [Config.PIPELINE_DATA_DIR])
+    except (ValueError, TypeError, OSError, RuntimeError):
+        return jsonify({'success': False, 'error': 'Pipeline state cannot be inspected'}), 409
+    if data is None:
+        return jsonify({'success': False, 'error': '管线不存在'}), 404
+    try:
+        schema_version = int(data.get('schema_version') or 1)
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'Pipeline state cannot be inspected'}), 409
+    if schema_version < 1 or schema_version > PIPELINE_SCHEMA_VERSION:
+        return jsonify({'success': False, 'error': 'Unsupported pipeline state schema'}), 409
+    if data.get('pipeline_id') != pipeline_id:
+        return jsonify({'success': False, 'error': 'Pipeline state identity mismatch'}), 409
+    if data.get('stages') is not None and not isinstance(data['stages'], dict):
+        return jsonify({'success': False, 'error': 'Pipeline stages must be an object'}), 409
+    try:
+        state = PipelineState.from_dict(data)
+        result = inspect_pipeline_reuse(
+            data,
+            manifest_path=PipelineManager.artifact_manifest_path(pipeline_id),
+            artifact_specs={stage: PipelineOrchestrator._stage_artifact_specs(state, stage) for stage in STAGES},
+            allowed_roots=[
+                Config.PIPELINE_DATA_DIR, Config.OASIS_SIMULATION_DATA_DIR,
+                SimulationRunner.RUN_STATE_DIR, ReportManager.REPORTS_DIR,
+            ],
+            changed=changed,
+        )
+    except (ValueError, TypeError, OSError, RuntimeError):
+        return jsonify({'success': False, 'error': 'Pipeline state cannot be inspected'}), 409
+    return jsonify({'success': True, 'data': result})
+
+
 @research_bp.route('/status/<pipeline_id>', methods=['GET'])
 def pipeline_status(pipeline_id: str):
     """返回管线聚合进度（直接读 pipeline_state.json，可在后端重启后存活）。

@@ -2,6 +2,10 @@
 
 **Status: approved by the user on 2026-09-19.** The user selected “Approve the incremental plan” in response to the explicit approval request. Source study and implementation now proceed one verified slice at a time. This plan does not claim that the entire project has been rearchitected or exhaustively behaviorally reviewed.
 
+## Verified progress
+
+RX-00 and the advisory portion of RX-01 are implemented and independently reviewed. The concrete first contract is immutable `StageObservation`; actual producer input receipts and automatic invalidation remain RX-02/RX-03. See `rx00-verification.json`, `rx01-verification.json` and `reuse-planner.md`. RX-02 through RX-12 remain planned; this is not whole-program completion.
+
 ## Objective and scope
 
 Improve the full research → ontology → graph → prepare → simulation → report workflow, including the Python modules in `backend`, `deerflow_bridge`, `drf2`, and the deployed DeerFlow backend/harness. Preserve existing forecast semantics, source provenance, actor access rules, compatible saved runs, and user-visible artifact links while reducing repeated work and making recovery explainable.

@@ -63,3 +63,9 @@ The first failing gates and their corrections remain recorded; they are not subs
 The requested 30-day review found strong repetition in DRF forensics/recovery, source-boundary analysis, HMS setup, and paper assessment. Existing skills and the paused ASTRA automation already cover the high-confidence candidates. **No new skill, custom agent or automation is justified by the current evidence.** The dated compact shortlist is in [history-reuse.md](history-reuse.md).
 
 A narrow producer/consumer audit worksheet may merit extending the existing research skill after it works on a DRF boundary and another project. Writing, communications, finance and personal administration had insufficient procedure-level evidence; similar task titles alone do not establish a reusable workflow. No automation was resumed or duplicated.
+
+## RX-01 implemented
+
+The new `GET /api/research/<pipeline_id>/reuse-plan` diagnostic explains current legacy evidence and hypothetical changes without starting work or rewriting artifacts. It uses a pure dependency planner, immutable caller observations, and descriptor-bound read-only state/manifest/artifact inspection. It preserves legacy uncertainty rather than manufacturing input receipts. See [usage and limits](reuse-planner.md) and [final verification](rx01-verification.json).
+
+Final acceptance: **4,158 backend tests passed**, with zero failures, 12 skips and 11 existing xfails. The final focused run passed 189 checks and included every new source file in its staged source snapshot. Independent review closed both boundary findings. Five existing terminal saved runs returned HTTP 200 with unchanged state hashes and zero network calls. All seven RX-01 Python files pass Ruff, and `init.sh` passed. The full rearchitecture program remains in progress: RX-02/RX-03 must introduce real input receipts and owned downstream invalidation before changing execution behavior.
