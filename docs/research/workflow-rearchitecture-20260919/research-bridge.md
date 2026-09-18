@@ -448,3 +448,7 @@ Focused [results XML](/Users/rogerlin/.codex/rearchitecture-evidence/20260919/rx
 Ruff check with --no-cache, AST parsing of all four changed files, and git diff --check passed. The focused skip is deployment-copy parity because the isolated deployed checkout is absent. The final broad gate was not duplicated by this reviewer.
 
 **Current handoff:** source remains frozen at the passing full-gate hashes. RX00 bridge implementation is ready for the parent's final race rereview/integration decision. The report is the only file changed by this documentation follow-up; no source edits or commits are needed.
+
+## Parent acceptance update
+
+Subsequent independent review closed RX00-R1, including actual bounded-settlement probes and parent queued-lane fencing. The final integrated gate passed 4,158 backend tests after RX-01 was added. See `rx00-review.md`, `rx00-verification.json` and `rx01-verification.json`; earlier pending-review notes above describe their historical snapshot.

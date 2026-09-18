@@ -1,0 +1,24 @@
+{
+  "schema": "rearchitecture-delivery/v1",
+  "recorded_at": "2026-09-18T21:48:46.712020+00:00",
+  "branch": "codex/workflow-rearchitecture-2026-09-19",
+  "worktree": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919",
+  "integration_commit": "61636e5",
+  "planner_commit": "ef7409e",
+  "unit_status": "RX-00 and RX-01 complete and independently verified offline",
+  "program_status": "in_progress",
+  "next_slice": "RX-02 ontology input binding, followed by RX-03 owned invalidation",
+  "source_matches_final_test_receipt": true,
+  "worktree_was_clean_before_delivery_record": true,
+  "publication": {
+    "status": "blocked",
+    "remote": "origin",
+    "destination": "linroger/DeepAgentForecast",
+    "reason": "GitHub rejected the configured Git username or token",
+    "push_exit_code": 128,
+    "retry_policy": "Do not retry until authentication changes",
+    "credentials_changed": false
+  },
+  "original_checkout_preservation": "final-preservation.json",
+  "next_session": "../../handoff/workflow-rearchitecture-20260919/handoff.md"
+}

@@ -2,7 +2,7 @@
 
 Last updated (UTC): 2026-09-18T17:19:21.129195+00:00
 Status: Current implementation unit Complete (RX-00/RX-01); overall rearchitecture In Progress.
-Current focus: Commit and publish the verified unit; next source slice is RX-02 ontology input binding followed by RX-03 owned invalidation.
+Current focus: RX-00/RX-01 are committed and verified. Next is RX-02 ontology input binding followed by RX-03 owned invalidation; remote publication is blocked by GitHub authentication.
 
 ## 1) Request and context
 Study backend, deerflow_bridge, drf2, and deployed DeerFlow backend/harness; rearchitect and optimize every stage and its connections on a new branch. The earlier request also asks for an evidence-based recurring-workflow shortlist and only high-confidence missing assets.
@@ -79,3 +79,5 @@ Five existing terminal saved pipelines returned HTTP 200 through the diagnostic 
 Read this handoff, root `PLANS.md` and `docs/research/workflow-rearchitecture-20260919/architecture.md` in `/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919`. The user approved the incremental plan on 2026-09-19; do not request that approval again. RX-00/RX-01 are independently reviewed and verified offline. Inspect current branch state and ownership before editing. Continue RX-02 ontology input receipts and publication, followed by RX-03 durable owned invalidation. Do not wire the advisory planner into automatic reuse before those contracts are ready.
 
 Preserve actor/source semantics, base-fork immutability, and missing-versus-corrupt distinctions. Keep provider execution, real pipeline starts/resumes, deployment, and saved-run mutation outside this offline scope. Read `issue-ledger.json` and the specialist reports before choosing one bounded failing-to-passing slice. Preserve the original dirty checkout and the paused ASTRA automation. Use the existing interpreter at `/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python`; native test sources were copied into this worktree, and no deployment was changed.
+
+- 2026-09-18T21:48:46.712020+00:00: Delivery: integration commit `61636e5` and planner commit `ef7409e` are complete locally. The code matches the final test receipt. A single explicit Git push was rejected with invalid username/token (exit 128); the branch has not been published. GitHub API authentication independently returned 401. No credentials were changed and no unchanged-auth retry was made. The worktree was clean before this documentation-only delivery record; original checkout status and all 880 indexed Python source hashes remain unchanged. See `delivery.json` for exact scope and continuation.
