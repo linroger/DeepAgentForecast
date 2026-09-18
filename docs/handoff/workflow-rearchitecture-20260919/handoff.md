@@ -1,13 +1,13 @@
 # Handoff: workflow rearchitecture
 
-Last updated (UTC): 2026-09-18T17:19:21.129195+00:00
+Last updated (UTC): 2026-09-18T21:53:05.823913+00:00
 Status: Current implementation unit Complete (RX-00/RX-01); overall rearchitecture In Progress.
 Current focus: RX-00/RX-01 are committed and verified. Next is RX-02 ontology input binding followed by RX-03 owned invalidation; remote publication is blocked by GitHub authentication.
 
 ## 1) Request and context
-Study backend, deerflow_bridge, drf2, and deployed DeerFlow backend/harness; rearchitect and optimize every stage and its connections on a new branch. The earlier request also asks for an evidence-based recurring-workflow shortlist and only high-confidence missing assets.
+Study backend, deerflow_bridge, drf2, and the requested DeerFlow vendor backend/harness; rearchitect and optimize every stage and its connections on a new branch. The earlier request also asks for an evidence-based recurring-workflow shortlist and only high-confidence missing assets.
 
-The branch is codex/workflow-rearchitecture-2026-09-19 in an isolated worktree based on ec29ab1. Existing dirty source changes and the ASTRA worktree remain untouched. User instructions explicitly require a concrete PLANS.md and approval before complex implementation. Runtime calls, service starts, saved-run mutation, and deployments are outside this source-study phase.
+The branch is codex/workflow-rearchitecture-2026-09-19 in an isolated worktree based on ec29ab1. Existing dirty source changes and the ASTRA worktree remain untouched. The user explicitly approved the concrete PLANS.md on 2026-09-19. Scope is source implementation and offline verification. Provider calls, real pipeline starts/resumes, service changes, saved-run mutation and deployment remain outside scope; read-only saved-state diagnostics were verified without changing state.
 
 ## 2) Requirements and acceptance checks
 | Requirement | Acceptance check | Evidence |
@@ -35,19 +35,19 @@ The branch is codex/workflow-rearchitecture-2026-09-19 in an isolated worktree b
 - [x] Implement and verify RX-00/RX-01. RX-02 through RX-12 remain planned.
 
 ## 5) Findings, decisions and assumptions
-The main checkout has unrelated deletions and edits. DeerFlow is an ignored deployed tree rather than tracked application source. Existing ASTRA improvements must be inspected before any rewrite or cherry-pick. A structural inventory is not an exhaustive behavioral review; coverage will be labeled honestly.
+The original main checkout has unrelated deletions and edits, all preserved. The requested deer-flow-2.0.0 tree is the ignored vendor seed; deer-flow is the default assembled runtime. Tracked bridge modules and overlays own custom behavior. Existing ASTRA improvements were reconciled in commit 61636e5. The 880-file structural inventory is not an exhaustive behavioral review: the coverage ledger records 64 full-file, 100 selected-function and 716 structural-only reviews.
 
 ## 6) Issues, mistakes and recoveries
 The root handoff is over 500 KB and mixes historical programs. A topic-scoped handoff avoids overwriting it. Large initial combined reads truncated output; subsequent reads use bounded sections and explicit coverage.
 
 ## 7) Scenario-focused resolution tests
-No runtime behavior has changed. Planning acceptance covers source citations, inventory completeness, reuse conflicts, and preservation of original work.
+RX-00 verifies real producer-to-context compatibility, strict extraction and mode admission, late-worker stop propagation, relocated skills, and offline OASIS prompt consumption. RX-01 verifies stage dependency decisions through the real Flask route, immutable legacy behavior, fork/base preservation, and descriptor-bound reads during file and ancestor replacement. Both units have red/green evidence and independent review; no live provider run was performed.
 
 ## 8) Verification summary
-Initial git status and HEAD are captured in baseline.json. Runtime tests are deferred until a code change is approved.
+The final backend gate passed 4,158 tests, with zero failures, 12 skips and 11 existing xfails. The staged focused gate passed 189 checks. The frontend passed 131 tests and built successfully during RX-00; it was unchanged in RX-01. init.sh and the seven-file RX-01 Ruff gate passed. See rx00-verification.json and rx01-verification.json. Initial and final original-checkout preservation evidence is in baseline.json and final-preservation.json.
 
 ## 9) Remaining work and next steps
-Finish source investigation and plan, then obtain the required approval. Next-session prompt: Read this handoff and root PLANS.md, verify branch/source hashes and ownership, and continue the current approved slice without touching unrelated work or saved runs.
+RX-02 through RX-12 remain planned. Next, bind ontology outputs to effective inputs and define strict publication, then persist owned downstream invalidation and preserve fork/base isolation. The advisory planner must not drive automatic execution until those contracts are ready. GitHub publication is blocked by rejected credentials; do not retry unchanged authentication. The approved continuation prompt below preserves current scope and ownership.
 
 ## 10) Updates
 - 2026-09-18T17:19:21.129195+00:00: Created baseline and focused handoff before implementation.
@@ -81,3 +81,5 @@ Read this handoff, root `PLANS.md` and `docs/research/workflow-rearchitecture-20
 Preserve actor/source semantics, base-fork immutability, and missing-versus-corrupt distinctions. Keep provider execution, real pipeline starts/resumes, deployment, and saved-run mutation outside this offline scope. Read `issue-ledger.json` and the specialist reports before choosing one bounded failing-to-passing slice. Preserve the original dirty checkout and the paused ASTRA automation. Use the existing interpreter at `/Users/rogerlin/Downloads/DeepResearchForecast/backend/.venv/bin/python`; native test sources were copied into this worktree, and no deployment was changed.
 
 - 2026-09-18T21:48:46.712020+00:00: Delivery: integration commit `61636e5` and planner commit `ef7409e` are complete locally. The code matches the final test receipt. A single explicit Git push was rejected with invalid username/token (exit 128); the branch has not been published. GitHub API authentication independently returned 401. No credentials were changed and no unchanged-auth retry was made. The worktree was clean before this documentation-only delivery record; original checkout status and all 880 indexed Python source hashes remain unchanged. See `delivery.json` for exact scope and continuation.
+
+- 2026-09-18T21:53:05.823913+00:00: Refreshed the current handoff sections after final readback so the approval, implementation, verification and remaining-work summary agrees with the appended history. Historical failed checks and their corrections remain recorded.
