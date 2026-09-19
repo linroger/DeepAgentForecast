@@ -1,3 +1,7 @@
+# Current priority: durable agentic research — 2026-09-19
+
+The user explicitly authorized implementation now. Build five-worker adaptive research phases, durable discoveries and task evidence, bounded context management, and mechanical publication with advisory LLM critique. The concrete design and acceptance criteria are in [the feature handoff](docs/handoff/agentic-research-20260919/handoff.md). This prioritizes the already-approved research slices before RX-02; it does not authorize live provider execution, deployment, saved-run mutation or credential changes.
+
 # Current plan: whole-workflow rearchitecture — 2026-09-19
 
 **Plan ID:** DRF-RX-20260919

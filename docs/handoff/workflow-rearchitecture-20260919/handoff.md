@@ -2,7 +2,7 @@
 
 Last updated (UTC): 2026-09-18T21:53:05.823913+00:00
 Status: Current implementation unit Complete (RX-00/RX-01); overall rearchitecture In Progress.
-Current focus: RX-00/RX-01 are committed and verified. Next is RX-02 ontology input binding followed by RX-03 owned invalidation; remote publication is blocked by GitHub authentication.
+Current focus: RX-00/RX-01 and the user-prioritized durable agentic research slice are verified offline. See docs/handoff/agentic-research-20260919/handoff.md. Next is RX-02 ontology input binding followed by RX-03 owned invalidation; remote publication remains blocked by GitHub authentication.
 
 ## 1) Request and context
 Study backend, deerflow_bridge, drf2, and the requested DeerFlow vendor backend/harness; rearchitect and optimize every stage and its connections on a new branch. The earlier request also asks for an evidence-based recurring-workflow shortlist and only high-confidence missing assets.
@@ -83,3 +83,5 @@ Preserve actor/source semantics, base-fork immutability, and missing-versus-corr
 - 2026-09-18T21:48:46.712020+00:00: Delivery: integration commit `61636e5` and planner commit `ef7409e` are complete locally. The code matches the final test receipt. A single explicit Git push was rejected with invalid username/token (exit 128); the branch has not been published. GitHub API authentication independently returned 401. No credentials were changed and no unchanged-auth retry was made. The worktree was clean before this documentation-only delivery record; original checkout status and all 880 indexed Python source hashes remain unchanged. See `delivery.json` for exact scope and continuation.
 
 - 2026-09-18T21:53:05.823913+00:00: Refreshed the current handoff sections after final readback so the approval, implementation, verification and remaining-work summary agrees with the appended history. Historical failed checks and their corrections remain recorded.
+
+2026-09-19T10:51:16.874535+00:00: Completed the user-prioritized agentic research unit after approval. Final4844 backend passes/12 skips/11 expected failures; zero network attempts/source drift, native config smoke and independent review closed. Scope/details/hashes: docs/research/agentic-research-20260919/verification.json. This supersedes the earlier next-work ordering, not the whole rearchitecture status.

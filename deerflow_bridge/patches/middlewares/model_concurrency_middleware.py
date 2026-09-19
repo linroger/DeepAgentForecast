@@ -9,7 +9,8 @@ module so separate outer-track and pipeline processes share the same permits.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, nullcontext
+import os
 from typing import override
 
 from langchain.agents import AgentState
@@ -30,6 +31,51 @@ except ImportError:  # Ordinary DeerFlow deployments have no research stop latch
 def _raise_if_compaction_stopped() -> None:
     if _research_compaction is not None:
         _research_compaction.raise_if_compaction_stopped()
+
+
+def provider_model_admission(messages, tools=None):
+    """Reserve one physical call's prompt budget without a legacy dependency.
+
+    Keep this context inside the concurrency lease: queued callers must pass its
+    stop check before reserving. Settle the response inside both contexts, before
+    the lease's post-call sibling-stop check can interrupt the return path.
+    """
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+        return nullcontext(None)
+    try:
+        from research_admission import model_admission
+    except ImportError:
+        if _research_compaction is not None:
+            error = _research_compaction.ResearchCompactionError("checkpoint_unavailable")
+            _research_compaction.stop_after_compaction_failure(error)
+            raise error from None
+        raise RuntimeError("Agentic model admission is unavailable") from None
+    return model_admission(messages, tools=tools)
+
+
+@asynccontextmanager
+async def async_provider_model_admission(messages, tools=None):
+    """Keep durable admission and settlement off the native event loop."""
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+        yield None
+        return
+    try:
+        from research_admission import async_model_admission
+    except ImportError:
+        if _research_compaction is not None:
+            error = _research_compaction.ResearchCompactionError("checkpoint_unavailable")
+            _research_compaction.stop_after_compaction_failure(error)
+            raise error from None
+        raise RuntimeError("Agentic model admission is unavailable") from None
+    async with async_model_admission(messages, tools=tools) as ticket:
+        yield ticket
+
+
+def _request_messages(request):
+    """Include the system message carried separately by native ModelRequest."""
+    messages = getattr(request, "messages", None)
+    system = getattr(request, "system_message", None)
+    return [system, *(messages or ())] if system is not None else messages
 
 
 @contextmanager
@@ -85,7 +131,11 @@ class ModelConcurrencyMiddleware(AgentMiddleware[AgentState]):
         handler: Callable[[ModelRequest], ModelResponse],
     ) -> ModelCallResult:
         with provider_model_lease():
-            return handler(request)
+            with provider_model_admission(_request_messages(request), getattr(request, "tools", None)) as ticket:
+                response = handler(request)
+                if ticket is not None:
+                    ticket.settle(response)
+                return response
 
     @override
     async def awrap_model_call(
@@ -94,4 +144,8 @@ class ModelConcurrencyMiddleware(AgentMiddleware[AgentState]):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelCallResult:
         async with async_provider_model_lease():
-            return await handler(request)
+            async with async_provider_model_admission(_request_messages(request), getattr(request, "tools", None)) as ticket:
+                response = await handler(request)
+                if ticket is not None:
+                    await ticket.settle(response)
+                return response

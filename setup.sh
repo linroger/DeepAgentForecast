@@ -591,10 +591,10 @@ if [ -d "$DEERFLOW_DIR/backend" ] && [ -d "$BRIDGE_DIR" ]; then
   #     (resolve_variable -> import_module) imports these by bare name — they MUST
   #     sit next to config.yaml in deer-flow/ or web_search/web_fetch/prediction_market
   #     tools fail to load. Deploy the shared helpers with these tool modules.
-  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py research_compaction.py runtime_skill_sync.py; do
+  for _tool_mod in market_tools.py search_tools.py cached_fetch.py research_budget.py research_compaction.py runtime_skill_sync.py linear_research.py research_workspace.py research_context.py research_archive.py agentic_research.py agentic_bridge.py research_quality.py research_synthesis.py research_admission.py research_invocation.py; do
     if [ -f "$BRIDGE_DIR/$_tool_mod" ]; then
       cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/$_tool_mod"
-      if [ "$_tool_mod" = "research_compaction.py" ]; then
+      if [[ "$_tool_mod" =~ ^(research_compaction|research_workspace|research_context|research_archive|research_admission)\.py$ ]]; then
         # Native Gateway runs from backend/ with PYTHONPATH=.; the bridge runs
         # from the repository root. Both entrypoints need the same helper.
         cp "$BRIDGE_DIR/$_tool_mod" "$DEERFLOW_DIR/backend/$_tool_mod"

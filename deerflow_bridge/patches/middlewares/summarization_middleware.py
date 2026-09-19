@@ -7,6 +7,7 @@ import logging
 import os
 import uuid
 from collections.abc import Collection
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Protocol, override, runtime_checkable
 
@@ -201,6 +202,23 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
     async def _acreate_summary(self, messages_to_summarize: list[AnyMessage]) -> str:
         return await self._asummarize_with(messages_to_summarize)
 
+    def _summary_admission(self, prompt, *, asynchronous=False):
+        """Keep standalone legacy summarizers independent of new helper exports."""
+        if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+            return nullcontext(None)
+        try:
+            if asynchronous:
+                from deerflow.agents.middlewares.model_concurrency_middleware import async_provider_model_admission as admission
+            else:
+                from deerflow.agents.middlewares.model_concurrency_middleware import provider_model_admission as admission
+        except ImportError:
+            error = ResearchCompactionError("checkpoint_unavailable")
+            stop_after_compaction_failure(error)
+            raise error from None
+        bound_kwargs = getattr(self._summary_model, "kwargs", None)
+        tools = bound_kwargs.get("tools") if isinstance(bound_kwargs, dict) else None
+        return admission(prompt, tools)
+
     def _summarize_with(self, messages_to_summarize: list[AnyMessage]) -> str:
         """Mirror the parent ``_create_summary`` but invoke the nostream-tagged model.
 
@@ -216,10 +234,13 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             )
 
             with provider_model_lease():
-                response = self._summary_model.invoke(
-                    prompt,
-                    config={"metadata": {"lc_source": "summarization"}},
-                )
+                with self._summary_admission(prompt) as ticket:
+                    response = self._summary_model.invoke(
+                        prompt,
+                        config={"metadata": {"lc_source": "summarization"}},
+                    )
+                    if ticket is not None:
+                        ticket.settle(response)
         except ResearchCompactionError:
             raise
         except Exception:
@@ -237,10 +258,13 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             )
 
             async with async_provider_model_lease():
-                response = await self._summary_model.ainvoke(
-                    prompt,
-                    config={"metadata": {"lc_source": "summarization"}},
-                )
+                async with self._summary_admission(prompt, asynchronous=True) as ticket:
+                    response = await self._summary_model.ainvoke(
+                        prompt,
+                        config={"metadata": {"lc_source": "summarization"}},
+                    )
+                    if ticket is not None:
+                        await ticket.settle(response)
         except ResearchCompactionError:
             raise
         except Exception:
@@ -251,6 +275,8 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
     def _validated_summary_response(response: Any) -> str:
         try:
             text = response.text
+        except ResearchCompactionError:
+            raise
         except Exception:
             raise ResearchCompactionError("invalid_summary") from None
         if not isinstance(text, str) or not text.strip():
@@ -262,6 +288,8 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             raise ResearchCompactionError("empty_summary_input")
         try:
             prompt = self._build_summary_prompt(messages_to_summarize)
+        except ResearchCompactionError:
+            raise
         except Exception:
             raise ResearchCompactionError("summary_prompt_failed") from None
         if not isinstance(prompt, str) or not prompt.strip():

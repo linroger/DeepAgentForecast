@@ -10,9 +10,13 @@ jina `web_fetch` 工具包成一层**磁盘缓存**：命中且未过期即秒�
 * **config.yaml 里以裸模块名注册**：`use: cached_fetch:web_fetch_tool`（group: web，
   timeout: 30）。由于本包裹器以 `web_fetch` 之名注册，被委派的 jina 工具读到的正是**本**
   stanza 的 timeout（30s），与直接配置 jina 完全同参。
-* **委派而非重实现**：真正抓取仍走 ``deerflow.community.jina_ai.tools:web_fetch_tool``
+* **委派而非重实现**：legacy 抓取仍走 ``deerflow.community.jina_ai.tools:web_fetch_tool``
   （异步）；本模块只在其外侧加缓存读写。deerflow.* 延迟导入 → 无 deerflow / 无 langchain
   的离线环境也能 import；``web_fetch_tool`` 变量在无 langchain 时为 None。
+  Active agentic workspaces use that native Jina client/extractor before its
+  4096-character preview, and retain full provider bodies for native offloading.
+  Durable workspace archival is mandatory before positive-cache/ledger success;
+  archive failure raises a terminal ResearchCompactionError.
 * **缓存语义**：
     - 目录  env RESEARCH_SOURCE_CACHE_DIR（默认 <module_dir>/.cache/source_cache）
     - 键    sha256(url) 的 hexdigest（→ ``<hash>.json``）
@@ -44,6 +48,14 @@ from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
+
+
+def _agentic_archive():
+    """Load only for the opted-in engine; legacy deployments need no archive."""
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+        return None
+    import research_archive
+    return research_archive if research_archive.current_workspace() is not None else None
 
 try:  # copied beside this module by the bridge sync guard; absence is fail-open
     import research_budget as _research_budget
@@ -155,6 +167,7 @@ async def _host_is_public(host: str) -> bool:
 
 async def _direct_http_fetch(url: str) -> str:
     """Keyless bounded fallback for a public page when Jina is unavailable."""
+    retain_full = _agentic_archive() is not None
     try:
         import httpx
 
@@ -202,17 +215,16 @@ async def _direct_http_fetch(url: str) -> str:
                     from pypdf import PdfReader
 
                     reader = PdfReader(io.BytesIO(response.content))
-                    text = "\n\n".join(
-                        str(page.extract_text() or "") for page in reader.pages[:80]
-                    )
-                    return text[:12000] if len(text.strip()) >= 200 else (
+                    pages = reader.pages if retain_full else reader.pages[:80]
+                    text = "\n\n".join(str(page.extract_text() or "") for page in pages)
+                    return (text if retain_full else text[:12000]) if len(text.strip()) >= 200 else (
                         "Error: direct fallback PDF had no extractable text"
                     )
                 except Exception as exc:  # noqa: BLE001
                     return f"Error: direct fallback PDF extraction failed: {type(exc).__name__}"
             raw = response.text
             if "html" not in content_type and "<html" not in raw[:1000].lower():
-                return raw[:12000]
+                return raw if retain_full else raw[:12000]
             try:
                 from deerflow.utils.readability import ReadabilityExtractor
 
@@ -221,13 +233,13 @@ async def _direct_http_fetch(url: str) -> str:
                 )
                 markdown = article.to_markdown()
                 if len(str(markdown or "").strip()) >= 200:
-                    return str(markdown)[:12000]
+                    return str(markdown) if retain_full else str(markdown)[:12000]
             except Exception:  # noqa: BLE001
                 pass
             parser = _TextExtractor()
             parser.feed(raw)
             plain = "\n".join(parser.parts)
-            return plain[:12000] if len(plain.strip()) >= 200 else (
+            return (plain if retain_full else plain[:12000]) if len(plain.strip()) >= 200 else (
                 "Error: direct fallback extracted no usable content"
             )
     except Exception as exc:  # noqa: BLE001
@@ -236,6 +248,7 @@ async def _direct_http_fetch(url: str) -> str:
 
 async def _exa_fetch(url: str) -> str:
     """Fetch one public URL through Exa when its configured credential exists."""
+    retain_full = _agentic_archive() is not None
     api_key = os.environ.get("EXA_API_KEY", "").strip()
     if not api_key:
         return "Error: Exa fallback unavailable (EXA_API_KEY is not configured)"
@@ -250,7 +263,7 @@ async def _exa_fetch(url: str) -> str:
         def _request() -> Any:
             client = Exa(api_key=api_key)
             return client.get_contents(
-                [url], text={"max_characters": max_chars}
+                [url], text=True if retain_full else {"max_characters": max_chars}
             )
 
         result = await asyncio.wait_for(
@@ -262,10 +275,12 @@ async def _exa_fetch(url: str) -> str:
             return "Error: Exa fallback returned no results"
         row = rows[0]
         title = str(getattr(row, "title", None) or "Untitled")
-        body = str(getattr(row, "text", None) or "").strip()
-        if not body:
+        body = str(getattr(row, "text", None) or "")
+        if not body.strip():
             return "Error: Exa fallback returned no page text"
-        return f"# {title}\n\n{body[:max_chars]}"
+        if not retain_full:
+            body = body.strip()
+        return f"# {title}\n\n{body if retain_full else body[:max_chars]}"
     except Exception as exc:  # noqa: BLE001
         # Do not include provider exception text: some clients echo request
         # headers or credentials in their exception representation.
@@ -327,6 +342,7 @@ async def _firecrawl_fetch(url: str) -> str:
     _is_cacheable/_is_transport_failure 分类），且绝不回显异常正文（可能含请求头/凭据）。
     """
     global _firecrawl_fetch_calls
+    retain_full = _agentic_archive() is not None
     api_key = os.environ.get("FIRECRAWL_API_KEY", "").strip()
     if not api_key:
         return "Error: Firecrawl unavailable (FIRECRAWL_API_KEY is not configured)"
@@ -373,14 +389,17 @@ async def _firecrawl_fetch(url: str) -> str:
         data = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(data, dict):
             return "Error: Firecrawl returned no scrape data"
-        body = str(data.get("markdown") or "").strip()
-        if not body:
+        body = str(data.get("markdown") or "")
+        if not body.strip():
             return "Error: Firecrawl returned no page text"
+        if not retain_full:
+            body = body.strip()
         metadata = data.get("metadata")
         if not isinstance(metadata, dict):
             metadata = {}
         title = str(metadata.get("title") or "").strip()
-        return (f"# {title}\n\n{body[:max_chars]}" if title else body[:max_chars])
+        retained = body if retain_full else body[:max_chars]
+        return f"# {title}\n\n{retained}" if title else retained
     except Exception as exc:  # noqa: BLE001
         # Do not include provider exception text (may echo the bearer header).
         return f"Error: Firecrawl failed: {type(exc).__name__}"
@@ -608,6 +627,30 @@ def _is_cacheable(content: Any) -> bool:
     return len(content) >= DEAD_FETCH_MIN_CHARS
 
 
+def _is_agentic_cacheable(content: Any) -> bool:
+    """A positive producer body, excluding tool controls and discovery snippets."""
+    if not _is_cacheable(content):
+        return False
+    text = content.strip()
+    if text.lower().startswith(("error:", "already fetched", "already available", "research tool budget exhausted")):
+        return False
+    if text.startswith("{"):
+        try:
+            envelope = json.loads(text)
+        except (TypeError, ValueError):
+            return True
+        if isinstance(envelope, dict):
+            if str(envelope.get("status", "")).lower() in {
+                "already_available", "blocked", "denied", "unavailable", "error", "failed",
+            }:
+                return False
+            if envelope.get("source_origin") in ("search_snippet", "snippet", "cited", "derived_summary", "tool_result"):
+                return False
+            if envelope.get("evidence_kind") in ("search_result", "search_snippet", "derived_summary", "tool_result"):
+                return False
+    return True
+
+
 def _read_cache(path: str, ttl_seconds: float) -> Optional[str]:
     """命中且未过期 → 返回 content（并 touch mtime 供 LRU 记「近用」）；否则 None。任何异常 → None。
 
@@ -694,6 +737,21 @@ async def cached_fetch(
     fetch_fn: Callable[[str], Awaitable[str]],
     revisit_reason: str = "",
 ) -> str:
+    """Preserve the legacy cache, adding durable full-body replay when activated."""
+    archive = _agentic_archive()
+    if archive is not None:
+        async with archive.source_lock(str(url or "").strip()):
+            return await _cached_fetch_impl(url, fetch_fn, revisit_reason, archive=archive)
+    return await _cached_fetch_impl(url, fetch_fn, revisit_reason)
+
+
+async def _cached_fetch_impl(
+    url: str,
+    fetch_fn: Callable[[str], Awaitable[str]],
+    revisit_reason: str = "",
+    *,
+    archive=None,
+) -> str:
     """缓存核心流程（可注入 ``fetch_fn`` 供单测，无网络无 deerflow）。返回类型与被包裹工具一致（str）。
 
     TTL<=0 → 关闭正缓存（LOOP-007 预算仍独立生效）。否则：命中未过期即返回；否则真抓，成功且可缓存
@@ -708,6 +766,11 @@ async def cached_fetch(
         if not attempt.allowed:
             return _research_budget.denial_result("web_fetch", attempt.reason, exact_key)
 
+    if archive is not None:
+        restored = archive.cached_source(exact_key)
+        if restored is not None:
+            return restored
+
     ttl = _ttl_seconds()
     root = _cache_root()
     path = _cache_path(root, url)
@@ -716,13 +779,15 @@ async def cached_fetch(
             hit = _read_cache(path, ttl)
         except Exception:  # noqa: BLE001 — 极端情况下路径计算/读取异常也不阻断抓取
             hit = None
-        if hit is not None:
+        if hit is not None and (archive is None or _is_agentic_cacheable(hit)):
+            if archive is not None:
+                archive.archive_fetched_source(exact_key, hit, provider="cache", cache_hit=True)
             if _research_budget is not None:
                 if hasattr(_research_budget, "record_fetched_source"):
                     _research_budget.record_fetched_source(
                         exact_key, hit, provider="cache", cache_hit=True
                     )
-                if not str(revisit_reason or "").strip():
+                if archive is None and not str(revisit_reason or "").strip():
                     artifact_id = _research_budget.positive_repeat(
                         "fetch", exact_key)
                     if artifact_id:
@@ -752,11 +817,13 @@ async def cached_fetch(
                 await asyncio.sleep(delay)
                 delay = min(1.0, delay * 1.7)
                 hit = _read_cache(path, ttl)
-                if hit is not None:
+                if hit is not None and (archive is None or _is_agentic_cacheable(hit)):
                     # A singleflight follower may be an isolated subagent that
                     # cannot see the owner's model history. Share the fresh
                     # cache body in full; network dedupe must not become
                     # cross-context evidence loss.
+                    if archive is not None:
+                        archive.archive_fetched_source(exact_key, hit, provider="cache", cache_hit=True)
                     _research_budget.record_positive("fetch", exact_key)
                     if hasattr(_research_budget, "record_fetched_source"):
                         _research_budget.record_fetched_source(
@@ -786,6 +853,8 @@ async def cached_fetch(
             return _research_budget.denial_result("web_fetch", network.reason, exact_key)
 
     try:
+        if archive is not None:
+            _FETCH_PROVIDER.set("")
         content = await fetch_fn(url)
     except Exception:
         if _research_budget is not None:
@@ -795,8 +864,11 @@ async def cached_fetch(
         if "content" not in locals() and _research_budget is not None:
             _research_budget.release_request(claim_token)
     try:
+        cacheable = _is_agentic_cacheable(content) if archive is not None else _is_cacheable(content)
+        if archive is not None and cacheable:
+            archive.archive_fetched_source(exact_key, content, provider=_FETCH_PROVIDER.get(), cache_hit=False)
         if _research_budget is not None:
-            if _is_cacheable(content):
+            if cacheable:
                 _research_budget.clear_negative("fetch", exact_key)
                 _research_budget.record_positive("fetch", exact_key)
                 if hasattr(_research_budget, "record_fetched_source"):
@@ -808,7 +880,7 @@ async def cached_fetch(
                     )
             else:
                 _research_budget.record_negative("fetch", exact_key)
-        if ttl > 0 and _is_cacheable(content):
+        if ttl > 0 and cacheable:
             _write_cache(path, url, content)
             _enforce_size_cap(root, _max_bytes())
         return content
@@ -822,6 +894,16 @@ async def _jina_delegate_fetch(url: str) -> str:
     import importlib
 
     mod = importlib.import_module("deerflow.community.jina_ai.tools")
+    if _agentic_archive() is not None:
+        # Use the same native client/readability extractor, before the seed
+        # tool's 4096-character preview discards the source tail.
+        config = mod.get_app_config().get_tool_config("web_fetch")
+        timeout = (config.model_extra or {}).get("timeout", 10) if config is not None else 10
+        html = await mod.JinaClient().crawl(url, return_format="html", timeout=timeout)
+        if isinstance(html, str) and html.startswith("Error:"):
+            return html
+        article = await asyncio.to_thread(mod.readability_extractor.extract_article, html)
+        return article.to_markdown()
     tool_obj = mod.web_fetch_tool
     fn = getattr(tool_obj, "coroutine", None)  # async @tool 的原协程函数
     if fn is not None:

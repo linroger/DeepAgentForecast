@@ -1118,6 +1118,9 @@ class Config:
     # DeerFlow config.yaml 中的模型名（默认 claude → Claude Code 订阅 OAuth；
     # 可选 claude | minimax | deepseek | qwen | glm | codex | kimi）
     DEERFLOW_MODEL = os.environ.get('DEERFLOW_MODEL', 'claude').strip()
+    # New runs pin their engine. Legacy states without a pin retain hybrid
+    # semantics when resumed rather than inheriting a changed ambient default.
+    RESEARCH_ENGINE = os.environ.get('RESEARCH_ENGINE', 'agentic').strip().lower()
     # 研究深度：quick / standard / deep。CONF-1：默认 standard→deep——deep 的多轮调研协议
     # （source map → primary evidence → contradictions → synthesis）是报告证据密度的最大杠杆。
     DEERFLOW_RESEARCH_DEPTH = os.environ.get('DEERFLOW_RESEARCH_DEPTH', 'deep').strip().lower()

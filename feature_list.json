@@ -173,5 +173,18 @@
       "Exercise the API with lifecycle, preflight and write methods forbidden; verify deterministic output and no provider/network calls."
     ],
     "passes": true
+  },
+  {
+    "id": "feature_durable_agentic_research",
+    "category": "research-reliability",
+    "description": "Run bounded adaptive native research with five concurrent scoped investigators per phase, durable discovery and task recovery, full archived evidence with bounded prompt views, shared provider admission, and mechanical publication with advisory targeted repairs.",
+    "steps": [
+      "Exercise the actual CLI, coordinator and archive with native-stream fixtures; observe five concurrent tasks, a persisted mid-flight discovery and full tail evidence.",
+      "Crash or fail after completed work and verify task, actor-receipt and synthesis-section reuse without duplicate completed calls.",
+      "Race timeouts, failures, cancellation and restart; reject late provider calls and publication and retain process ownership until workers drain.",
+      "Exercise real parent routing, global source and actor handoffs, final receipt replay and promotion; allow advisory FAIL but reject citation, scenario, actor or artifact corruption.",
+      "Run guarded offline regression, native configuration smoke and independent review; document limits without asserting live-provider quality or speed."
+    ],
+    "passes": true
   }
 ]

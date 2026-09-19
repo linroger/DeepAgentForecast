@@ -1,0 +1,106 @@
+{
+  "schema": "agentic-research-verification/v1",
+  "verified_at": "2026-09-19T10:51:16.874535+00:00",
+  "status": "verified_offline",
+  "branch": "codex/workflow-rearchitecture-2026-09-19",
+  "base_commit": "22238a228f3f322f4cd7ff3f3783d0a9e5bd4d5a",
+  "scope": "Durable agentic research slice; broader rearchitecture remains in progress",
+  "backend": {
+    "phase": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/agentic-final-acceptance03",
+    "command_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/agentic-final-acceptance03/command-completed.json",
+    "junit": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/agentic-final-acceptance03/results.xml",
+    "passed": 4844,
+    "skipped": 12,
+    "expected_failures": 11,
+    "warnings": 21,
+    "seconds": 266.54771795800025,
+    "network_attempts": 0,
+    "guarded_processes": 215,
+    "source_changes_during_run": []
+  },
+  "native_configuration": {
+    "probe": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/native-agentic-config-final04/probe.py",
+    "output": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/native-agentic-config-final04/output.txt",
+    "checks_passed": 7,
+    "scope": "Actual DeerFlow client/config types; no provider/model construction",
+    "known_warning": "Existing LangChainPendingDeprecationWarning for allowed_objects default"
+  },
+  "lint": {
+    "command": "ruff check --config backend/pyproject.toml <all changed Python files>",
+    "files": 32,
+    "passed": true,
+    "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/agentic-final-ruff.txt"
+  },
+  "syntax": {
+    "python_ast_files": 32,
+    "setup_bash_n": "passed",
+    "git_diff_check": "passed"
+  },
+  "reviews": [
+    {
+      "reviewer": "Lorentz",
+      "scope": "Native admission / async accounting / cancellation",
+      "status": "findings_resolved",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/native_admission_cancel_chain_green_12/results.xml"
+    },
+    {
+      "reviewer": "Sagan",
+      "scope": "Actor cache receipts, duplicate resume blocks, real archive references and source projection",
+      "status": "findings_resolved",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/integration-review-regressions-frozen-ready-04/results.xml"
+    },
+    {
+      "reviewer": "Goodall",
+      "scope": "Whole callback ownership through preparation and model construction",
+      "status": "findings_resolved",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/invocation-integration-final-08/results.xml"
+    },
+    {
+      "reviewer": "Singer",
+      "scope": "Pre-dispatch ownership and mixed import exception identity",
+      "status": "findings_resolved",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/synthesis-review-regressions-final-02/results.xml"
+    }
+  ],
+  "limitations": [
+    "No paid/live providers, production research run, saved-run resume, deployment or service restart.",
+    "Offline fixtures verify control/data contracts, not research quality or production speedup.",
+    "Existing skips and expected failures remain; the broader rearchitecture feature list is not complete.",
+    "Remote publication remains blocked by previously rejected GitHub credentials; no unchanged-auth retry."
+  ],
+  "source_sha256": {
+    "backend/app/config.py": "d4d6dec4d83032a8b48a87de221fa859d41e8f693b77c750d80d5131c40eea72",
+    "backend/app/services/pipeline_orchestrator.py": "f618acc6d930046a1e5f59a65b0db9c2e0661625e396a0a7f886f9991bcf09d2",
+    "backend/app/services/research_quality_gate.py": "58fb8e57afd44a89d796e3ce84eef387513381b215be3b8bc17eae159ef0d0e9",
+    "backend/tests/test_agentic_admission_integration.py": "b938e8b1b3e5867ffa7c9a0df6dbe6b90a49f9e74778e6ef897e1da2babbc1be",
+    "backend/tests/test_agentic_bridge_integration.py": "26cee71ee1379abc33a3a6e6fd5ad4d7dab4f51c6e8582e35cf2fda51edfbaf8",
+    "backend/tests/test_agentic_bridge_review_regressions.py": "d9796f91eb41a481ed6c0bb5065f8568bfd6bf17a29ba9a5f13042618bd812f3",
+    "backend/tests/test_agentic_evidence_archive.py": "2e7d55ee87c78755816d587496bc1e2522a077c817a04e2c46343d8fa1384aac",
+    "backend/tests/test_agentic_invocation.py": "6607efa0c0a908518701db7112c8ca9a5d5fcd5edac33369834b69bc35090a93",
+    "backend/tests/test_agentic_invocation_integration.py": "fa20d579266f5f9a563bf703f908156a8451cbe0457613e8554d10bdcc08eb27",
+    "backend/tests/test_agentic_model_admission.py": "7ac5e152d02f61ae44b66d70cf831d3800e651f74c2bacec91b81423f6d4fb4f",
+    "backend/tests/test_agentic_parent_routing.py": "6de6493c322c9a1a573a77f0006a0c8d82a7ccdb7330c99c6900cf795f9cd20d",
+    "backend/tests/test_agentic_quality_handoff.py": "fc16ac0ab945f28e5880790567b92e707cbd746fedfc5a9b52800b52f39b02df",
+    "backend/tests/test_agentic_research.py": "5eabb12c68babe43d30588e1c1b35ab641abdb86b6b99057d5f4964508cb2621",
+    "backend/tests/test_agentic_synthesis_cache.py": "4209e534fff878edf7e42b2558651e3704cf0df44cba69208763e817ffdf6c51",
+    "backend/tests/test_agentic_synthesis_review_regressions.py": "b1bd98aa4d3b2c8de6d348813fd82da056fba293b497e63ff7434d3bdf330447",
+    "backend/tests/test_research_context.py": "61af0f6e5e39bd7cd5e4560e0769e87077df45a42954b06de9c6f4020648948f",
+    "backend/tests/test_research_quality_policy.py": "5dd105762cbd6f97220ed1d35868ae844d63ef77a9d768398f1d0ad71083cbef",
+    "backend/tests/test_research_workspace.py": "7095563d08efee896ac06c414780d8fccf434471e8501d260a49f0680610f3e8",
+    "deerflow_bridge/agentic_bridge.py": "0a433c9bdcb905964454a8c8ad72e25058d0e8fa50bca3ee8158443b54149eeb",
+    "deerflow_bridge/agentic_research.py": "3ed90e6e9cb2fa957f8012d20b1c5799f65171c828db4eabbbaaea7f0347dcb5",
+    "deerflow_bridge/cached_fetch.py": "204d7cd2a57da0220c5683d95cdf7bab9677343bd59cf9bde0a26f3e0507b9c9",
+    "deerflow_bridge/deerflow_research.py": "f2c2453e57aa875fdf27ed23714b049621cdc169c05b856db609dba481094c64",
+    "deerflow_bridge/patches/middlewares/model_concurrency_middleware.py": "39f2744cb4010079bb9d3caff9454ebcfc74150333444ac391dca23bf2c6d387",
+    "deerflow_bridge/patches/middlewares/summarization_middleware.py": "6e43b123b7ae341c21c020c9a9bfbcee9d3fa570386e00349c69d69fc71d4be3",
+    "deerflow_bridge/patches/middlewares/tool_output_budget_middleware.py": "33633c3fe6216b77cc4ff3ee11bb59cb51543bd199af0c278ab2b94e86ae4e2e",
+    "deerflow_bridge/research_admission.py": "f6c5c8b87199adc7f55723bd3adf96ae6114e4d0a43d223ce4bb1c735755b7c2",
+    "deerflow_bridge/research_archive.py": "24be4596fa5d09a139c8b21762742af03dab140d9c0b7ca264239dc713cb4161",
+    "deerflow_bridge/research_context.py": "aa57f3f976d920c1caf3156fdbcc4b2155e81c50e48158c53a63df3df3b2d197",
+    "deerflow_bridge/research_invocation.py": "f2180a55d649543cbb6c23cb1d7e1d7b3d12df626c7873961c96dab4dd8ef81b",
+    "deerflow_bridge/research_quality.py": "51f303f1aa00a4d8ae0f74fc626b817e2850553d107f6d099f6ef1c2b375f681",
+    "deerflow_bridge/research_synthesis.py": "26ec5c7f456899df2a4d9c2a3dc12c103cad9cd4149864cd2a0dde6d3374ddfd",
+    "deerflow_bridge/research_workspace.py": "e05e6b8953f40fed13cb515bdd05c9fa6547936d17ffe725ef3132ebb1e1a1f2",
+    "setup.sh": "ed08df2d989ab804c37df1a3be1aee8e3e3156c8b7e4ca44e63a412e77dac81a"
+  }
+}

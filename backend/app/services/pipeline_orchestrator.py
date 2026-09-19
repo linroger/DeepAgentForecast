@@ -1411,11 +1411,13 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
         for _tool_mod in (
             "market_tools.py", "search_tools.py", "cached_fetch.py",
             "research_budget.py", "linear_research.py", "research_compaction.py",
+            "research_workspace.py", "research_context.py", "research_archive.py",
+            "agentic_research.py", "agentic_bridge.py", "research_quality.py", "research_synthesis.py", "research_admission.py", "research_invocation.py",
         ):
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
                 pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
-                if _tool_mod == "research_compaction.py":
+                if _tool_mod in {"research_compaction.py", "research_workspace.py", "research_context.py", "research_archive.py", "research_admission.py"}:
                     # The native Gateway starts in backend/ with PYTHONPATH=.;
                     # keep its helper identical to the root bridge's import.
                     pairs.append((
@@ -2121,6 +2123,8 @@ class DeerFlowResearchRunner:
         shared_actor_track: Optional[bool] = None,
         evidence_only: bool = False,
         synthesis_manifest_path: Optional[str] = None,
+        research_engine: Optional[str] = None,
+        agentic_cache_root: Optional[str] = None,
         _spend: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
         """运行研究子进程，阻塞直到结束。返回 handoff 摘要。
@@ -2222,6 +2226,14 @@ class DeerFlowResearchRunner:
             cmd += ["--synthesis-manifest", str(synthesis_manifest_path)]
 
         env = dict(os.environ)
+        engine = research_engine or env.get("RESEARCH_ENGINE") or "hybrid"
+        if engine not in {"hybrid", "agentic", "linear"}:
+            raise ValueError("unsupported research engine")
+        env["RESEARCH_ENGINE"] = engine
+        if engine == "agentic":
+            namespace = "synthesis" if synthesis_manifest_path else "evidence"
+            cache_root = agentic_cache_root or os.path.join(handoff_dir, "agentic-cache")
+            env["RESEARCH_AGENTIC_CACHE_DIR"] = os.path.join(cache_root, namespace)
         env["RESEARCH_PROCESS_ATTEMPT_ID"] = process_attempt_id
         env.setdefault("PYTHONUNBUFFERED", "1")
         # Checkpoint identity is parent-owned per launch; never inherit an
@@ -2293,6 +2305,11 @@ class DeerFlowResearchRunner:
                 max(1, int(model_concurrency_global)))
         env["RESEARCH_GLOBAL_SUBAGENT_CAP"] = str(
             max(1, int(getattr(Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9))))
+        if engine == "agentic":
+            env["RESEARCH_GLOBAL_SUBAGENT_CAP"] = "5"
+            env["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = "5"
+            env["RESEARCH_SYNTHESIS_WORKERS"] = "5"
+            env["RESEARCH_AGENTIC_WORKERS"] = "5"
         # LOOP-009: prediction_market_search runs inside the DeerFlow agent and
         # previously returned useful markets only into chat history.  Give the
         # reflected tool a trusted, per-track artifact root so it can append a
@@ -2869,6 +2886,10 @@ def _load_fresh_evidence_lane_actor_dossier(
         if (
             isinstance(judge, dict)
             and str(judge.get("verdict") or "").strip().upper() == "FAIL"
+            and not (
+                meta.get("research_engine") == "agentic-phases/v1"
+                and meta.get("quality_policy") == "mechanical-with-advisory/v1"
+            )
         ):
             raise RuntimeError(
                 "baseline evidence lane actor dossier has an explicit final judge FAIL"
@@ -3098,7 +3119,7 @@ _RESEARCH_CONTRACT_FILES = (
     ACTOR_INTELLIGENCE_LINEAGE_FILENAME,
     "timeline.json", "quantitative.json", "contested.json",
     "prediction_markets.json", "market_price_history.json",
-    "research_report_judge.json", "research_progress.log", "meta.json",
+    "research_report_judge.json", "research_quality.json", "research_progress.log", "meta.json",
     "charts.json",
 )
 
@@ -3171,6 +3192,9 @@ def _research_contract_quality_errors(
     handoff_dir: str, *, require_judge: bool = False,
 ) -> list[str]:
     """Return publication-quality defects independently of checksum integrity."""
+    from .research_quality_gate import is_agentic_quality, quality_errors
+    if is_agentic_quality(_read_json(os.path.join(handoff_dir, "meta.json"))):
+        return quality_errors(handoff_dir)
     judge_path = os.path.join(handoff_dir, "research_report_judge.json")
     if not os.path.isfile(judge_path):
         return ["research_report_judge_missing"] if require_judge else []
@@ -3196,6 +3220,9 @@ def _research_judge_contract_errors(
     meta = _read_json(os.path.join(root, "meta.json"))
     if not isinstance(meta, dict):
         meta = {}
+    from .research_quality_gate import is_agentic_quality, quality_contract_errors
+    if is_agentic_quality(meta):
+        return quality_contract_errors(root, entries, report)
     judge_required = (
         str(meta.get("depth", "")).strip().lower() == "deep"
         or "research_report_judge.json" in entries
@@ -3381,7 +3408,7 @@ def _research_report_is_judge_bound(handoff_dir: str) -> bool:
     return bool(
         manifest.get("version") == 1
         and isinstance(entries, dict)
-        and "research_report_judge.json" in entries
+        and ("research_report_judge.json" in entries or "research_quality.json" in entries)
     )
 
 
@@ -7763,6 +7790,9 @@ class PipelineOrchestrator:
         model: Optional[str] = None,
     ) -> PipelineState:
         """Build an admission snapshot without files, tasks, or background work."""
+        research_engine = str(getattr(Config, "RESEARCH_ENGINE", "agentic")).strip().lower()
+        if research_engine not in {"agentic", "hybrid", "linear"}:
+            raise ValueError("unsupported research engine")
         pipeline_id = f"pipe_{uuid.uuid4().hex[:12]}"
         bands = RESEARCH_ONLY_BANDS if mode == "research_only" else STAGE_BANDS
         stages = {name: StageState(name=name) for name in bands.keys()}
@@ -7786,6 +7816,7 @@ class PipelineOrchestrator:
             # ""=auto（不传 --target-language，模型自选）；具体值=覆盖。model: None=用 Config 默认。
             "research_language": language,
             "research_model": model or None,
+            "research_engine": research_engine,
         })
         state.options["actor_intelligence_policy_v1"] = (
             capture_actor_intelligence_policy_v1("admission")
@@ -11232,6 +11263,9 @@ class PipelineOrchestrator:
                     depth=state.options.get("depth"),
                     language=state.options.get("research_language"),
                     model=state.options.get("research_model"),
+                    research_engine=state.options.get("research_engine", "hybrid"),
+                    agentic_cache_root=(os.path.join(PipelineManager._dir(state.pipeline_id), "agentic-cache")
+                                        if state.options.get("research_engine") == "agentic" else None),
                     cancel_event=type(self)._cancel_events.get(state.pipeline_id),
                     on_spawn=_spawn,
                     kg_graph_id=state.graph_id,
@@ -11372,8 +11406,9 @@ class PipelineOrchestrator:
         cls = type(self)
         angles = _RESEARCH_TRACK_ANGLES[:max(1, n_tracks)]
         n = len(angles)
+        agentic = state.options.get("research_engine") == "agentic"
         global_synthesis = bool(
-            n > 1 and getattr(Config, "RESEARCH_GLOBAL_SYNTHESIS", True))
+            agentic or (n > 1 and getattr(Config, "RESEARCH_GLOBAL_SYNTHESIS", True)))
         global_subagent_cap = getattr(Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9)
         configured_model_cap = getattr(Config, "RESEARCH_GLOBAL_MODEL_CONCURRENCY", 0)
         outer_workers = research_outer_track_workers(
@@ -11493,6 +11528,9 @@ class PipelineOrchestrator:
                 depth=state.options.get("depth"),
                 language=state.options.get("research_language"),
                 model=state.options.get("research_model"),
+                research_engine=state.options.get("research_engine", "hybrid"),
+                agentic_cache_root=(os.path.join(PipelineManager._dir(state.pipeline_id), "agentic-cache")
+                                        if state.options.get("research_engine") == "agentic" else None),
                 cancel_event=cls._cancel_events.get(state.pipeline_id),
                 on_spawn=_make_spawn(idx),
                 resume=_resume_track,
@@ -11721,6 +11759,10 @@ class PipelineOrchestrator:
             }
             baseline_meta = _read_json(os.path.join(
                 baseline_dir, "meta.json"))
+            if agentic:
+                if not isinstance(baseline_meta, dict) or baseline_meta.get("quality_policy") != "mechanical-with-advisory/v1":
+                    raise RuntimeError("agentic evidence lane policy mismatch")
+                actor_descriptor["judge_policy"] = "mechanical-with-advisory/v1"
             current_judge_sha = str(
                 (baseline_meta or {}).get("actor_dossier_judge_sha256") or ""
             ).strip() if isinstance(baseline_meta, dict) else ""
@@ -11811,6 +11853,9 @@ class PipelineOrchestrator:
                         depth=state.options.get("depth"),
                         language=state.options.get("research_language"),
                         model=state.options.get("research_model"),
+                        research_engine=state.options.get("research_engine", "hybrid"),
+                        agentic_cache_root=(os.path.join(PipelineManager._dir(state.pipeline_id), "agentic-cache")
+                                        if state.options.get("research_engine") == "agentic" else None),
                         cancel_event=cls._cancel_events.get(state.pipeline_id),
                         on_spawn=_make_spawn(0),
                         kg_graph_id=state.graph_id,
@@ -12318,7 +12363,10 @@ class PipelineOrchestrator:
                         _n_tracks = max(1, int(getattr(Config, "RESEARCH_PARALLEL_TRACKS", 3) or 3))
                     except (TypeError, ValueError):
                         _n_tracks = 3
-                    if _n_tracks > 1:
+                    _agentic = state.options.get("research_engine") == "agentic"
+                    if _agentic:
+                        _n_tracks = 1
+                    if _n_tracks > 1 or _agentic:
                         research = self._run_parallel_research_tracks(
                             state, handoff_dir, upd, _n_tracks)
                     else:
@@ -12383,6 +12431,9 @@ class PipelineOrchestrator:
                             depth=state.options.get("depth"),
                             language=state.options.get("research_language"),  # T5.5
                             model=state.options.get("research_model"),        # T5.5
+                            research_engine=state.options.get("research_engine", "hybrid"),
+                            agentic_cache_root=(os.path.join(PipelineManager._dir(state.pipeline_id), "agentic-cache")
+                                        if state.options.get("research_engine") == "agentic" else None),
                             cancel_event=cls._cancel_events.get(state.pipeline_id),
                             on_spawn=_persist_research_pid,
                             resume=_resume_research,

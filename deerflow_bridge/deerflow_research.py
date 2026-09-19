@@ -2233,6 +2233,14 @@ def merge_fetched_into_sources(extracted: Any) -> "tuple[list[dict], int]":
             seen.discard(u)
             continue
         out.append(row)
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        from research_archive import attach_source_content
+        originals = {row["url"]: row for row in export_fetched_sources_for_manifest()}
+        for row in out:
+            original = originals.get(row["url"], {})
+            if original.get("content_sha256") == row.get("content_sha256") and "content" in original:
+                row["content"] = original["content"]
+        out = attach_source_content(out)
     return out, dropped + s4_dropped
 
 
@@ -4493,11 +4501,16 @@ def _model_call_lease(weight: int = 1):
 def _invoke_model(model, messages):
     """Invoke any bare model under the same cross-process provider envelope."""
     _raise_if_compaction_stopped()
-    with _model_call_lease(1):
+    from research_invocation import producer_scope
+    with producer_scope(), _model_call_lease(1):
         # A sibling can stop while this call waits for a provider permit.
         _raise_if_compaction_stopped()
         try:
-            result = model.invoke(messages)
+            from research_admission import model_admission
+            with model_admission(messages) as admission:
+                _raise_if_compaction_stopped()
+                result = model.invoke(messages)
+                admission.settle(result)
         except ResearchCompactionError as exc:
             _stop_after_compaction_failure(exc)
             raise
@@ -4654,12 +4667,15 @@ def build_citation_index(fetched: "list[dict]", cap: int = 100) -> "list[dict]":
     按规整化 URL 去重、剔除 ok=False 的死抓取），因此确定性参考节的编号顺序与
     sources.json 的 fetched 主干结构性对齐。行形态 {"n": 1 起的序号, "title", "url"}。
     """
+    agentic = os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic"
     entries: list[dict] = []
     seen: set[str] = set()
     for f in fetched or []:
         if not isinstance(f, dict):
             continue
-        u = _norm_url(f.get("url"))
+        u = _source_identity_url(f.get("url")) if agentic else _norm_url(f.get("url"))
+        if agentic and f.get("ok") is not True:
+            continue
         if (not _is_valid_http_url(u) or u in seen or f.get("ok") is False
                 or _source_domain_denied(u)):
             continue
@@ -4770,6 +4786,14 @@ def finalize_report_citations(report: str, plog: "ProgressLog") -> str:
         plog.write("stage", "citations: no inline [S<n>] markers in the report; nothing to validate")
         return report
     refs = parse_references_section(report)
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        # Keep malformed/dangling markers visible to the mechanical gate.
+        # Removing them would turn an unsupported claim into an apparent pass.
+        if not refs and _PINNED_CITATION_INDEX:
+            section = render_references_section(_PINNED_CITATION_INDEX, markers)
+            if section:
+                return report.rstrip() + "\n\n" + section + "\n"
+        return report
     if refs:
         out, kept, dangling = strip_dangling_citation_markers(report, set(refs))
         plog.write("warn" if dangling else "ok",
@@ -5221,6 +5245,8 @@ def _message_text(content: Any) -> str:
 def _multipart_synthesis_enabled(depth: str) -> bool:
     """SCALE-1: 多段合成开关。env 显式设置对所有深度一律生效；未设置 → 仅 deep 开
     （quick/standard 保持单调用现状，成本/行为与今天逐字节一致）。"""
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        return True  # Every completed section must be durable, at every depth.
     raw = (os.environ.get("RESEARCH_MULTIPART_SYNTHESIS", "") or "").strip()
     if raw:
         return raw.lower() in ("1", "true", "yes", "on")
@@ -6441,6 +6467,21 @@ def _bare_synth_invoke(
 def synthesize_multipart(question: str, target_language: str | None, depth: str,
                          synth_model: str, blocks: list[str], ai_parts: list[str],
                          context: str, plog: "ProgressLog") -> str:
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        from research_archive import current_workspace
+        workspace = current_workspace()
+        if workspace is None:
+            raise RuntimeError("agentic synthesis requires a durable workspace")
+        with workspace.execution_lock() as lease:
+            return _synthesize_multipart_impl(question, target_language, depth, synth_model,
+                                              blocks, ai_parts, context, plog, workspace, lease)
+    return _synthesize_multipart_impl(question, target_language, depth, synth_model,
+                                      blocks, ai_parts, context, plog)
+
+
+def _synthesize_multipart_impl(question: str, target_language: str | None, depth: str,
+                               synth_model: str, blocks: list[str], ai_parts: list[str],
+                               context: str, plog: "ProgressLog", workspace=None, lease=None) -> str:
     """SCALE-1 多段合成主流程。返回 '' 表示结构性失败（大纲解析失败/过半分节空），
     调用方回退到今天的单调用路径；所有降级均已写入 _RESEARCH_FLAGS。"""
     import concurrent.futures as _cf
@@ -6458,18 +6499,50 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
     execution_budget = SynthesisExecutionBudget(
         _synthesis_execution_output_token_limit(depth))
 
+    phase_deadline = time.monotonic() + float(os.environ.get("RESEARCH_AGENTIC_PHASE_DEADLINE_S", "2700"))
+
     def _budgeted_invoke(
             prompt: str, label: str, max_output_tokens: int,
             fail_on_truncation: bool = False) -> str:
         execution_budget.reserve(label, max_output_tokens)
-        return _bare_synth_invoke(
-            synth_model,
-            prompt,
-            plog,
-            label,
-            max_output_tokens,
-            fail_on_truncation,
-        )
+
+        def call():
+            if workspace is None:
+                return _bare_synth_invoke(synth_model, prompt, plog, label, max_output_tokens, fail_on_truncation)
+            remaining = min(float(os.environ.get("RESEARCH_AGENTIC_CALL_TIMEOUT_S", "600")),
+                            phase_deadline - time.monotonic())
+            if remaining <= 0:
+                stop = ResearchCompactionError("checkpoint_unavailable", label)
+                _stop_after_compaction_failure(stop)
+                raise stop
+            executor = _cf.ThreadPoolExecutor(max_workers=1)
+            def invoke_physical():
+                from research_invocation import producer_scope
+                with producer_scope():
+                    return _bare_synth_invoke(synth_model, prompt, plog, label,
+                                              max_output_tokens, fail_on_truncation)
+            from research_invocation import submit_producer
+            future = submit_producer(executor, invoke_physical)
+            try:
+                return future.result(timeout=remaining)
+            except _cf.TimeoutError as exc:
+                stop = ResearchCompactionError("checkpoint_unavailable", label)
+                _stop_after_compaction_failure(stop)
+                raise stop from exc
+            finally:
+                lease.defer_release_until([future])
+                executor.shutdown(wait=False, cancel_futures=True)
+
+        if workspace is None:
+            return call()
+        from research_synthesis import cached_invoke
+        return cached_invoke(workspace, {
+            "model": synth_model, "label": label, "prompt": str(prompt),
+            "evidence": getattr(prompt, "evidence", ""),
+            "evidence_label": getattr(prompt, "evidence_label", ""),
+            "max_output": max_output_tokens,
+            "policy": {"version": "agentic-synthesis/v1", "fail_on_truncation": fail_on_truncation},
+        }, call)
 
     # (1) OUTLINE —— only a compact representative slice is needed to plan
     # ownership. Replaying the entire evidence corpus just to name sections is
@@ -6682,7 +6755,8 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
         f"<= {section_cap * len(outline)} chars aggregate)",
     )
     with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(_write_section, i): i for i in range(len(outline))}
+        from research_invocation import submit_producer
+        futs = {submit_producer(ex, _write_section, i): i for i in range(len(outline))}
         fatal_truncations: list[TruncatedModelOutput] = []
         fatal_budget_errors: list[SynthesisExecutionBudgetExceeded] = []
         fatal_actor_coverage_errors: list[ActorCoverageBoundaryError] = []
@@ -6713,7 +6787,10 @@ def synthesize_multipart(question: str, target_language: str | None, depth: str,
             f"{len(fatal_truncations)} section(s) remained truncated after retry; "
             "refusing incomplete multipart report"
         ) from fatal_truncations[0]
+    _raise_if_compaction_stopped()
     written = sum(1 for t in texts if t)
+    if workspace is not None and written != len(outline):
+        raise RuntimeError("agentic synthesis has incomplete sections; completed sections retained")
     if written < max(3, (len(outline) + 1) // 2):
         plog.write("warn", f"synthesize/multipart: only {written}/{len(outline)} sections produced text; falling back to single-call synthesis")
         _flag_research_degradation(f"multipart synthesis: only {written}/{len(outline)} sections written; fell back to single-call synthesis")
@@ -7315,12 +7392,20 @@ def load_manifest_actor_dossier(
             scorecard = json.loads(judge_bytes.decode("utf-8"))
         except (UnicodeDecodeError, ValueError, TypeError) as exc:
             raise ValueError("actor dossier judge is invalid JSON") from exc
-        if not _dossier_judge_input_matches(scorecard, dossier):
+        advisory = (
+            os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic"
+            and descriptor.get("judge_policy") == "mechanical-with-advisory/v1"
+        )
+        if advisory:
+            if (not isinstance(scorecard, dict) or not isinstance(scorecard.get("_judge_input"), dict)
+                    or scorecard["_judge_input"].get("source_sha256") != hashlib.sha256(dossier.encode()).hexdigest()):
+                raise ValueError("shared actor advisory identity mismatch")
+        elif not _dossier_judge_input_matches(scorecard, dossier):
             raise ValueError(
                 "shared actor dossier judge is stale, truncated, or not bound "
                 "to the exact model input"
             )
-        if not dossier_passes(scorecard):
+        if not advisory and not dossier_passes(scorecard):
             raise ValueError("shared actor dossier has an explicit final judge FAIL")
 
     lane_sources = _read_manifest_lane_sources(
@@ -7745,13 +7830,16 @@ def seed_manifest_sources(sources: list[dict]) -> int:
         ):
             if source.get(key) not in (None, ""):
                 seeded_row[key] = source[key]
+        content = source.get("content")
+        if isinstance(content, str) and hashlib.sha256(content.encode("utf-8")).hexdigest() == source.get("content_sha256"):
+            seeded_row["content"] = content
         seeded.append(seeded_row)
     with _FETCHED_LOCK:
         _FETCHED_SOURCES[:] = seeded
     return len(seeded)
 
 
-def export_fetched_sources_for_manifest() -> list[dict]:
+def export_fetched_sources_for_manifest(*, include_content: bool = True) -> list[dict]:
     """Persist real fetched evidence, including excerpts needed for routing."""
     _merge_shared_fetched_sources()
     exported: list[dict] = []
@@ -7780,7 +7868,13 @@ def export_fetched_sources_for_manifest() -> list[dict]:
         ):
             if source.get(key) not in (None, ""):
                 exported_row[key] = source[key]
+        content = source.get("content")
+        if include_content and isinstance(content, str) and hashlib.sha256(content.encode("utf-8")).hexdigest() == source.get("content_sha256"):
+            exported_row["content"] = content
         exported.append(exported_row)
+    if include_content and os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        from research_archive import attach_source_content
+        exported = attach_source_content(exported)
     return exported
 
 
@@ -7883,6 +7977,8 @@ def synthesize_from_evidence_parts(
             # masquerade as a judged report after an over-budget write.
             raise
         except Exception as e:  # noqa: BLE001 — fail closed for deep below
+            if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+                raise
             plog.write(
                 "warn",
                 "synthesize/multipart: crashed "
@@ -9892,7 +9988,20 @@ class _ResearchStreamUsage:
         self.ended = True  # The final aggregate is a reconciliation, never new usage.
 
 
-def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str) -> str:
+def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str, *, event_observer=None, strict: bool = False) -> str:
+    if (os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic"
+            and event_observer is None and label.startswith("actor-")):
+        import agentic_bridge
+        return agentic_bridge.run_auxiliary_turn(
+            sys.modules.get(__name__) or __import__("types").SimpleNamespace(**globals()),
+            client, message, thread_id, recursion_limit, plog, label)
+    from research_invocation import producer_scope
+    with producer_scope():
+        return _run_streamed_turn_impl(client, message, thread_id, recursion_limit, plog, label,
+                                       event_observer=event_observer, strict=strict)
+
+
+def _run_streamed_turn_impl(client, message: str, thread_id: str, recursion_limit: int, plog: ProgressLog, label: str, *, event_observer=None, strict: bool = False) -> str:
     """Run one agent turn, logging tool activity, returning the final AI text.
 
     Mirrors ``DeerFlowClient.chat`` (accumulate AI text deltas per id, return the
@@ -9929,6 +10038,13 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
                     recursion_limit=_next_limit):
                 etype = event.type
                 data = event.data or {}
+                if event_observer is not None:
+                    try:
+                        event_observer(etype, data)
+                    except Exception as observer_error:
+                        stop = ResearchCompactionError("archive_write_failed", thread_id)
+                        _stop_after_compaction_failure(stop)
+                        raise stop from observer_error
                 if etype == "usage":
                     _stream_usage.observe(data)
                     continue
@@ -10030,6 +10146,10 @@ def run_streamed_turn(client, message: str, thread_id: str, recursion_limit: int
         raise
     except Exception as exc:  # noqa: BLE001 — salvage partial output; never discard accumulated report text
         _raise_if_compaction_stopped()
+        if strict:
+            if _v2:
+                _merge_pending_fetches(_pending_fetches)
+            raise
         # LangGraph raises GraphRecursionError when the step budget (recursion_limit)
         # is exhausted; other transient errors can also break the stream mid-turn.
         # Whatever text was accumulated so far is still useful, so we fall through to
@@ -10915,9 +11035,18 @@ def audit_global_actor_report_coverage(
     errors = list(projection_errors)
     actors: list[dict[str, Any]] = []
     raw_report = str(report or "")
-    source_index = build_citation_index(
-        admitted_sources or [], _citation_index_cap()
-    )
+    # This is the admitted ordered sources.json projection, not transient
+    # collector rows. Preserve every position (including non-fetched rows) so
+    # [S<n>] cannot silently shift when a source is excluded from actor support.
+    source_index = [
+        {"n": index, "url": _source_identity_url(source.get("url"))}
+        for index, source in enumerate(admitted_sources or [], start=1)
+        if isinstance(source, dict)
+        and _is_valid_http_url(_source_identity_url(source.get("url")))
+        and not _source_domain_denied(source.get("url"))
+        and source.get("source_origin", "fetched") == "fetched"
+        and source.get("ok", source.get("reachable", True)) is True
+    ]
     citation_source_ids = {
         int(entry["n"]): stable_source_id(entry.get("url"))
         for entry in source_index
@@ -12063,6 +12192,13 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
     非空时进入续跑模式——已在该集合里的 pass 跳过（其笔记已在复用线程的 checkpointer 里），
     只补跑未完成 pass，覆盖门 + 合成照常重跑。两者均缺省时逐字节不改今日行为。
     """
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        import agentic_bridge
+        from types import SimpleNamespace
+        return agentic_bridge.run_stage(
+            sys.modules.get(__name__) or SimpleNamespace(**globals()), client, question, depth, target_language,
+            model_name, thread_id, plog, out_dir=out_dir,
+        )
     preset = DEPTH_PRESETS[depth]
     # ITEM-3：续跑集合 + 断点记录器。resume_completed 空 → resume=False（should_run_pass 恒
     # True，逐字节不改行为）；out_dir 空或 RESEARCH_CHECKPOINT=false → ckpt 记录为 no-op。
@@ -13915,6 +14051,9 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
     else:
         research_limit = int(preset["recursion_limit"])
 
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        research_limit = min(research_limit, 2 * int(os.environ.get("RESEARCH_AGENTIC_TASK_STEPS", "12")) + 8)
+
     plog.write("stage", "actor-ontology (Track B): starting actor/ontology research turn")
     research_text = run_streamed_turn(
         client,
@@ -13962,20 +14101,25 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
             thread = client.get_thread(thread_id)
         except Exception as e:  # noqa: BLE001 — 线程读不到则退回研究回合文本
             plog.write("warn", f"actor-ontology synthesize: could not load thread ({type(e).__name__}: {e})")
-            return research_text
+            if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+                return research_text
+            thread = {}
         messages: list = []
         for cp in reversed(thread.get("checkpoints") or []):
             vals = cp.get("values") or {}
             if vals.get("messages"):
                 messages = vals["messages"]
                 break
-        if not messages:
+        if not messages and os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
             plog.write("warn", "actor-ontology synthesize: no messages in thread; using research-turn text")
             return research_text
         # Share the validated projection, without importing global Track-A
         # worker-note fallback into this actor thread.
         parts, _ = collect_synthesis_message_parts(
             messages, required_thread_id=thread_id)
+        if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+            from agentic_bridge import actor_evidence
+            parts = list(dict.fromkeys([*actor_evidence(thread_id), *parts]))
         result_receipts = _track_b_search_result_receipts(thread_id)
         if result_receipts:
             parts.append(
@@ -14082,6 +14226,21 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
     if not dossier.strip():
         plog.write("warn", "actor-ontology: empty dossier after synthesis; skipping judge loop (single-track degrade)")
         return ""
+
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        # One advisory critique never starts a whole-dossier rewrite loop.
+        _raise_if_compaction_stopped()
+        coverage = _live_actor_dossier_coverage_audit(dossier)
+        scorecard = judge_dossier(dossier, question, target_language, model_name, plog) if _env_flag("ACTOR_DOSSIER_JUDGE", True) else None
+        _raise_if_compaction_stopped()
+        if scorecard is None:
+            scorecard = {"status": "unavailable", "_judge_input": _dossier_judge_input(dossier)[1]}
+        if out_dir is not None:
+            _atomic_write_text(Path(out_dir) / "actor_dossier_judge.json", json.dumps(scorecard, ensure_ascii=False, indent=2))
+            _atomic_write_text(Path(out_dir) / "actor_dossier_coverage.json", json.dumps(coverage, ensure_ascii=False, indent=2))
+        if not coverage.get("accountable"):
+            raise RuntimeError("actor dossier deterministic source-bound coverage failed")
+        return dossier
 
     # NEXTSTEPS P3-1: AI-judge → 定向 refine 环（默认开，预算有界）。判不合格则按 gap 清单做一次
     # 定向研究回合再重合成，最多 ACTOR_DOSSIER_JUDGE_MAX_ROUNDS 轮。任何失败都回退当前稿（degrade）。
@@ -14208,6 +14367,9 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
         return ""
     if (not dossier_passes(scorecard)
             or not _dossier_judge_input_matches(scorecard, dossier)):
+        if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+            plog.write("warn", "actor-ontology: LLM critique is advisory; deterministic source-bound coverage passed")
+            return dossier
         # An enabled judge is a fail-closed publication boundary: transport or
         # parse failure, malformed/non-finite dimensions, stale bytes, a
         # truncated input, and explicit FAIL all prevent this dossier from
@@ -15964,6 +16126,26 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
 
 
 def main() -> int:
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+        return _main_impl()
+    # Acquire before any output/checkpoint mutation. The scheduler and synthesis
+    # own narrower phase leases; this additional owner includes the actor lane.
+    owner_parser = argparse.ArgumentParser(add_help=False)
+    owner_parser.add_argument("--out-dir")
+    owner_args, _ = owner_parser.parse_known_args()
+    if not owner_args.out_dir:
+        return _main_impl()
+    from research_invocation import invocation_scope
+    root = Path(os.environ.get("RESEARCH_AGENTIC_CACHE_DIR") or Path(owner_args.out_dir) / "agentic")
+    try:
+        with invocation_scope(root):
+            return _main_impl()
+    except ResearchCompactionError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 4
+
+
+def _main_impl() -> int:
     _reset_compaction_stop()
     os.environ["RESEARCH_COMPACTION_RUN_SCOPED"] = "true"
     parser = argparse.ArgumentParser(description="DeerFlow deep-research bridge for MiroFish.")
@@ -15995,6 +16177,7 @@ def main() -> int:
               "merged source ledger. Produces one global dossier/extraction run."),
     )
     args = parser.parse_args()
+    agentic_enabled = os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic"
     if args.evidence_only and args.synthesis_manifest:
         parser.error("--evidence-only and --synthesis-manifest are mutually exclusive")
     os.environ["RESEARCH_EVIDENCE_ONLY"] = (
@@ -16114,7 +16297,7 @@ def main() -> int:
     # AGENTIC-SEARCH: 依 --subagents 打开研究提示词里的「主动委派 scoped-researcher」指令块。
     # 必须在 _reset_fetched_sources()（其把该标志复位 False）之后设置。仅当同时开启 --subagents
     # 与 RESEARCH_AGENTIC_SEARCH（默认 true，在 _agentic_delegation_block 内二次门控）才注入指令。
-    _set_agentic_delegation(bool(getattr(args, "subagents", False)))
+    _set_agentic_delegation(bool(getattr(args, "subagents", False)) and not agentic_enabled)
     thread_id = args.thread_id or f"research-{uuid.uuid4().hex[:12]}"
     # ITEM-3 续跑：--resume 且 checkpoint 存在、question_hash 匹配、depth 一致 → 复用记录的
     # thread_id（LangGraph checkpointer 仍持有该线程全部笔记），把已完成 pass 传给研究阶段跳过。
@@ -16313,6 +16496,20 @@ def main() -> int:
             import linear_research
             return linear_research.run(question, out_dir, args, meta, plog, write_meta)
 
+        if agentic_enabled:
+            import agentic_bridge
+            agentic_workspace, agentic_policy = agentic_bridge.prepare(
+                out_dir, question, args.depth, args.model, args.target_language,
+                mode="synthesis" if args.synthesis_manifest else "evidence", owner_id=thread_id)
+            meta["research_engine"] = agentic_bridge.ENGINE
+            meta["quality_policy"] = agentic_bridge.QUALITY_POLICY
+            meta["agentic_context_policy"] = agentic_policy.to_dict()
+            os.environ["RESEARCH_GLOBAL_SUBAGENT_CAP"] = "5"
+            os.environ["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = "5"
+            os.environ["RESEARCH_SYNTHESIS_WORKERS"] = "5"
+            os.environ.setdefault("RESEARCH_BUDGET_DB", str(out_dir / "research_budget.sqlite3"))
+            write_meta()
+
         plog.write("init", f"importing DeerFlow client (model={args.model})")
         from deerflow.client import DeerFlowClient
 
@@ -16320,7 +16517,7 @@ def main() -> int:
             config_path=args.config,
             model_name=args.model,
             thinking_enabled=True,
-            subagent_enabled=args.subagents,
+            subagent_enabled=args.subagents and not agentic_enabled,
             # LOOP-009: do not advertise the entire DeerFlow public-skill
             # catalog to a forecast worker.  Slash activation below loads the
             # exact workflow skill body; this whitelist keeps metadata/tool
@@ -16332,6 +16529,8 @@ def main() -> int:
                 "forecast-visuals",
             },
         )
+        if agentic_enabled:
+            agentic_bridge.configure_client(client, agentic_policy)
         plog.write("init", "client ready; available skills will load on demand (deep-research)")
 
         # The checkpoint sidecar is only a skip plan; it is not proof that the
@@ -16339,7 +16538,7 @@ def main() -> int:
         # passes only when either the live checkpointer can reconstruct evidence
         # or a same-question durable evidence pack exists.  Otherwise replay the
         # passes on a fresh thread instead of exporting an empty 100-byte pack.
-        if resume_info.get("resumed") and not resume_evidence_pack:
+        if resume_info.get("resumed") and not resume_evidence_pack and not agentic_enabled:
             checkpoint_parts, _checkpoint_ai = collect_thread_evidence_parts(
                 client, thread_id, plog)
             if checkpoint_parts:
@@ -16443,16 +16642,14 @@ def main() -> int:
             )
             meta["actor_dossier_coverage"] = dossier_coverage
             global_actor_coverage = dossier_coverage
-            report, scorecard = _finalize_and_judge_report(
-                report,
-                question,
-                args.target_language,
-                args.depth,
-                args.model,
-                plog,
-                context="global pre-judge",
-                actor_coverage=dossier_coverage,
-            )
+            if agentic_enabled:
+                scorecard = None
+            else:
+                report, scorecard = _finalize_and_judge_report(
+                    report, question, args.target_language, args.depth,
+                    args.model, plog, context="global pre-judge",
+                    actor_coverage=dossier_coverage,
+                )
             refined = False
             if (_validated_report_scores(scorecard) is not None
                     and not report_passes(scorecard)
@@ -16555,16 +16752,21 @@ def main() -> int:
                 )
 
             def _run_track_b():
-                return run_actor_ontology_stage(
-                    client,
-                    question,
-                    args.depth,
-                    args.target_language,
-                    args.model,
-                    actor_thread_id,
-                    plog,
-                    out_dir,
-                )
+                from contextlib import nullcontext
+                lease = _research_budget.subagent_call_lease() if agentic_enabled else nullcontext()
+                from research_invocation import producer_scope
+                with producer_scope(), lease:
+                    if agentic_enabled:
+                        from types import SimpleNamespace
+                        return agentic_bridge.run_actor_stage(
+                            sys.modules.get(__name__) or SimpleNamespace(**globals()),
+                            client, question, args.depth, args.target_language,
+                            args.model, actor_thread_id, plog, out_dir,
+                        )
+                    return run_actor_ontology_stage(
+                        client, question, args.depth, args.target_language,
+                        args.model, actor_thread_id, plog, out_dir,
+                    )
 
             if dual_workers >= 2:
                 plog.write(
@@ -16589,9 +16791,10 @@ def main() -> int:
                 _ex = _cf.ThreadPoolExecutor(max_workers=dual_workers)
                 track_futures = {}
                 try:
-                    _fut_a = _ex.submit(_run_track_a)
+                    from research_invocation import submit_producer
+                    _fut_a = submit_producer(_ex, _run_track_a)
                     track_futures[_fut_a] = thread_id
-                    _fut_b = _ex.submit(_run_track_b)
+                    _fut_b = submit_producer(_ex, _run_track_b)
                     track_futures[_fut_b] = actor_thread_id
                     report = _fut_a.result(
                         timeout=_dual_wall("RESEARCH_TRACK_A_WALL_SECONDS", 10800))
@@ -16806,6 +17009,9 @@ def main() -> int:
                 if judge_path.is_file():
                     meta["actor_dossier_judge_sha256"] = hashlib.sha256(
                         judge_path.read_bytes()).hexdigest()
+            if agentic_enabled:
+                from research_admission import snapshot as admission_snapshot
+                meta["agentic_model_usage"] = admission_snapshot(agentic_workspace)
             meta.update(
                 status="completed",
                 actor_dossier_required=actor_track_required,
@@ -16841,7 +17047,7 @@ def main() -> int:
         _stripped = report.strip()
         _is_content_block = bool(_stripped) and any(s in report for s in ("new_sensitive", "unprocessable_entity"))
         # SCALE-2: 触发线按深度取值 —— deep 15000 / 其余 4000（见 _synthesis_trigger_chars）。
-        if (not args.synthesis_manifest
+        if (not agentic_enabled and not args.synthesis_manifest
                 and len(_stripped) < _synthesis_trigger_chars(args.depth)
                 and not _is_content_block):
             plog.write("warn", f"research turn returned only {len(_stripped)} chars (budget exhausted or a provider error on the final write); synthesizing tool-free from gathered research")
@@ -16888,7 +17094,12 @@ def main() -> int:
             report = finalize_report_citations(report, plog)
         except Exception as _cit_err:  # noqa: BLE001 — 引注校验为可选增强
             plog.write("warn", f"citation finalize skipped (non-fatal): {_cit_err}")
-        judge_required = bool(
+        if agentic_enabled:
+            agentic_sources = export_fetched_sources_for_manifest()
+            report, agentic_advisory = agentic_bridge.review_and_repair(
+                sys.modules.get(__name__) or __import__("types").SimpleNamespace(**globals()),
+                agentic_workspace, report, agentic_sources, meta, args.model, plog)
+        judge_required = not agentic_enabled and bool(
             args.synthesis_manifest
             or (args.depth == "deep" and _env_flag("RESEARCH_REPORT_JUDGE", True))
         )
@@ -17285,7 +17496,7 @@ def main() -> int:
         # degrade-safe：无标记声明 / 任何失败 → 保留已落盘报告，绝不影响已产出的研究契约。
         try:
             _flagged = meta.get("single_origin_loadbearing")
-            if (not args.synthesis_manifest and args.depth == "deep"
+            if (not agentic_enabled and not args.synthesis_manifest and args.depth == "deep"
                     and _flagged
                     and _env_flag("RESEARCH_TRIANGULATION_TOPUP", True)):
                 _new_report = run_triangulation_topup(
@@ -17379,6 +17590,12 @@ def main() -> int:
         final_report_path = out_dir / REPORT_FILENAME
         if final_report_path.is_file():
             report = final_report_path.read_text(encoding="utf-8")
+        if agentic_enabled:
+            source_path = out_dir / SOURCES_FILENAME
+            current_sources = json.loads(source_path.read_text(encoding="utf-8")) if source_path.is_file() else []
+            persist_evidence_sources(out_dir, agentic_bridge.align_source_order(
+                sys.modules.get(__name__) or __import__("types").SimpleNamespace(**globals()),
+                agentic_sources, current_sources))
         if not args.no_actors:
             persist_final_actor_intelligence_contract(
                 out_dir,
@@ -17391,6 +17608,16 @@ def main() -> int:
                 expected_unsealed_actors_sha256=actor_extraction_sha256,
             )
 
+        if agentic_enabled:
+            # All sanctioned citation/chart/actor postprocessing has finished.
+            # Bind mechanical checks to these exact final bytes and sources.
+            sources = json.loads((out_dir / SOURCES_FILENAME).read_text(encoding="utf-8"))
+            from research_admission import snapshot as admission_snapshot
+            meta["agentic_model_usage"] = admission_snapshot(agentic_workspace)
+            agentic_bridge.persist_quality(
+                sys.modules.get(__name__) or __import__("types").SimpleNamespace(**globals()),
+                out_dir, report, sources, meta, advisory=agentic_advisory,
+            )
         meta.update(status="completed", finished_at=_utcnow())
         write_meta()
         # Provider/subagent lease telemetry is intentionally coalesced off the
