@@ -697,6 +697,23 @@ def _synthesis_context_cap(
     ``extra_prompt_chars`` charges lazily loaded prompt references against the
     input envelope instead of letting them consume the output reserve.
     """
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        from research_archive import current_workspace
+        from research_context import ContextPolicy
+        workspace = current_workspace()
+        if workspace is not None and "execution_policy" in workspace.identity:
+            policy = ContextPolicy.from_workspace(workspace)
+            from agentic_bridge import model_envelope
+            envelope = model_envelope(model_name)
+            window = min(policy.context_window_tokens, envelope["context_window_tokens"])
+            reserve = min(policy.reserved_output_tokens, envelope["max_output_tokens"], window // 4)
+            overhead = min(policy.prompt_overhead_tokens, window // 8)
+            safety = min(policy.safety_margin_tokens, window // 16)
+            available = window - reserve - overhead - safety
+            width = max((len(char.encode("utf-8")) for char in str(context_text or "")), default=1)
+            cap = max(1, available // width - max(0, int(extra_prompt_chars)))
+            explicit = _agentic_execution_setting("SYNTHESIS_MAX_CONTEXT_CHARS", 0)
+            return min(cap, max(1, explicit - max(0, int(extra_prompt_chars)))) if explicit else cap
     try:
         override = int(os.environ.get("SYNTHESIS_MAX_CONTEXT_CHARS", "0") or "0")
     except ValueError:
@@ -788,21 +805,20 @@ def _synthesis_section_context_cap(section_count: int, model_cap: int) -> int:
     try:
         per_section = max(
             8000,
-            int(os.environ.get(
-                "SYNTHESIS_SECTION_CONTEXT_CHARS", "60000") or "60000"),
+            _pinned_synthesis_setting("SYNTHESIS_SECTION_CONTEXT_CHARS", 60000),
         )
     except ValueError:
         per_section = 60000
     try:
         aggregate = max(
             20000,
-            int(os.environ.get(
-                "SYNTHESIS_TOTAL_ROUTED_CONTEXT_CHARS", "600000") or "600000"),
+            _pinned_synthesis_setting("SYNTHESIS_TOTAL_ROUTED_CONTEXT_CHARS", 600000),
         )
     except ValueError:
         aggregate = 600000
     count = max(1, int(section_count or 1))
-    return max(8000, min(per_section, aggregate // count, max(8000, model_cap)))
+    floor = 1 if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic" else 8000
+    return max(floor, min(per_section, aggregate // count, max(floor, model_cap)))
 
 
 def _synthesis_section_max_blocks() -> int:
@@ -5325,7 +5341,10 @@ def _synthesis_execution_output_token_limit(depth: str) -> int:
     maximum_words = _synthesis_max_words(depth)
     if maximum_words <= 0:
         maximum_words = max(8000, _synthesis_min_words(depth))
-    return max(8000, int(round(maximum_words * 1.6)))
+    prose_allowance = max(8000, int(round(maximum_words * 1.6)))
+    # GLM-5.3 cannot disable reasoning. Reserve bounded thought headroom for
+    # the outline, up to 24 initial sections/retries, expansions and summary.
+    return prose_allowance + 56 * _agentic_execution_setting("REASONING_RESERVE_TOKENS", 0)
 
 
 def rebalance_synthesis_outline(
@@ -6344,6 +6363,73 @@ def _model_failover_cooldown_seconds() -> float:
         return 900.0
 
 
+def _pinned_synthesis_setting(name, default):
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
+        from research_archive import current_workspace
+        workspace = current_workspace()
+        if workspace is not None and "execution_policy" in workspace.identity:
+            return _agentic_execution_setting(name, default)
+    return int(os.environ.get(name, str(default)) or str(default))
+
+
+def _agentic_execution_setting(name, default):
+    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+        return default
+    from agentic_bridge import execution_setting
+    return execution_setting(name, default)
+
+
+def _effective_model_output_tokens(model_name, requested):
+    if requested is None:
+        return None
+    from research_archive import current_workspace
+    from research_profiles import is_glm53, GLM_MAX_OUTPUT
+    workspace = current_workspace()
+    identity = workspace.identity if workspace is not None else {}
+    if workspace is not None:
+        from agentic_bridge import model_envelope
+        envelope = model_envelope(model_name)
+        if is_glm53(model_name, envelope["model_id"]):
+            return min(GLM_MAX_OUTPUT, envelope["max_output_tokens"],
+                       max(256, int(requested)) + _agentic_execution_setting("REASONING_RESERVE_TOKENS", 0))
+    return max(256, int(requested))
+
+
+def _critic_model_provenance(requested, served, response, model=None):
+    """Producer-owned model identity; never infer served identity from prose."""
+    metadata = getattr(response, "response_metadata", None)
+    reported = metadata.get("model_name", metadata.get("model")) if isinstance(metadata, dict) else None
+    configured = getattr(model, "model_name", None) if model is not None else None
+    if configured is None:
+        from research_archive import current_workspace
+        workspace = current_workspace()
+        if workspace is not None:
+            identity = workspace.identity
+            configured = (identity.get("model_profiles", {}).get(served, {}).get("model_id")
+                          or (identity.get("model_id") if served == identity.get("model") else None))
+    return {"requested_model_alias": str(requested), "served_model_alias": str(served),
+            "configured_model_id": configured if isinstance(configured, str) else None,
+            "provider_response_model": reported if isinstance(reported, str) else None}
+
+
+def _check_model_context(model_name, messages, requested_output=None, *, physical_output=False):
+    from research_archive import current_workspace
+    workspace = current_workspace()
+    if workspace is None:
+        return
+    from agentic_bridge import model_envelope
+    from research_admission import _estimate
+    from research_context import ContextPolicy
+    envelope = model_envelope(model_name)
+    output = requested_output if physical_output else _effective_model_output_tokens(model_name, requested_output)
+    output = envelope["max_output_tokens"] if output is None else output
+    _, estimate = _estimate(messages, None)
+    safety = min(ContextPolicy.from_workspace(workspace).safety_margin_tokens,
+                 envelope["context_window_tokens"] // 16)
+    if output > envelope["max_output_tokens"] or estimate + output + safety > envelope["context_window_tokens"]:
+        raise ValueError("selected model context/output capacity is insufficient; evidence retained")
+
+
 def _build_tool_free_model(model_name: str, max_output_tokens: int | None):
     from deerflow.models import create_chat_model
 
@@ -6351,7 +6437,7 @@ def _build_tool_free_model(model_name: str, max_output_tokens: int | None):
     if max_output_tokens is not None:
         # Model profiles intentionally expose large general-purpose allowances.
         # Outline/section/judge calls need a local completion budget instead.
-        model = model.bind(max_tokens=max(256, int(max_output_tokens)))
+        model = model.bind(max_tokens=_effective_model_output_tokens(model_name, max_output_tokens))
     return model
 
 
@@ -6376,6 +6462,7 @@ def _invoke_tool_free_model(
     primary_error: BaseException | None = None
     if not primary_circuit_open:
         try:
+            _check_model_context(model_name, messages, max_output_tokens)
             return (
                 _invoke_model(
                     _build_tool_free_model(model_name, max_output_tokens),
@@ -6404,6 +6491,7 @@ def _invoke_tool_free_model(
         )
 
     try:
+        _check_model_context(fallback, messages, max_output_tokens)
         response = _invoke_model(
             _build_tool_free_model(fallback, max_output_tokens), messages)
     except Exception as fallback_error:  # noqa: BLE001 — preserve both causes
@@ -6451,7 +6539,7 @@ def _bare_synth_invoke(
     usage_label = label if served_model == synth_model else f"{label}:{served_model}"
     _log_model_response_usage(plog, usage_label, resp)
     if fail_on_truncation and _model_output_was_truncated(
-            resp, max_output_tokens):
+            resp, _effective_model_output_tokens(served_model, max_output_tokens)):
         reason = _model_finish_reason(resp) or "output-token saturation"
         if plog is not None:
             plog.write(
@@ -6499,17 +6587,25 @@ def _synthesize_multipart_impl(question: str, target_language: str | None, depth
     execution_budget = SynthesisExecutionBudget(
         _synthesis_execution_output_token_limit(depth))
 
-    phase_deadline = time.monotonic() + float(os.environ.get("RESEARCH_AGENTIC_PHASE_DEADLINE_S", "2700"))
+    phase_deadline = time.monotonic() + _agentic_execution_setting("PHASE_DEADLINE_S", 2700)
+    owned_frame = None
+    needs_frame = workspace is not None and "execution_policy" in workspace.identity
+    if needs_frame and not os.environ.get("RESEARCH_SYNTHESIS_EXECUTION_MAX_OUTPUT_TOKENS", "").strip():
+        execution_budget.limit += 3600  # One bounded scenario plan and one format repair.
 
     def _budgeted_invoke(
             prompt: str, label: str, max_output_tokens: int,
             fail_on_truncation: bool = False) -> str:
-        execution_budget.reserve(label, max_output_tokens)
-
+        if owned_frame is not None:
+            from research_scenarios import prompt_instruction
+            prompt = Stage1ModelPrompt(str(prompt) + "\n\n" + prompt_instruction(owned_frame),
+                                      label=getattr(prompt, "evidence_label", "research evidence"),
+                                      evidence=getattr(prompt, "evidence", ""))
         def call():
+            execution_budget.reserve(label, _effective_model_output_tokens(synth_model, max_output_tokens))
             if workspace is None:
                 return _bare_synth_invoke(synth_model, prompt, plog, label, max_output_tokens, fail_on_truncation)
-            remaining = min(float(os.environ.get("RESEARCH_AGENTIC_CALL_TIMEOUT_S", "600")),
+            remaining = min(float(_agentic_execution_setting("CALL_TIMEOUT_S", 600)),
                             phase_deadline - time.monotonic())
             if remaining <= 0:
                 stop = ResearchCompactionError("checkpoint_unavailable", label)
@@ -6555,8 +6651,7 @@ def _synthesize_multipart_impl(question: str, target_language: str | None, depth
     try:
         outline_context_cap = max(
             20000,
-            int(os.environ.get(
-                "SYNTHESIS_OUTLINE_CONTEXT_CHARS", "120000") or "120000"),
+            _pinned_synthesis_setting("SYNTHESIS_OUTLINE_CONTEXT_CHARS", 120000),
         )
     except ValueError:
         outline_context_cap = 120000
@@ -6573,6 +6668,29 @@ def _synthesize_multipart_impl(question: str, target_language: str | None, depth
         "synthesis-outline",
         2500,
     )
+    if needs_frame:
+        from research_scenarios import parse_frame
+        instruction = (
+            "Propose the single canonical forecast scenario frame shared by all report sections. "
+            "These probabilities are modeling assumptions, not measured source facts. Use the question's horizon. "
+            "Return only JSON with schema='research-scenario-frame/v1', horizon (nonempty string), and "
+            "scenarios: exactly four objects with id SC1,SC2,SC3,SC4, descriptive name, and numeric "
+            "probability in percent. Probabilities must sum to 100. No extra fields. "
+            "Every writer will preserve these IDs and weights. Question: " + question
+        )
+        frame_raw = _budgeted_invoke(Stage1ModelPrompt(instruction, label="scenario frame evidence",
+                                                      evidence=outline_context), "synthesis-scenario-frame", 1800)
+        try:
+            owned_frame = parse_frame(frame_raw)
+        except ValueError:
+            frame_raw = _budgeted_invoke(Stage1ModelPrompt(instruction + " Repair the invalid JSON/schema; do not add prose.",
+                label="scenario frame evidence", evidence=outline_context + "\nRejected proposal:\n" + frame_raw[:12000]),
+                "synthesis-scenario-frame-repair", 1800)
+            owned_frame = parse_frame(frame_raw)
+        frame_ref = workspace.put_artifact(json.dumps(owned_frame, ensure_ascii=False, sort_keys=True), "scenario_frame")
+        prior_frames = workspace.events("synthesis-scenario-frame")
+        if not prior_frames or prior_frames[-1]["payload"].get("ref") != frame_ref:
+            workspace.append_event("synthesis-scenario-frame", "canonical_frame", {"ref": frame_ref})
     outline = parse_synthesis_outline(outline_raw)
     if not outline:
         outline = default_synthesis_outline(question, target_language)
@@ -6633,7 +6751,7 @@ def _synthesize_multipart_impl(question: str, target_language: str | None, depth
         extra_prompt_chars=len(_final_dossier_contract_block()),
     )
     section_cap = _synthesis_section_context_cap(
-        len(outline), max(8000, cap - len(notes_digest) - 12000))
+        len(outline), max(1 if workspace is not None else 8000, cap - len(notes_digest) - 12000))
     workers = min(_synthesis_workers(), len(outline))
     texts: list[str] = [""] * len(outline)
     section_output_budgets = allocate_synthesis_section_output_tokens(
@@ -8140,7 +8258,7 @@ def extract_structured_tool_free(report: str, target_language: str | None, model
         return StructuredExtractionText(
             text,
             finish_reason=finish_reason,
-            truncated=_model_output_was_truncated(resp, max_output_tokens),
+            truncated=_model_output_was_truncated(resp, _effective_model_output_tokens(served_model, max_output_tokens)),
         )
     except Exception as e:  # noqa: BLE001
         plog.write("warn", f"extract (tool-free) model call failed ({type(e).__name__}: {e})")
@@ -8258,7 +8376,7 @@ def extract_structured_recovery_tool_free(
         return StructuredExtractionText(
             text,
             finish_reason=finish_reason,
-            truncated=_model_output_was_truncated(resp, max_output_tokens),
+            truncated=_model_output_was_truncated(resp, _effective_model_output_tokens(served_model, max_output_tokens)),
         )
     except Exception as exc:  # noqa: BLE001 — caller decides final fallback policy
         plog.write(
@@ -11533,6 +11651,7 @@ def judge_research_report(report: str, question: str, target_language: str | Non
             # longer than the context-safe cap is not a fully judged report and
             # therefore cannot pass or replace an existing fully judged draft.
             sc["_judge_input"] = judge_input
+            sc["_judge_model"] = _critic_model_provenance(judge_model, served_model, resp)
             if actor_coverage is not None:
                 actor_audit = audit_global_actor_report_coverage(
                     report,
@@ -12179,7 +12298,7 @@ def _prompt_with_compact_prior_notes(prompt: str, reports: list[str]) -> str:
 
 
 @_compaction_boundary
-def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None, resume_evidence_pack: str = "") -> str:
+def run_research_stage(client, question: str, depth: str, target_language: str | None, model_name: str, thread_id: str, plog: ProgressLog, *, resume_completed=None, out_dir=None, resume_evidence_pack: str = "", stage_evidence_only: bool = False) -> str:
     """Run the research stage.
 
     Quick/standard remain one DeerFlow turn. Deep is intentionally multi-pass.
@@ -12197,7 +12316,7 @@ def run_research_stage(client, question: str, depth: str, target_language: str |
         from types import SimpleNamespace
         return agentic_bridge.run_stage(
             sys.modules.get(__name__) or SimpleNamespace(**globals()), client, question, depth, target_language,
-            model_name, thread_id, plog, out_dir=out_dir,
+            model_name, thread_id, plog, out_dir=out_dir, force_evidence=stage_evidence_only,
         )
     preset = DEPTH_PRESETS[depth]
     # ITEM-3：续跑集合 + 断点记录器。resume_completed 空 → resume=False（should_run_pass 恒
@@ -13994,6 +14113,7 @@ def judge_dossier(dossier: str, question: str, target_language: str | None,
         if isinstance(sc, dict):
             sc = dict(sc)
             sc["_judge_input"] = judge_input
+            sc["_judge_model"] = _critic_model_provenance(judge_model, judge_model, resp, model)
             # Compatibility breadcrumb; the complete structured attestation is
             # authoritative and is recomputed by manifest admission.
             sc["input_sha256"] = judge_input["input_sha256"]
@@ -14052,7 +14172,7 @@ def run_actor_ontology_stage(client, question: str, depth: str, target_language:
         research_limit = int(preset["recursion_limit"])
 
     if os.environ.get("RESEARCH_ENGINE", "").strip().lower() == "agentic":
-        research_limit = min(research_limit, 2 * int(os.environ.get("RESEARCH_AGENTIC_TASK_STEPS", "12")) + 8)
+        research_limit = min(research_limit, 2 * _agentic_execution_setting("TASK_STEPS", 12) + 8)
 
     plog.write("stage", "actor-ontology (Track B): starting actor/ontology research turn")
     research_text = run_streamed_turn(
@@ -16126,8 +16246,35 @@ def run_extract_only(question: str, out_dir: Path, args, meta: dict, plog: "Prog
 
 
 def main() -> int:
-    if os.environ.get("RESEARCH_ENGINE", "").strip().lower() != "agentic":
+    from research_profiles import select_engine
+    engine_parser = argparse.ArgumentParser(add_help=False)
+    engine_parser.add_argument("--engine", choices=("agentic", "hybrid", "linear"))
+    engine_parser.add_argument("--resume", action="store_true")
+    engine_parser.add_argument("--extract-only", action="store_true")
+    engine_parser.add_argument("--out-dir")
+    engine_args, _ = engine_parser.parse_known_args()
+    saved_engine = None
+    try:
+        if (engine_args.resume or engine_args.extract_only) and engine_args.out_dir:
+            meta_path = Path(engine_args.out_dir) / META_FILENAME
+            if meta_path.is_file():
+                saved_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                if not isinstance(saved_meta, dict):
+                    raise ValueError("invalid saved research metadata")
+                saved_engine = saved_meta.get("research_engine")
+                if saved_engine is not None and not isinstance(saved_engine, str):
+                    raise ValueError("invalid saved research engine")
+        os.environ["RESEARCH_ENGINE"] = select_engine(
+            engine_args.engine or os.environ.get("RESEARCH_ENGINE"),
+            resume=engine_args.resume or engine_args.extract_only, saved_engine=saved_engine)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 3
+    if os.environ["RESEARCH_ENGINE"] != "agentic":
         return _main_impl()
+    if engine_args.extract_only:
+        print("ERROR: agentic extract-only cannot preserve the sealed research contract; use --resume for validated recovery", file=sys.stderr)
+        return 3
     # Acquire before any output/checkpoint mutation. The scheduler and synthesis
     # own narrower phase leases; this additional owner includes the actor lane.
     owner_parser = argparse.ArgumentParser(add_help=False)
@@ -16149,6 +16296,7 @@ def _main_impl() -> int:
     _reset_compaction_stop()
     os.environ["RESEARCH_COMPACTION_RUN_SCOPED"] = "true"
     parser = argparse.ArgumentParser(description="DeerFlow deep-research bridge for MiroFish.")
+    parser.add_argument("--engine", choices=("agentic", "hybrid", "linear"), help="Research engine (new runs default to agentic; legacy resumes retain hybrid).")
     src = parser.add_mutually_exclusive_group(required=True)
     src.add_argument("--prompt", help="The research / prediction question (inline).")
     src.add_argument("--prompt-file", help="Path to a UTF-8 file containing the question.")
@@ -16496,20 +16644,6 @@ def _main_impl() -> int:
             import linear_research
             return linear_research.run(question, out_dir, args, meta, plog, write_meta)
 
-        if agentic_enabled:
-            import agentic_bridge
-            agentic_workspace, agentic_policy = agentic_bridge.prepare(
-                out_dir, question, args.depth, args.model, args.target_language,
-                mode="synthesis" if args.synthesis_manifest else "evidence", owner_id=thread_id)
-            meta["research_engine"] = agentic_bridge.ENGINE
-            meta["quality_policy"] = agentic_bridge.QUALITY_POLICY
-            meta["agentic_context_policy"] = agentic_policy.to_dict()
-            os.environ["RESEARCH_GLOBAL_SUBAGENT_CAP"] = "5"
-            os.environ["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = "5"
-            os.environ["RESEARCH_SYNTHESIS_WORKERS"] = "5"
-            os.environ.setdefault("RESEARCH_BUDGET_DB", str(out_dir / "research_budget.sqlite3"))
-            write_meta()
-
         plog.write("init", f"importing DeerFlow client (model={args.model})")
         from deerflow.client import DeerFlowClient
 
@@ -16529,6 +16663,32 @@ def _main_impl() -> int:
                 "forecast-visuals",
             },
         )
+        if agentic_enabled:
+            import agentic_bridge
+            app_config = getattr(client, "_app_config", None)
+            selected_config = app_config.get_model_config(args.model) if app_config is not None else None
+            resolved_model = getattr(selected_config, "model", None) if selected_config is not None else None
+            model_profiles = {
+                item.name: {"model_id": str(getattr(item, "model", item.name)),
+                            "context_window_tokens": int(getattr(item, "context_window_tokens", 0) or 128000),
+                            "max_output_tokens": int(getattr(item, "max_tokens", 0) or 16000)}
+                for item in getattr(app_config, "models", [])
+            } if app_config is not None else None
+            agentic_workspace, agentic_policy = agentic_bridge.prepare(
+                out_dir, question, args.depth, args.model, args.target_language,
+                mode="synthesis" if args.synthesis_manifest else "evidence", owner_id=thread_id,
+                model_id=resolved_model, model_profiles=model_profiles)
+            meta["research_engine"] = agentic_bridge.ENGINE
+            meta["quality_policy"] = agentic_bridge.QUALITY_POLICY
+            meta["agentic_context_policy"] = agentic_policy.to_dict()
+            meta["agentic_model_profile"] = agentic_workspace.identity.get("model_profile", "legacy-pinned")
+            meta["agentic_execution_policy"] = agentic_workspace.identity.get("execution_policy", {})
+            os.environ["RESEARCH_GLOBAL_SUBAGENT_CAP"] = str(min(5, max(1, int(os.environ.get("RESEARCH_GLOBAL_SUBAGENT_CAP", "5")))))
+            os.environ["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = str(min(5, max(1, int(os.environ.get("RESEARCH_MODEL_CONCURRENCY_GLOBAL", "5")))))
+            os.environ["RESEARCH_SYNTHESIS_WORKERS"] = "5"
+            os.environ.setdefault("RESEARCH_BUDGET_DB", str(out_dir / "research_budget.sqlite3"))
+            write_meta()
+
         if agentic_enabled:
             agentic_bridge.configure_client(client, agentic_policy)
         plog.write("init", "client ready; available skills will load on demand (deep-research)")
@@ -16749,6 +16909,7 @@ def _main_impl() -> int:
                     resume_completed=resume_completed,
                     out_dir=out_dir,
                     resume_evidence_pack=resume_evidence_pack,
+                    stage_evidence_only=agentic_enabled,
                 )
 
             def _run_track_b():
@@ -16899,9 +17060,24 @@ def _main_impl() -> int:
                 resume_completed=resume_completed,  # ITEM-3 续跑：跳过已完成 pass
                 out_dir=out_dir,                    # ITEM-3：每完成一 pass 落 checkpoint
                 resume_evidence_pack=resume_evidence_pack,
+                    stage_evidence_only=agentic_enabled,
             )
 
         _raise_if_compaction_stopped()
+        if (agentic_enabled and not args.evidence_only and not args.synthesis_manifest
+                and str(report).startswith("# Internal Evidence Lane Pack")):
+            # Standalone CLI follows the same evidence -> actor reception ->
+            # shared synthesis order as the parent, before any publication gate.
+            parts = parse_evidence_pack(report)
+            if dossier.strip() and not args.no_actors:
+                global_actor_coverage = _live_actor_dossier_coverage_audit(dossier)
+                if not global_actor_coverage.get("accountable"):
+                    raise RuntimeError("actor evidence is not accountable for global synthesis")
+                admitted = export_fetched_sources_for_manifest()
+                parts = [*actor_dossier_synthesis_blocks(dossier, admitted, admitted, global_actor_coverage), *parts]
+                meta["actor_dossier_coverage"] = global_actor_coverage
+            report = synthesize_from_evidence_parts(parts, parts, question, args.target_language,
+                                                     args.model, plog, args.depth)
         if args.evidence_only:
             evidence_pack = (
                 report if str(report or "").startswith(

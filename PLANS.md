@@ -1,3 +1,7 @@
+# Current priority: GLM-5.3 profile and agentic hardening — 2026-09-19
+
+The user explicitly requested updating budgets for GLM-5.3's 1M context, making agentic the default and orchestrating a subagent team for deeper review and improvements. This continues the approved research rearchitecture. Parent owns model-aware policy, default selection, native/parent integration and final acceptance. Disjoint workers own scheduler recovery, archive/store efficiency and recall, synthesis/publication, and native admission/compaction. Reproduce concrete defects before fixing; add capabilities only where the producer/consumer workflow benefits. Preserve five-call global concurrency, full evidence and legacy pinned resumes. Do not call paid providers, deploy, alter credentials or mutate saved runs. Validate GLM capability from official sources, pin effective policy for new workspaces, and preserve explicit overrides and smaller-model safety. The focused handoff records acceptance and evidence.
+
 # Current priority: durable agentic research — 2026-09-19
 
 The user explicitly authorized implementation now. Build five-worker adaptive research phases, durable discoveries and task evidence, bounded context management, and mechanical publication with advisory LLM critique. The concrete design and acceptance criteria are in [the feature handoff](docs/handoff/agentic-research-20260919/handoff.md). This prioritizes the already-approved research slices before RX-02; it does not authorize live provider execution, deployment, saved-run mutation or credential changes.

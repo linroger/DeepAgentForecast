@@ -220,20 +220,56 @@ class ContextPolicy:
             raise ValueError("paragraph_tokens must hold at least one UTF-8 code point")
 
     @classmethod
-    def from_env(cls) -> ContextPolicy:
+    def from_env(cls, model_name=None, *, model_id=None, context_limit=None) -> ContextPolicy:
         """Read strictly positive decimal RESEARCH_AGENTIC_* token settings.
 
         Oversized budgets fail instead of silently changing the requested policy.
         The declared model window is configuration, not model capability discovery.
         """
-        settings = {}
+        try:
+            from .research_profiles import context_defaults, is_glm53, GLM_CONTEXT
+        except ImportError:
+            from research_profiles import context_defaults, is_glm53, GLM_CONTEXT
+        settings = context_defaults(model_name, model_id)
+        if context_limit is not None:
+            _integer(context_limit, "configured context window")
+            capacity = min(GLM_CONTEXT, context_limit) if is_glm53(model_name, model_id) else context_limit
+            defaults = {field: getattr(cls(), field) for field in cls.ENV_FIELDS.values()}
+            settings = {**defaults, **settings, "context_window_tokens": capacity}
+            if sum(settings[key] for key in ("working_tokens", "reserved_output_tokens", "prompt_overhead_tokens", "safety_margin_tokens")) > capacity:
+                settings.update(working_tokens=max(1, capacity // 2),
+                                reserved_output_tokens=max(1, capacity // 8),
+                                prompt_overhead_tokens=max(1, capacity // 8),
+                                safety_margin_tokens=max(1, capacity // 16),
+                                retrieval_tokens=max(1, capacity // 16),
+                                paragraph_tokens=max(4, min(settings["paragraph_tokens"], capacity // 64)))
         for name, field in cls.ENV_FIELDS.items():
             value = os.environ.get(name)
             if value is not None:
                 if not re.fullmatch(r"[0-9]+", value) or int(value) <= 0:
                     raise ValueError(f"{name} must be a positive decimal integer")
                 settings[field] = int(value)
-        return cls(**settings)
+        policy = cls(**settings)
+        if context_limit is not None and policy.context_window_tokens > context_limit:
+            raise ValueError("declared context exceeds configured model capacity")
+        if is_glm53(model_name, model_id) and policy.context_window_tokens > GLM_CONTEXT:
+            raise ValueError("declared context exceeds GLM-5.3 capacity")
+        return policy
+
+    @classmethod
+    def from_workspace(cls, workspace) -> ContextPolicy:
+        """Use the immutable policy bound to the workspace, never ambient drift."""
+        identity = getattr(workspace, "identity", {})
+        saved = identity.get("context_policy")
+        if saved is None:
+            return cls.from_env(model_name=identity.get("model"), model_id=identity.get("model_id"))
+        fields = set(cls.ENV_FIELDS.values())
+        if type(saved) is not dict or set(saved) != fields | {"schema_version", "estimation_basis"}:
+            raise ValueError("invalid saved context policy")
+        policy = cls(**{field: saved[field] for field in fields})
+        if policy.to_dict() != saved:
+            raise ValueError("incompatible saved context policy")
+        return policy
 
     def to_dict(self) -> dict:
         """Stable JSON-safe policy identity for durable task-input bindings."""

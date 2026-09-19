@@ -1,0 +1,139 @@
+{
+  "schema": "glm-agentic-hardening-verification/v1",
+  "verified_at_utc": "2026-09-19T12:55:32.861546+00:00",
+  "status": "verified_offline",
+  "base_commit": "0dbeba768fd803de6bb63751c107a73e0cd3d2b8",
+  "branch": "codex/workflow-rearchitecture-2026-09-19",
+  "official_model_sources": [
+    "https://docs.z.ai/guides/llm/glm-5.3",
+    "https://www.alibabacloud.com/help/en/model-studio/glm-5-3"
+  ],
+  "backend": {
+    "phase": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03",
+    "receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03/command-completed.json",
+    "junit": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03/results.xml",
+    "passed": 5085,
+    "skipped": 12,
+    "expected_failures": 11,
+    "warnings": 21,
+    "seconds": 375.89256229200146,
+    "network_attempts": 0,
+    "guarded_processes": 216,
+    "source_drift": []
+  },
+  "native_sdk": {
+    "phase": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-sdk08",
+    "receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-sdk08/command-completed.json",
+    "junit": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-sdk08/results.xml",
+    "passed": 34,
+    "network_attempts": 0,
+    "source_drift": [],
+    "scope": "Real LangChain/OpenAI-compatible sync/async and streaming/nonstreaming serialization with offline transports; no live provider"
+  },
+  "native_client_tools": {
+    "output": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-native-config-integration02/output.txt",
+    "probe": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-native-config-integration02/probe.py",
+    "passed": true,
+    "scope": "Actual client/config/tool types; private GLM policy and searchable Unicode tail recall; no model construction or providers",
+    "known_warning": "Inherited LangChainPendingDeprecationWarning about allowed_objects"
+  },
+  "lint": {
+    "passed": true,
+    "python_files": 30,
+    "config": "backend/pyproject.toml",
+    "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-ruff-clean.txt"
+  },
+  "syntax": {
+    "python_ast": "passed",
+    "bash_n_setup": "passed",
+    "git_diff_check": "passed"
+  },
+  "reviews": [
+    {
+      "area": "scheduler/admission/discovery and legacy task compatibility",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scheduler-final-10/results.xml",
+      "status": "closed"
+    },
+    {
+      "area": "archive/index/eligibility/cold migration",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-archive-rereview-eligibility-suite-07/results.xml",
+      "legacy_proof": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-archive-rereview-legacy-08/results.xml",
+      "status": "closed"
+    },
+    {
+      "area": "synthesis/quality performance and corruption stops",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-synthesis-crossreview01/results.xml",
+      "status": "closed"
+    },
+    {
+      "area": "model profiles/pinned budgets/alternate envelopes",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-parent-crossreview-latest06/results.xml",
+      "status": "closed"
+    },
+    {
+      "area": "native capacity cancellation and factory payload",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-capacity-delivery-01/verification.json",
+      "status": "closed; two final lambda/exception-chain lines rereviewed without findings"
+    },
+    {
+      "area": "canonical scenario plan/persistence/cache",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-parent-review-03/results.xml",
+      "status": "closed"
+    },
+    {
+      "area": "full scenario contract/requiredness/table integrity",
+      "evidence": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-latest04/results.xml",
+      "status": "closed"
+    }
+  ],
+  "historical_audit": {
+    "pipeline_id": "pipe_1ee2fae33f8c",
+    "document": "judge-loop-audit.md",
+    "evidence": "judge-loop-evidence.json",
+    "saved_artifacts_rehashed_unchanged": 46,
+    "billing_verified": false,
+    "critic_physical_model_historically_recorded": false
+  },
+  "limits": [
+    "No paid or live research run, deployment, service restart, credential change, or saved-run resume.",
+    "Offline control/data/SDK checks are not a production quality or speed benchmark.",
+    "Scenario probabilities are modeling assumptions; arbitrary historical scenario labels and free-form numerical metrics are not automatically equated.",
+    "Legacy saved policies remain pinned; source migrations are verified on stopped saved workspaces.",
+    "GitHub authentication read-only check still exits 1; no unchanged-auth push retry."
+  ],
+  "source_sha256": {
+    ".env.example": "f3f3319d03b25c88ea7d69b9f378153fec92a03cb82e2166a3f89ab6e7587249",
+    "backend/app/services/pipeline_orchestrator.py": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813",
+    "backend/app/services/research_quality_gate.py": "0bf9b6a2e357de1b3747625af45cbde6f3bd266bb1fcd60b2cf8b49d6a14b6c3",
+    "backend/tests/test_agentic_archive_hardening.py": "87eb15cf65c47284b8e17125445811c4f4c795081cd4f777c49da0c14ee83b3f",
+    "backend/tests/test_agentic_bridge_integration.py": "2c7d6a73ee2fba5ed973a5f247ffb5d629b41aad2094f40ed4fb96e72e024ada",
+    "backend/tests/test_agentic_capacity_cancellation.py": "396465736d702f15658b26176266008457ddc65f028beca5c45587be71699fb8",
+    "backend/tests/test_agentic_native_hardening.py": "ac98afe92fb0be551a32fc006f55aa1e5a75a753e7248b6ddd026e2c6e311cb4",
+    "backend/tests/test_agentic_scenario_integration.py": "a035ea99b17c2df293f6e8c1695b5f9c880b6e83a7826c6df49a7d9e861909ef",
+    "backend/tests/test_agentic_scheduler_hardening.py": "642a9626543f05b7c044340702e38afeb83d435a09423a6c9bee325f5c7f2606",
+    "backend/tests/test_agentic_synthesis_hardening.py": "52b55f84d527d9f31edfc86f07d3d94472cb3bd98f7c34cf69d69366eb405b26",
+    "backend/tests/test_deerflow_bridge_sync_guard.py": "acff5b6312bff2c9eb1bc4dc1cc8bf3e1a5ae241fce2afb3fa9e3800b41277f7",
+    "backend/tests/test_glm_agentic_profiles.py": "a05cab9148d7f786935ebd8dfb511d96f9078bc47f3dda9cc499697f200df5d2",
+    "backend/tests/test_judge_replay_guard.py": "db4c12cf28836978186db74bf152823aefd32b03483de36ab607842ac03d61e1",
+    "backend/tests/test_research_scenario_frame.py": "91f6a4bd7969afa6e037df924340ec8d6ed222ced0cb2e46c583f91cc1149185",
+    "deerflow_bridge/agentic_bridge.py": "aff743e36310225a177e15ea5489a9a7903f1e9eb2066bfd25969389ccf14408",
+    "deerflow_bridge/agentic_research.py": "bd8dda5d787b11d8ea7c9a6b9440d0cd2eabd03f4d3d4483d254e4b1b086f3ea",
+    "deerflow_bridge/cached_fetch.py": "01dd37fab5d448292a5e6c1bbd957ba5a5f14ea09ae506f3be01f0fd8e0db4df",
+    "deerflow_bridge/config.yaml": "9fca37669dc5a2dc0d3fe52b05b58b3b0637c638498fac01354c1a2e8f80a268",
+    "deerflow_bridge/deerflow_research.py": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2",
+    "deerflow_bridge/patches/apply_model_factory_overlays.py": "3cabbca3589f98ad497bae62899e373397d2ea5bcf21cceec25b6f4df0f06e61",
+    "deerflow_bridge/patches/middlewares/summarization_middleware.py": "a2f6c5b359e21db76db386deb20c2b7eeacc27b3fe85c2e8da4a2c1d94ee07bf",
+    "deerflow_bridge/patches/middlewares/tool_output_budget_middleware.py": "f0181e13ee89558ed6c2191c7bf96e56aa1890fb813059766b0c0d7108de52fa",
+    "deerflow_bridge/patches/tests/test_glm53_factory_payload.py": "bafd125d8417fabd6b87fbad485d9ba163efe34a9e85c47db726628b7fd6f6dd",
+    "deerflow_bridge/research_admission.py": "9d785970b40be5c34e7706dfe86c0df9b557e7364348b02288b8521dcfde55a1",
+    "deerflow_bridge/research_archive.py": "0dfdde9cc99e0580682e405e169771e6be5ebadfc1345f4d28143aed614e22da",
+    "deerflow_bridge/research_budget.py": "909bd1140b7a8c999cec70ac416982f34906965d6b489bb9aa3108f6713c1ac4",
+    "deerflow_bridge/research_context.py": "e87cbf3d90d24eff95cadd6c8706ddc60346700c8f346ce9b54e66560787a141",
+    "deerflow_bridge/research_profiles.py": "5aedd23732b9988874318b97d945aaa99da015b178d8132faa6cb4c843ad16dc",
+    "deerflow_bridge/research_quality.py": "9b39cc62a56b9b93b57f7bc45534b7d48255aa84e7e28afb7ffcc22ae9a3a7c9",
+    "deerflow_bridge/research_scenarios.py": "87d45cc1874f5fb8b6b618564ee08c8df66047d263ce2334faeb660580fabfaa",
+    "deerflow_bridge/research_synthesis.py": "e4c72d4cc98c3de87fbb8041dda3ad6791b98b4c0c6615d29d2a44c5c79050d3",
+    "deerflow_bridge/research_workspace.py": "bad85c8c63596aa992d085d88ee01058c425c449776c6637738e73fa392258bd",
+    "setup.sh": "0cfbde2f117bad72bd23e63322bf705a3bd31725e04c1db95aed6b350e1109a7"
+  }
+}

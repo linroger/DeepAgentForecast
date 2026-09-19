@@ -11,10 +11,12 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import threading
 
 from research_context import ContextPolicy, estimate_tokens
 from research_workspace import ResearchWorkspace
+from research_profiles import EXECUTION_ENV_ALIASES, execution_policy, profile_name, workspace_execution_policy
 
 
 ENGINE = "agentic-phases/v1"
@@ -39,22 +41,107 @@ def _setting(name: str, default: int, minimum: int = 0) -> int:
     return value
 
 
-def prepare(out_dir, question, depth, model_name, language=None, *, mode="evidence", owner_id="standalone"):
-    """Bind the workspace before any native agent or tool can run."""
-    import research_archive
+def _saved_identity(root):
+    path = root / "identity.json"
+    if not path.exists() and not path.is_symlink():
+        return None
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError("invalid research identity file")
+        data = stream.read(65_537)
+    if len(data) > 65_536:
+        raise ValueError("oversized research identity")
+    value = json.loads(data)
+    identity = value.get("identity") if isinstance(value, dict) else None
+    if not isinstance(identity, dict):
+        raise ValueError("invalid research identity")
+    return identity
 
-    policy = ContextPolicy.from_env()
-    root = Path(os.environ.get("RESEARCH_AGENTIC_CACHE_DIR") or Path(out_dir) / "agentic")
-    identity = {
+
+def _check_overrides(saved, fields):
+    for env_name, key in fields.items():
+        raw = os.environ.get(env_name)
+        if raw is None:
+            continue
+        if key.endswith("_s"):
+            try:
+                valid = float(raw) == saved[key]
+            except ValueError:
+                valid = False
+        else:
+            valid = bool(re.fullmatch(r"[0-9]+", raw)) and int(raw) == saved[key]
+        if not valid:
+            raise ValueError(f"{env_name} conflicts with saved research policy")
+
+
+def prepare(out_dir, question, depth, model_name, language=None, *, mode="evidence", owner_id="standalone", model_id=None, model_profiles=None):
+    """Resolve new-run model defaults or reopen the exact immutable saved policy."""
+    import research_archive
+    from types import SimpleNamespace
+
+    root = Path(os.environ.get("RESEARCH_AGENTIC_CACHE_DIR") or Path(out_dir) / "agentic").expanduser().resolve()
+    base = {
         "schema": ENGINE, "question_sha256": hashlib.sha256(question.encode()).hexdigest(),
         "depth": depth, "model": model_name, "language": language or "auto",
         "run_id": os.environ.get("RESEARCH_BUDGET_RUN_ID") or owner_id,
         "lane_id": mode,
-        "context_policy": policy.to_dict(),
     }
+    if model_profiles is not None:
+        for name, envelope in model_profiles.items():
+            if (not isinstance(name, str) or not isinstance(envelope, dict)
+                    or not isinstance(envelope.get("model_id"), str)
+                    or any(type(envelope.get(key)) is not int or envelope[key] <= 0
+                           for key in ("context_window_tokens", "max_output_tokens"))):
+                raise ValueError("invalid configured model envelope")
+    saved = _saved_identity(root)
+    if saved is not None:
+        if any(saved.get(key) != value for key, value in base.items()):
+            raise ValueError("saved research identity does not match this request")
+        if "model_id" in saved and model_id is not None and saved["model_id"] != model_id:
+            raise ValueError("configured model changed since research began")
+        if "model_profiles" in saved and model_profiles is not None and saved["model_profiles"] != model_profiles:
+            raise ValueError("configured model envelopes changed since research began")
+        policy = ContextPolicy.from_workspace(SimpleNamespace(identity=saved))
+        _check_overrides(policy.to_dict(), ContextPolicy.ENV_FIELDS)
+        if "execution_policy" in saved:
+            pinned = workspace_execution_policy(SimpleNamespace(identity=saved))
+            _check_overrides(pinned, {"RESEARCH_AGENTIC_" + key.upper(): key for key in pinned})
+            _check_overrides(pinned, EXECUTION_ENV_ALIASES)
+        identity = saved
+    else:
+        declared = model_profiles.get(model_name, {}).get("context_window_tokens") if model_profiles else None
+        policy = ContextPolicy.from_env(model_name=model_name, model_id=model_id, context_limit=declared)
+        identity = {**base, "model_id": model_id or ("glm-5.3" if model_name == "glm" else model_name),
+                    "model_profile": profile_name(model_name, model_id),
+                    "context_policy": policy.to_dict(),
+                    "execution_policy": execution_policy(model_name, model_id)}
+        if model_profiles is not None:
+            identity["model_profiles"] = model_profiles
     workspace = ResearchWorkspace(root, identity)
     research_archive.activate_workspace(workspace)
     return workspace, policy
+
+
+def execution_setting(name, default):
+    """Read a pinned execution setting without changing global environment."""
+    import research_archive
+    workspace = research_archive.current_workspace()
+    if workspace is None:
+        return _setting(name, default)
+    policy = workspace_execution_policy(workspace)
+    return policy.get(name.lower(), default)
+
+
+def scenario_frame_for_workspace(workspace):
+    from research_scenarios import parse_frame, probability_frame
+    events = workspace.events("synthesis-scenario-frame")
+    if not events:
+        if "execution_policy" in workspace.identity:
+            raise ValueError("canonical scenario frame is missing; synthesis must finish before publication")
+        return None, None
+    frame = parse_frame(workspace.read_artifact(events[-1]["payload"]["ref"]))
+    return frame, probability_frame(frame)
 
 
 def persist_quality(dr, out_dir, report, sources, meta, *, advisory=None):
@@ -63,7 +150,14 @@ def persist_quality(dr, out_dir, report, sources, meta, *, advisory=None):
 
     coverage = meta.get("actor_dossier_coverage")
     audit = dr.audit_global_actor_report_coverage(report, coverage, sources) if coverage is not None else None
-    receipt = make_receipt(report, sources, advisory=advisory, actor_audit=audit)
+    import research_archive
+    workspace = research_archive.current_workspace()
+    if workspace is None and meta.get("agentic_execution_policy"):
+        raise ValueError("research workspace is unavailable for canonical scenario validation")
+    frame, probabilities = scenario_frame_for_workspace(workspace) if workspace is not None else (None, None)
+    if frame is not None:
+        meta["research_scenario_frame"] = frame
+    receipt = make_receipt(report, sources, advisory=advisory, actor_audit=audit, scenario_frame=probabilities, scenario_contract=frame)
     dr._atomic_write_text(Path(out_dir) / "research_quality.json", json.dumps(receipt, ensure_ascii=False, indent=2))
     conflicts = dr.scenario_probability_conflicts(report)
     meta["research_report_quality_gate"] = {
@@ -123,17 +217,28 @@ def configure_client(client, policy):
     from deerflow.config.tool_config import ToolConfig
     from deerflow.tools.tools import get_available_tools
 
-    recall = next((tool for tool in config.tools if tool.name == "read_evidence"), None)
-    if recall is None:
-        config.tools.append(ToolConfig(name="read_evidence", group="web", use="research_archive:read_evidence_tool"))
-    elif recall.use != "research_archive:read_evidence_tool":
-        raise ValueError("read_evidence tool conflicts with managed research archive")
+    for name, use in (("read_evidence", "research_archive:read_evidence_tool"),
+                      ("search_evidence", "research_archive:search_evidence_tool")):
+        recall = next((tool for tool in config.tools if tool.name == name), None)
+        if recall is None:
+            config.tools.append(ToolConfig(name=name, group="web", use=use))
+        elif recall.use != use:
+            raise ValueError(f"{name} tool conflicts with managed research archive")
+    # Recall already returns a policy-bounded view over an archived original.
+    # Re-offloading it would force an endless recall -> preview -> recall loop.
+    tool_output = getattr(config, "tool_output", None)
+    if tool_output is not None:
+        updates = {"exempt_tools": list(dict.fromkeys([*tool_output.exempt_tools, "read_evidence", "search_evidence"]))}
+        if policy.context_window_tokens >= 1_000_000:
+            updates.update(externalize_min_chars=32768, preview_head_chars=8192,
+                           preview_tail_chars=4096, fallback_max_chars=65536)
+        config.tool_output = tool_output.model_copy(update=updates)
 
     threshold = min(
         policy.working_tokens + policy.prompt_overhead_tokens,
         policy.context_window_tokens - policy.reserved_output_tokens - policy.safety_margin_tokens,
     )
-    keep = min(16000, max(1, policy.working_tokens // 4))
+    keep = min(execution_setting("COMPACTION_KEEP_TOKENS", 16000), max(1, policy.working_tokens // 4))
     config.summarization = config.summarization.model_copy(update={
         "enabled": True, "trigger": [ContextSize(type="tokens", value=threshold)],
         "keep": ContextSize(type="tokens", value=keep), "trim_tokens_to_summarize": None,
@@ -170,7 +275,7 @@ def _merge_sources(dr, sources):
                 existing[url] = row
 
 
-def run_stage(dr, client, question, depth, language, model_name, thread_id, plog, *, out_dir):
+def run_stage(dr, client, question, depth, language, model_name, thread_id, plog, *, out_dir, force_evidence=False):
     from agentic_research import AgenticResearchHalt, run_research
     import research_archive
 
@@ -180,7 +285,7 @@ def run_stage(dr, client, question, depth, language, model_name, thread_id, plog
     if workspace is None:
         workspace, policy = prepare(out_dir, question, depth, model_name, language, owner_id=thread_id)
     else:
-        policy = ContextPolicy.from_env()
+        policy = ContextPolicy.from_workspace(workspace)
     checkpoint = dr.ResearchCheckpointer(out_dir, thread_id, depth, question, enabled=True)
     checkpoint.update_progress(strict=True)
 
@@ -261,7 +366,7 @@ def run_stage(dr, client, question, depth, language, model_name, thread_id, plog
             _prepare_native_agent(client, task_thread)
             text = dr.run_streamed_turn(
                 client, prompt, task_thread,
-                2 * _setting("TASK_STEPS", 12, 1) + 8, plog,
+                2 * execution_setting("TASK_STEPS", 12) + 8, plog,
                 "research:agentic:" + str(task["phase"]), event_observer=observe, strict=True,
             )
             parts, _ = dr.collect_thread_evidence_parts(client, task_thread, plog)
@@ -275,8 +380,8 @@ def run_stage(dr, client, question, depth, language, model_name, thread_id, plog
         result = run_research(
             workspace, question=question, depth=depth, language=language or "auto",
             worker=worker, context_policy=policy, workers=5,
-            phase_deadline_s=_setting("PHASE_DEADLINE_S", 2700, 1),
-            max_followups=_setting("MAX_FOLLOWUPS", 5), max_discovery_rounds=_setting("DISCOVERY_ROUNDS", 3),
+            phase_deadline_s=execution_setting("PHASE_DEADLINE_S", 2700),
+            max_followups=execution_setting("MAX_FOLLOWUPS", 5), max_discovery_rounds=execution_setting("DISCOVERY_ROUNDS", 3),
             emit=lambda kind, payload: plog.write("stage", f"agentic:{kind}: " + json.dumps(payload, ensure_ascii=False)),
         )
     except AgenticResearchHalt as exc:
@@ -286,7 +391,7 @@ def run_stage(dr, client, question, depth, language, model_name, thread_id, plog
     _merge_sources(dr, result["sources"])
     checkpoint.record_pass("agentic-phases")
     dr._atomic_write_text(Path(out_dir) / "agentic_research_stats.json", json.dumps(result["stats"], indent=2))
-    if dr._env_flag("RESEARCH_EVIDENCE_ONLY", False):
+    if force_evidence or dr._env_flag("RESEARCH_EVIDENCE_ONLY", False):
         return dr.render_evidence_pack(result["evidence"])
     return dr.synthesize_from_evidence_parts(result["evidence"], [result["text"]], question,
                                              language, model_name, plog, depth)
@@ -319,7 +424,7 @@ def run_auxiliary_turn(dr, client, message, thread_id, recursion_limit, plog, la
             for row in saved['search_receipts']:
                 dr._SEARCH_RESULT_RECEIPTS[row['result_id']] = row
         return saved['text']
-    policy = ContextPolicy.from_env()
+    policy = ContextPolicy.from_workspace(workspace)
     prior = [workspace.read_artifact(row['payload']['artifact'])
              for row in workspace.events(task_id) if row['kind'] == 'partial_native_message']
     prompt = message
@@ -362,27 +467,41 @@ def review_and_repair(dr, workspace, report, sources, meta, model_name, plog):
     from research_quality import evaluate_report
     from research_synthesis import advisory_reviews, targeted_repairs
 
+    _owned_frame, probabilities = scenario_frame_for_workspace(workspace)
+    judge_model = os.environ.get("DEERFLOW_JUDGE_MODEL", "").strip() or model_name
+    provenance_task = "critique-models-" + hashlib.sha256(report.encode("utf-8")).hexdigest()
+
     def invoke(task):
-        limit = 4096 if task['label'].startswith('section-repair-') else 1800
-        response, _served = dr._invoke_tool_free_model(
-            model_name, dr._stage1_model_messages(task['system'], task['label'], task['evidence']),
+        repair = task['label'].startswith('section-repair-')
+        limit = 4096 if repair else 1800
+        requested = model_name if repair else judge_model
+        response, served = dr._invoke_tool_free_model(
+            requested, dr._stage1_model_messages(task['system'], task['label'], task['evidence']),
             max_output_tokens=limit, plog=plog, label=task['label'])
         dr._log_model_response_usage(plog, task['label'], response)
+        dr._raise_if_compaction_stopped()
+        workspace.append_event(provenance_task, "critic_model", {
+            "label": task["label"], **dr._critic_model_provenance(requested, served, response)})
+        dr._raise_if_compaction_stopped()
         return dr._message_text(getattr(response, 'content', response))
 
     def validate(candidate, ordered_sources):
         coverage = meta.get('actor_dossier_coverage')
         audit = dr.audit_global_actor_report_coverage(candidate, coverage, ordered_sources) if coverage is not None else None
-        result = evaluate_report(candidate, ordered_sources, actor_audit=audit)
+        result = evaluate_report(candidate, ordered_sources, actor_audit=audit, scenario_frame=probabilities)
         if dr.scenario_probability_conflicts(candidate):
             result['passed'] = False
             result['errors'].append('scenario_probability_conflicts')
         return result
 
-    advisory = advisory_reviews(workspace, report, sources, invoke, workers=5, model=model_name)
+    advisory = advisory_reviews(workspace, report, sources, invoke, workers=5, model=judge_model,
+                                timeout_s=execution_setting("REVIEW_TIMEOUT_S", 120))
     repaired = targeted_repairs(workspace, report, sources, advisory, invoke, validate,
-                                workers=5, model=model_name, max_output=4096)
+                                workers=5, model=model_name, max_output=4096,
+                                timeout_s=execution_setting("REPAIR_TIMEOUT_S", 120))
     advisory['repairs'] = repaired['repairs']
+    advisory['model_provenance'] = [event['payload'] for event in workspace.events(provenance_task)
+                                    if event['kind'] == 'critic_model']
     return repaired['report'], advisory
 
 
@@ -398,3 +517,30 @@ def align_source_order(dr, original, current):
         seen.add(url)
     result.extend(row for row in current if isinstance(row, dict) and dr._source_identity_url(row.get('url')) not in seen)
     return result
+
+
+def model_envelope(model_name):
+    """Resolve each actual call's capacity, including smaller alternate models."""
+    import research_archive
+    workspace = research_archive.current_workspace()
+    identity = workspace.identity if workspace is not None else {}
+    profiles = identity.get("model_profiles")
+    if isinstance(profiles, dict):
+        if model_name not in profiles:
+            raise ValueError("model was not bound to the research workspace")
+        return dict(profiles[model_name])
+    if model_name == identity.get("model"):
+        context = ContextPolicy.from_workspace(workspace)
+        return {"model_id": identity.get("model_id", model_name),
+                "context_window_tokens": context.context_window_tokens,
+                "max_output_tokens": context.reserved_output_tokens}
+    try:
+        from deerflow.config import get_app_config
+        config = get_app_config().get_model_config(model_name)
+        if config is not None:
+            return {"model_id": str(getattr(config, "model", model_name)),
+                    "context_window_tokens": int(getattr(config, "context_window_tokens", 0) or 128000),
+                    "max_output_tokens": int(getattr(config, "max_tokens", 0) or 16000)}
+    except (ImportError, AttributeError, ValueError):
+        pass
+    return {"model_id": str(model_name), "context_window_tokens": 128000, "max_output_tokens": 16000}

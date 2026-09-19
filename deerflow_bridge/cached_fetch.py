@@ -42,6 +42,7 @@ import json
 import logging
 import os
 import socket
+import tempfile
 import time
 from html.parser import HTMLParser
 from typing import Any, Awaitable, Callable, Optional
@@ -679,6 +680,7 @@ def _read_cache(path: str, ttl_seconds: float) -> Optional[str]:
 
 def _write_cache(path: str, url: str, content: str) -> None:
     """原子写缓存条目（temp+replace）。best-effort：任何失败静默跳过（不影响返回给 agent 的结果）。"""
+    tmp = None
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         payload = {
@@ -687,14 +689,20 @@ def _write_cache(path: str, url: str, content: str) -> None:
             "fetched_at": time.time(),
             "content_len": len(content),
         }
-        tmp = f"{path}.{os.getpid()}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        fd, tmp = tempfile.mkstemp(prefix=".source-cache-", suffix=".tmp", dir=os.path.dirname(path))
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
     except Exception as e:  # noqa: BLE001
         logger.warning("cached_fetch: 写缓存失败（跳过，不影响抓取结果）: %s", e)
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 def _enforce_size_cap(root: str, max_bytes: int) -> None:

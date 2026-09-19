@@ -13,7 +13,21 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+SCENARIO_FRAME = {'schema': 'research-scenario-frame/v1', 'horizon': '2030',
+                  'scenarios': [{'id': f'SC{i}', 'name': f'Case {i}', 'probability': weight}
+                                for i, weight in enumerate([40, 30, 20, 10], 1)]}
 BODY = '# Source release\n\n' + 'Full retained evidence paragraph.\n\n' * 800 + 'TAIL_SENTINEL 98765 revised capacity.\n'
+
+
+SCENARIO_TABLE = "| Scenario | Probability |\n|---|---|\n" + "\n".join(
+    f"| SC{i} | {weight}% |" for i, weight in enumerate([40, 30, 20, 10], 1)) + "\n"
+
+
+def seed_frame():
+    import research_archive
+    workspace = research_archive.current_workspace()
+    ref = workspace.put_artifact(json.dumps(SCENARIO_FRAME), "scenario_frame")
+    workspace.append_event("synthesis-scenario-frame", "canonical_frame", {"ref": ref})
 
 
 @pytest.fixture
@@ -148,12 +162,13 @@ def test_cli_advisory_fail_cannot_veto_and_bad_citation_cannot_disappear(bridge,
     client_module.DeerFlowClient = lambda **kwargs: object()
     monkeypatch.setitem(sys.modules, 'deerflow', ModuleType('deerflow'))
     monkeypatch.setitem(sys.modules, 'deerflow.client', client_module)
-    report = '# Research report\n\n## Findings\n\n' + ('Observed evidence remains uncertain ' + marker + '. ') * 20 + '\n\n## Limitations\n\nMore primary evidence may change this assessment.\n'
+    report = '# Research report\n\n## Findings\n\n' + ('Observed evidence remains uncertain ' + marker + '. ') * 20 + '\n\n## Scenarios\n\n' + SCENARIO_TABLE + '\n\n## Limitations\n\nMore primary evidence may change this assessment.\n'
     source = {'url': 'https://example.test/full', 'source_origin': 'fetched', 'reachable': True,
               'content': BODY, 'content_sha256': hashlib.sha256(BODY.encode()).hexdigest(),
               'receipt_id': 'producer-receipt'}
     def researched(*args, **kwargs):
         dr.seed_manifest_sources([source])
+        seed_frame()
         return report
     monkeypatch.setattr(dr, 'run_research_stage', researched)
     monkeypatch.setattr(dr, '_render_research_charts', lambda *args: {'passed': True})
@@ -184,6 +199,8 @@ def test_real_multipart_reuses_successful_sections_after_failure(bridge, monkeyp
     failing = [True]
     def invoke(_model, _prompt, _log=None, label='bare', *_args):
         calls[label] += 1
+        if label.startswith('synthesis-scenario-frame'):
+            return json.dumps(SCENARIO_FRAME)
         if label == 'synthesis-outline':
             return json.dumps({'sections': [{'title': f'Topic {i}', 'scope': f'Capacity risk topic {i}', 'target_words': 1000, 'covers': [f'KIQ-{i}']} for i in range(5)]})
         if label.startswith('synthesis-section-1') and failing[0]:
@@ -210,9 +227,9 @@ def test_real_multipart_reuses_successful_sections_after_failure(bridge, monkeyp
 
 def test_real_multipart_timeout_retains_execution_ownership(bridge, monkeypatch, tmp_path):
     dr, adapter, _ = bridge
+    monkeypatch.setenv('RESEARCH_AGENTIC_CALL_TIMEOUT_S', '0.05')
     workspace, _ = adapter.prepare(tmp_path / 'out', 'Forecast capacity', 'standard', 'minimax')
     from research_workspace import ResearchWorkspaceError
-    monkeypatch.setenv('RESEARCH_AGENTIC_CALL_TIMEOUT_S', '0.05')
     entered, release = threading.Event(), threading.Event()
     def invoke(*_args):
         entered.set()
@@ -275,11 +292,12 @@ def test_advisory_targets_only_named_section_in_real_cli(bridge, monkeypatch, tm
     monkeypatch.setitem(sys.modules, 'deerflow', ModuleType('deerflow'))
     monkeypatch.setitem(sys.modules, 'deerflow.client', client_module)
     limits = '## Limitations\n\nThis unchanged limitation remains precise.\n'
-    report = '# Research\n\n## Findings\n\n' + 'Initial uncertain evidence [S1]. ' * 20 + '\n\n' + limits
+    report = '# Research\n\n## Findings\n\n' + 'Initial uncertain evidence [S1]. ' * 20 + '\n\n## Scenarios\n\n' + SCENARIO_TABLE + '\n\n' + limits
     source = {'url': 'https://example.test/release', 'source_origin': 'fetched', 'reachable': True,
               'content': BODY, 'content_sha256': hashlib.sha256(BODY.encode()).hexdigest()}
     def researched(*args, **kwargs):
         dr.seed_manifest_sources([source])
+        seed_frame()
         return report
     monkeypatch.setattr(dr, 'run_research_stage', researched)
     monkeypatch.setattr(dr, '_render_research_charts', lambda *args: {'passed': True})
@@ -299,3 +317,44 @@ def test_advisory_targets_only_named_section_in_real_cli(bridge, monkeypatch, tm
     receipt = json.loads((tmp_path / 'out' / 'research_quality.json').read_text())
     assert receipt['passed'] is True
     assert any(r['status'] == 'applied' for r in receipt['advisory']['repairs'])
+
+
+def test_standalone_cli_runs_evidence_then_shared_frame_synthesis_and_reuses_all(bridge, monkeypatch, tmp_path):
+    dr, _, _ = bridge
+    client = OfflineClient()
+    native = ModuleType('deerflow.client')
+    native.DeerFlowClient = lambda **kwargs: client
+    monkeypatch.setitem(sys.modules, 'deerflow', ModuleType('deerflow'))
+    monkeypatch.setitem(sys.modules, 'deerflow.client', native)
+    monkeypatch.setenv('RESEARCH_SYNTHESIS_MIN_WORDS', '0')
+    monkeypatch.setattr(dr, '_dedup_shingles_enabled', lambda: False)
+    monkeypatch.setattr(dr, '_render_research_charts', lambda *_: {'passed': True})
+    calls = []
+    def synth(_model, prompt, _log, label, *_args):
+        calls.append(label)
+        if label == 'synthesis-outline':
+            return json.dumps({'sections': [{'title': f'Topic {i}', 'scope': 'capacity', 'covers': [str(i)], 'target_words': 1000} for i in range(5)]})
+        if label == 'synthesis-scenario-frame':
+            return json.dumps(SCENARIO_FRAME)
+        assert 'SC1' in str(prompt) and 'SC4' in str(prompt)
+        return 'Documented capacity is uncertain [S1]. ' * 40 + '\n\n' + SCENARIO_TABLE
+    monkeypatch.setattr(dr, '_bare_synth_invoke', synth)
+    critics = []
+    def critique(*args, **kwargs):
+        critics.append(kwargs['label'])
+        return SimpleNamespace(content=json.dumps({'status': 'FAIL', 'weaknesses': []}), response_metadata={'model_name': 'fixture-critic'}), 'minimax'
+    monkeypatch.setattr(dr, '_invoke_tool_free_model', critique)
+    argv = ['bridge', '--prompt', 'Forecast capacity to 2030', '--out-dir', str(tmp_path / 'out'), '--model', 'minimax', '--depth', 'standard', '--thread-id', 'fixed', '--no-actors']
+    monkeypatch.setattr(sys, 'argv', argv)
+    assert dr.main() == 0
+    report = (tmp_path / 'out' / dr.REPORT_FILENAME).read_text()
+    assert not report.startswith('# Internal Evidence Lane Pack')
+    assert client.calls == 30 and client.peak == 5
+    receipt = json.loads((tmp_path / 'out' / 'research_quality.json').read_text())
+    assert receipt['passed'] is True and receipt['scenario_contract']['horizon'] == '2030'
+    assert len(receipt['advisory']['model_provenance']) == 5
+    before = list(calls), list(critics)
+    monkeypatch.setattr(sys, 'argv', argv + ['--resume'])
+    assert dr.main() == 0
+    assert (calls, critics) == before and client.calls == 30
+    assert (tmp_path / 'out' / dr.REPORT_FILENAME).read_text() == report

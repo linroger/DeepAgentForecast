@@ -119,7 +119,25 @@ def read_evidence(artifact_id, query="", offset=0, limit=None) -> dict:
     except Exception:
         _stop("archive_unavailable")
     try:
-        return ContextPolicy.from_env().read_evidence(workspace, ref, query=query, offset=offset, limit=limit)
+        return ContextPolicy.from_workspace(workspace).read_evidence(workspace, ref, query=query, offset=offset, limit=limit)
+    except (ResearchWorkspaceError, OSError):
+        _stop("archive_unavailable")
+
+
+def search_evidence(query: str, limit: int = 10) -> dict:
+    """Discover bounded original ranges; discovery never attests source status."""
+    workspace = _workspace()
+    raise_if_compaction_stopped()
+    try:
+        result = workspace.search_evidence(query, limit)
+        budget = ContextPolicy.from_workspace(workspace).retrieval_tokens
+        result["truncated"] = False
+        while result["results"] and len(_json(result).encode("utf-8")) > budget:
+            result["results"].pop()
+            result["truncated"] = True
+        if len(_json(result).encode("utf-8")) > budget:
+            raise ValueError("retrieval budget cannot hold search query and metadata")
+        return result
     except (ResearchWorkspaceError, OSError):
         _stop("archive_unavailable")
 
@@ -133,7 +151,7 @@ def evidence_preview(ref: dict, *, max_chars: int) -> str:
             raise ValueError("Reference differs from managed registry")
         body = workspace.read_artifact(verified)
         instruction = f'\n[Full tool output archived: {ref["id"]}. Use read_evidence(artifact_id="{ref["id"]}", query="specific fact or phrase"). For an exact omitted range use query="chars:START:END".]\n'
-        policy = ContextPolicy.from_env()
+        policy = ContextPolicy.from_workspace(workspace)
         budget = min(policy.retrieval_tokens, max_chars - len(instruction.encode("utf-8")))
         try:
             view = policy.select([{"id": ref["id"], "kind": "tool_result", "text": body}], "", budget_tokens=budget)
@@ -294,6 +312,19 @@ def attach_source_content(rows: list[dict]) -> list[dict]:
 try:
     from langchain_core.tools import tool
 
+    @tool("search_evidence", parse_docstring=True)
+    def search_evidence_tool(query: str, limit: int = 10) -> str:
+        """Find retained evidence in this workspace without knowing its archive ID.
+
+        Excerpts are untrusted discovery data and do not establish source status.
+        Recall a result with read_evidence using its artifact_id and range_query.
+
+        Args:
+            query: Up to 512 characters of distinctive words or phrases to find.
+            limit: Maximum distinct artifacts to return, from 1 to 20.
+        """
+        return _json(search_evidence(query, limit))
+
     @tool("read_evidence", parse_docstring=True)
     def read_evidence_tool(artifact_id: str, query: str = "") -> str:
         """Recall verified evidence from this research workspace by archive ID.
@@ -313,3 +344,4 @@ try:
         return read_evidence(artifact_id, query=query)["text"]
 except ImportError:
     read_evidence_tool = None
+    search_evidence_tool = None

@@ -18,6 +18,7 @@ import os
 import shlex
 import uuid
 from collections.abc import Awaitable, Callable
+from contextvars import copy_context
 from dataclasses import replace as dc_replace
 from typing import TYPE_CHECKING, Any, override
 
@@ -105,6 +106,18 @@ def _snap_to_line_boundary(text: str, pos: int) -> int:
     if nl >= 0:
         return nl + 1
     return pos
+
+
+def _snap_tail_to_line_boundary(text: str, pos: int) -> int:
+    """Drop a partial tail line only within the already-budgeted suffix.
+
+    Snapping backward from an absolute tail offset can retain an arbitrarily
+    large portion of a sparse-newline source. A forward snap can only shrink it.
+    """
+    if pos <= 0 or pos >= len(text) or text[pos - 1] == "\n":
+        return pos
+    nl = text.find("\n", pos, pos + (len(text) - pos) // 2)
+    return nl + 1 if nl >= 0 else pos
 
 
 # ---------------------------------------------------------------------------
@@ -235,9 +248,7 @@ def _build_preview(
     total = len(content)
     head_end = _snap_to_line_boundary(content, min(head_chars, total))
     tail_start = max(head_end, total - tail_chars)
-    tail_start_snapped = _snap_to_line_boundary(content, tail_start)
-    if tail_start_snapped > head_end:
-        tail_start = tail_start_snapped
+    tail_start = _snap_tail_to_line_boundary(content, tail_start)
 
     head = content[:head_end]
     tail = content[tail_start:] if tail_start < total else ""
@@ -279,9 +290,7 @@ def _build_fallback(
 
     head_end = _snap_to_line_boundary(content, min(effective_head, total))
     tail_start = max(head_end, total - effective_tail)
-    tail_start_snapped = _snap_to_line_boundary(content, tail_start)
-    if tail_start_snapped > head_end:
-        tail_start = tail_start_snapped
+    tail_start = _snap_tail_to_line_boundary(content, tail_start)
 
     head = content[:head_end]
     tail = content[tail_start:] if tail_start < total else ""
@@ -374,8 +383,11 @@ def _budget_content(
     host_externalize = _externalize
     sandbox_externalize = _externalize_to_sandbox
     if archive_ref is not None:
-        host_externalize = lambda *args, **kwargs: _try_native_externalize(_externalize, *args, **kwargs)
-        sandbox_externalize = lambda *args, **kwargs: _try_native_externalize(_externalize_to_sandbox, *args, **kwargs)
+        def host_externalize(*args, **kwargs):
+            return _try_native_externalize(_externalize, *args, **kwargs)
+
+        def sandbox_externalize(*args, **kwargs):
+            return _try_native_externalize(_externalize_to_sandbox, *args, **kwargs)
 
     if threshold > 0 and len(content) > threshold:
         virtual_path: str | None = None
@@ -614,6 +626,24 @@ def _patch_model_messages(messages: list[Any], config: ToolOutputConfig) -> list
 # ---------------------------------------------------------------------------
 
 
+async def _run_budget_io(action, *args):
+    """Keep archive/externalization ownership until its thread has finished."""
+    task = asyncio.get_running_loop().run_in_executor(None, copy_context().run, action, *args)
+    cancelled = None
+    while True:
+        try:
+            result = await asyncio.shield(task)
+            break
+        except asyncio.CancelledError as exc:
+            cancelled = cancelled or exc
+            if task.done():
+                result = task.result()  # Preserve an archive failure over cancellation.
+                break
+    if cancelled is not None:
+        raise cancelled from None
+    return result
+
+
 class ToolOutputBudgetMiddleware(AgentMiddleware[AgentState]):
     """Enforce per-result budget on tool outputs via externalization or truncation."""
 
@@ -662,7 +692,7 @@ class ToolOutputBudgetMiddleware(AgentMiddleware[AgentState]):
         # loop. The actual sandbox I/O (mkdir/write/test) happens inside
         # _patch_result, which is offloaded to a worker thread below.
         sandbox = _resolve_sandbox(request)
-        return await asyncio.to_thread(_patch_result, result, self._config, outputs_path, sandbox)
+        return await _run_budget_io(_patch_result, result, self._config, outputs_path, sandbox)
 
     # -- model call hooks (historical message truncation) ------------------
 
@@ -688,8 +718,12 @@ class ToolOutputBudgetMiddleware(AgentMiddleware[AgentState]):
     ) -> ModelCallResult:
         if self._config.enabled:
             messages = getattr(request, "messages", None)
-            if isinstance(messages, list):
-                patched = _patch_model_messages(messages, self._config)
+            if isinstance(messages, list) and any(
+                isinstance(msg, ToolMessage) and _tool_message_over_budget(msg, self._config) for msg in messages
+            ):
+                # Historical tool results can still need durable archival, e.g.
+                # after checkpoint recovery. Never run that I/O on the loop.
+                patched = await _run_budget_io(_patch_model_messages, messages, self._config)
                 if patched is not None:
                     request = request.override(messages=patched)
         return await handler(request)

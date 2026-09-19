@@ -279,6 +279,7 @@ def advisory_reviews(workspace, report: str, sources, invoke: Callable[[dict], d
     invoke receives exactly {label, system, evidence}. The model identity comes
     from the explicit model argument or workspace.identity['model']. Callers
     must bind the actual requested review model and max_output (default 1800).
+    Context uses the workspace's pinned policy, including on cache replay.
     Transport failures are unavailable/type-only and are not cached.
     Context selection is lexical, bounded and incomplete; the full originals and
     selected context are durable. Scope describes this limitation explicitly.
@@ -293,7 +294,7 @@ def advisory_reviews(workspace, report: str, sources, invoke: Callable[[dict], d
     if type(timeout_s) not in (int, float) or not math.isfinite(timeout_s) or timeout_s <= 0:
         raise ValueError("timeout_s must be finite and positive")
     sources_json = _canonical(sources)
-    policy = ContextPolicy.from_env()
+    policy = ContextPolicy.from_workspace(workspace)
     identity = workspace.identity
     model = identity.get("model") if model is None else model
     if not model:
@@ -491,6 +492,7 @@ def targeted_repairs(workspace, report: str, sources, advisory: dict, invoke, va
     are actionable. Oversized/ambiguous sections are skipped. Raw responses and
     replacement hashes are durably bound to the exact original, sources and
     model, but acceptance is always revalidated. The helper owns execution_lock.
+    Context uses the workspace's pinned policy; storage failures stop repairs.
     """
     if not isinstance(report, str) or not report.strip() or not callable(invoke) or not callable(validate):
         raise ValueError("report, invoke and validate are required")
@@ -498,7 +500,7 @@ def targeted_repairs(workspace, report: str, sources, advisory: dict, invoke, va
         raise ValueError("workers and repair count must fit the five-worker envelope")
     if type(timeout_s) not in (int, float) or not math.isfinite(timeout_s) or timeout_s <= 0:
         raise ValueError("timeout_s must be finite and positive")
-    policy = ContextPolicy.from_env()
+    policy = ContextPolicy.from_workspace(workspace)
     model = workspace.identity.get("model") if model is None else model
     if not model or type(max_output) is not int or not 0 < max_output <= policy.reserved_output_tokens:
         raise ValueError("model and bounded positive max_output are required")
@@ -550,7 +552,7 @@ def targeted_repairs(workspace, report: str, sources, advisory: dict, invoke, va
             fence.check()
             try:
                 previous = _mechanics(validate, report, sources_json)
-            except ResearchCompactionError:
+            except (ResearchCompactionError, ResearchWorkspaceError):
                 raise
             except Exception as exc:
                 return {"report": report, "repairs": repairs + [{"status": "unavailable", "reason": "validation_unavailable", "error_type": type(exc).__name__}]}
@@ -613,7 +615,7 @@ def targeted_repairs(workspace, report: str, sources, advisory: dict, invoke, va
                         raise ValueError("invalid section proposal")
                     replacement = _raw(proposal["replacement"])
                     new_headings, closed = _headings(replacement)
-                    if new_headings or not closed or re.search(r"(?m)^ {0,3}(?:=+|-{3,})[ \t]*$", replacement):
+                    if new_headings or not closed or re.search(r"(?m)^ {0,3}(?:=+|-+)[ \t\r]*$", replacement):
                         raise ValueError("replacement must contain only a section body")
                     old_body = report[section["start"]:section["end"]]
                     prefix = old_body[:len(old_body) - len(old_body.lstrip("\r\n"))]
@@ -644,7 +646,7 @@ def targeted_repairs(workspace, report: str, sources, advisory: dict, invoke, va
                 candidate += report[cursor:]
                 try:
                     evaluated = _mechanics(validate, candidate, sources_json)
-                except ResearchCompactionError:
+                except (ResearchCompactionError, ResearchWorkspaceError):
                     raise
                 except Exception as exc:
                     repairs.append({**record, "status": "unavailable", "reason": "validation_unavailable", "error_type": type(exc).__name__})

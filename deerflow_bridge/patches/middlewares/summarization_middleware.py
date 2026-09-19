@@ -8,6 +8,7 @@ import os
 import uuid
 from collections.abc import Collection
 from contextlib import nullcontext
+from contextvars import copy_context
 from dataclasses import dataclass
 from typing import Any, Protocol, override, runtime_checkable
 
@@ -388,9 +389,7 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
             raise ResearchCompactionError(exc.reason, thread_id=thread_id) from None
         # Serialization and SQLite's durable commit must not block concurrent
         # async research tasks. Await completion before any state replacement.
-        new_messages = await asyncio.to_thread(
-            self._record_summary, summary, messages[:cutoff_index], thread_id,
-        )
+        new_messages = await self._arecord_summary(summary, messages[:cutoff_index], thread_id)
         self._fire_hooks(messages_to_summarize, preserved_messages, runtime)
 
         return {
@@ -400,6 +399,27 @@ class DeerFlowSummarizationMiddleware(SummarizationMiddleware):
                 *preserved_messages,
             ]
         }
+
+    async def _arecord_summary(
+        self, summary: str, original_segment: list[AnyMessage], thread_id: str,
+    ) -> list[HumanMessage]:
+        """Drain the durable receipt write before allowing cancellation to leave."""
+        task = asyncio.get_running_loop().run_in_executor(
+            None, copy_context().run, self._record_summary, summary, original_segment, thread_id,
+        )
+        cancelled = None
+        while True:
+            try:
+                result = await asyncio.shield(task)
+                break
+            except asyncio.CancelledError as exc:
+                cancelled = cancelled or exc
+                if task.done():
+                    result = task.result()  # Preserve an integrity failure over cancellation.
+                    break
+        if cancelled is not None:
+            raise cancelled from None
+        return result
 
     @staticmethod
     def _required_thread_id(runtime: Runtime) -> str:

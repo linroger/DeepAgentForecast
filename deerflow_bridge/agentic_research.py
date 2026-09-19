@@ -149,6 +149,7 @@ class _Run:
         self.phase = ""
         self.deadline = math.inf
         self.records = []
+        self.discovery_refs = []
         self.reused = 0
         self.executed = 0
 
@@ -168,6 +169,15 @@ class _Run:
         if time.monotonic() >= self.deadline:
             raise self.halt("phase_deadline")
 
+    def persist(self, operation, *args, **kwargs):
+        # A disk call already in flight can finish after halt. Fence both sides
+        # so its return cannot start another write, discovery or publication.
+        # Never hold failure_mutex across I/O: halt must stay non-blocking.
+        self.check()
+        result = operation(*args, **kwargs)
+        self.check()
+        return result
+
     def event(self, task_id, kind, payload):
         try:
             with self.mutex:
@@ -186,10 +196,12 @@ class _Run:
                     question = safe_payload.get("question")
                     if not isinstance(question, str) or not question.strip():
                         raise AgenticResearchHalt("event_failed")
-                    self.workspace.add_discovery(question, task_id, safe_payload.get("evidence_refs", []))
-                self.workspace.append_event(task_id, kind, safe_payload)
+                    self.persist(self.workspace.add_discovery, question, task_id, safe_payload.get("evidence_refs", []))
+                self.persist(self.workspace.append_event, task_id, kind, safe_payload)
             if self.emit is not None:
+                self.check()
                 self.emit(kind, {**safe_payload, "task_id": task_id})
+                self.check()
         except BaseException:
             raise self.halt("event_failed") from None
 
@@ -208,6 +220,11 @@ class _Run:
                 if "source_url" in stored:
                     block["source_url"] = stored["source_url"]
                 blocks.append(block)
+        for ref in self.discovery_refs:
+            if ref["id"] not in seen:
+                seen.add(ref["id"])
+                blocks.append({"id": ref["id"], "text": self.workspace.read_artifact(ref),
+                               "kind": "discovery_evidence"})
         return blocks
 
     def _read_record(self, record):
@@ -223,8 +240,18 @@ class _Run:
                         for ref in [record["output_ref"], *(b["ref"] for b in record["blocks"])]]
         plan_inputs = {"run": self.run_hash, "phase": phase, "question": question, "predecessors": predecessors}
         plan_id = "agentic-plan-" + phase
-        plan = self.workspace.load_task(plan_id, plan_inputs)
+        plan = self.persist(self.workspace.load_task, plan_id, plan_inputs)
         if plan is None:
+            # Keep the lookup identity above unchanged for frozen legacy plans.
+            # New plans bind the round's frozen discovery evidence into each
+            # task before selection. It is archived evidence, not an attestation
+            # that any source was fetched or independently verified.
+            context_refs = predecessors[:]
+            known_refs = {ref["id"] for ref in context_refs}
+            for ref in self.discovery_refs:
+                if ref["id"] not in known_refs:
+                    context_refs.append(ref)
+                    known_refs.add(ref["id"])
             blocks = self._context_blocks()
             tasks = []
             phase_goals = _GOALS.get(phase, _GOALS["primary-evidence"])
@@ -240,13 +267,16 @@ class _Run:
                     "as a material new gap is found. Return full research notes and evidence for later synthesis; "
                     "do not write the final report."
                 )
-                selection = self.policy.select(_copy(blocks), query=goal)
+                # Blocks contain only immutable strings. Isolate the mutable
+                # containers without serializing/copying full evidence five
+                # times per phase, especially with large model envelopes.
+                selection = self.policy.select([dict(block) for block in blocks], query=goal)
                 if not isinstance(selection, dict) or not isinstance(selection.get("text"), str):
                     raise AgenticResearchHalt("context_selection")
-                context_ref = self.workspace.put_artifact(selection["text"], "phase_context")
+                context_ref = self.persist(self.workspace.put_artifact, selection["text"], "phase_context")
                 task_inputs = {
                     "schema": SCHEMA, "run": self.run_hash, "phase": phase, "question": question,
-                    "focus": focus, "goal": goal, "context_refs": predecessors,
+                    "focus": focus, "goal": goal, "context_refs": context_refs,
                     "context_ref": context_ref, "policy": self.inputs["context_policy"],
                 }
                 task_id = "ar-" + _hash(task_inputs)
@@ -254,11 +284,11 @@ class _Run:
                     "id": task_id, "phase": phase, "question": question, "focus": focus,
                     "role": focus, "kind": "investigate", "goal": goal,
                     "depth": self.inputs["depth"], "language": self.inputs["language"],
-                    "context_refs": predecessors, "context_ref": context_ref,
+                    "context_refs": context_refs, "context_ref": context_ref,
                 }
                 tasks.append({"task": task, "inputs": task_inputs, "selection": selection})
             plan = {"tasks": tasks}
-            self.workspace.save_task(plan_id, plan_inputs, plan)
+            self.persist(self.workspace.save_task, plan_id, plan_inputs, plan)
         if not isinstance(plan, dict) or not isinstance(plan.get("tasks"), list) or len(plan["tasks"]) != 5:
             raise AgenticResearchHalt("identity_or_workspace")
         return plan
@@ -290,25 +320,28 @@ class _Run:
             finally:
                 with callback_mutex:
                     callback_open = False
+            # A timed-out callback may return a very large result. Do not copy
+            # or serialize it once the controller has already closed admission.
+            self.check()
             result = _validate_result(value)
             with self.mutex:
                 self.check()
-                ref = self.workspace.put_artifact(_canonical(result), "worker_result")
-                blocks = [{"ref": self.workspace.put_artifact(result["text"], "worker_output"), "kind": "worker_output"}]
+                ref = self.persist(self.workspace.put_artifact, _canonical(result), "worker_result")
+                blocks = [{"ref": self.persist(self.workspace.put_artifact, result["text"], "worker_output"), "kind": "worker_output"}]
                 for text in result["evidence"]:
-                    blocks.append({"ref": self.workspace.put_artifact(text, "evidence"), "kind": "evidence"})
+                    blocks.append({"ref": self.persist(self.workspace.put_artifact, text, "evidence"), "kind": "evidence"})
                 for source in result["sources"]:
-                    block = {"ref": self.workspace.put_artifact(_canonical(source), "source"), "kind": "source"}
+                    block = {"ref": self.persist(self.workspace.put_artifact, _canonical(source), "source"), "kind": "source"}
                     if isinstance(source.get("url"), str):
                         block["source_url"] = source["url"]
                     blocks.append(block)
                 for question in result["discoveries"]:
                     if question.strip():
-                        self.workspace.add_discovery(question, task_id, [ref])
+                        self.persist(self.workspace.add_discovery, question, task_id, [ref])
                 record = {"task": task, "output_ref": ref, "blocks": blocks, "result_sha256": _hash(result)}
                 self.check()
-                self.workspace.save_task(task_id, item["inputs"], record)
-                self.workspace.append_event(task_id, "task_done", {"output_ref": ref})
+                self.persist(self.workspace.save_task, task_id, item["inputs"], record)
+                self.persist(self.workspace.append_event, task_id, "task_done", {"output_ref": ref})
                 self.executed += 1
                 return record
         except BaseException as exc:
@@ -328,10 +361,9 @@ class _Run:
             task = item["task"]
             if task["id"] != "ar-" + _hash(item["inputs"]):
                 raise AgenticResearchHalt("identity_or_workspace")
-            context = self.workspace.read_artifact(task["context_ref"])
-            saved = self.workspace.load_task(task["id"], item["inputs"])
+            saved = self.persist(self.workspace.load_task, task["id"], item["inputs"])
             if saved is None:
-                missing.append((item, context))
+                missing.append((item, self.workspace.read_artifact(task["context_ref"])))
             else:
                 if saved["task"] != task:
                     raise AgenticResearchHalt("identity_or_workspace")
@@ -368,7 +400,7 @@ class _Run:
         if len(outputs) != 5:
             raise self.halt("phase_incomplete")
         ordered = [outputs[item["task"]["id"]] for item in plan["tasks"]]
-        self.workspace.append_event("agentic-run", "phase_done", {"phase": phase, "task_ids": list(outputs)})
+        self.persist(self.workspace.append_event, "agentic-run", "phase_done", {"phase": phase, "task_ids": list(outputs)})
         self.records.extend(ordered)
 
     def execute(self, max_followups, max_rounds):
@@ -381,29 +413,37 @@ class _Run:
         for phase in PHASES:
             self.run_phase(phase, self.inputs["question"])
         admitted = []
+        admitted_questions = {" ".join(self.inputs["question"].split()).casefold()}
         rounds = 0
         for round_index in range(1, max_rounds + 1):
             self.check()
             round_inputs = {"run": self.run_hash, "round": round_index, "admitted": admitted[:]}
             round_id = f"agentic-round-{round_index}"
-            plan = self.workspace.load_task(round_id, round_inputs)
+            plan = self.persist(self.workspace.load_task, round_id, round_inputs)
             if plan is None:
-                root = " ".join(self.inputs["question"].split()).casefold()
-                candidates = [d for d in self.workspace.discoveries()
-                              if d["id"] not in admitted and " ".join(d["question"].split()).casefold() != root]
-                candidates.sort(key=lambda d: d["id"])
+                # Deduplicate only new admissions. Never rewrite a persisted
+                # round, merge observations, or reinterpret punctuation/meaning.
+                seen_questions = set(admitted_questions)
+                candidates = []
+                for discovery in sorted(self.workspace.discoveries(), key=lambda d: d["id"]):
+                    normalized = " ".join(discovery["question"].split()).casefold()
+                    if discovery["id"] not in admitted and normalized not in seen_questions:
+                        candidates.append(discovery)
+                        seen_questions.add(normalized)
                 plan = {"discoveries": candidates[:max(0, max_followups - len(admitted))]}
-                self.workspace.save_task(round_id, round_inputs, plan)
+                self.persist(self.workspace.save_task, round_id, round_inputs, plan)
             if not plan["discoveries"]:
                 break
             rounds += 1
             for discovery in plan["discoveries"]:
                 discovery_id = discovery["id"]
                 phase = "followup-" + _hash({"id": discovery_id, "question": discovery["question"]})
-                self.workspace.mark_discovery(discovery_id, "dispatched", task_id=phase)
+                self.persist(self.workspace.mark_discovery, discovery_id, "dispatched", task_id=phase)
+                self.discovery_refs = discovery["evidence_refs"]
                 self.run_phase(phase, discovery["question"])
-                self.workspace.mark_discovery(discovery_id, "completed", task_id=phase)
+                self.persist(self.workspace.mark_discovery, discovery_id, "completed", task_id=phase)
                 admitted.append(discovery_id)
+                admitted_questions.add(" ".join(discovery["question"].split()).casefold())
             if len(admitted) >= max_followups:
                 break
         self.check()
@@ -418,6 +458,15 @@ class _Run:
             sources.extend(result["sources"])
             refs.append(record["output_ref"])
             refs.extend(block["ref"] for block in record["blocks"])
+        # Preserve the existing result/ref order, then expose discovery-only
+        # evidence bound by new plans for downstream local recall. Frozen legacy
+        # tasks have no extra references and produce the same output as before.
+        known_refs = {ref["id"] for ref in refs}
+        for record in self.records:
+            for ref in record["task"]["context_refs"]:
+                if ref["id"] not in known_refs:
+                    refs.append(ref)
+                    known_refs.add(ref["id"])
         self.check()
         stats = {
             "completed_tasks": len(self.records), "executed_tasks": self.executed,
@@ -425,7 +474,7 @@ class _Run:
             "followup_questions": len(admitted), "discovery_rounds": rounds,
             "deferred_discoveries": deferred, "worker_limit": self.workers,
         }
-        self.workspace.append_event("agentic-run", "research_complete", stats)
+        self.persist(self.workspace.append_event, "agentic-run", "research_complete", stats)
         return {"text": "\n\n".join(texts), "evidence": evidence, "discoveries": discoveries,
                 "stats": stats, "evidence_refs": refs, "sources": sources}
 

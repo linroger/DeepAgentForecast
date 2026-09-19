@@ -42,6 +42,7 @@ import unicodedata
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Callable, Optional
 
 from ..config import Config
@@ -1319,6 +1320,23 @@ _RUNTIME_SKILL_SYNC_HELPER_PATH = os.path.abspath(os.path.join(
 ))
 
 
+_RESEARCH_PROFILE_HELPER_PATH = os.path.abspath(os.path.join(
+    os.path.dirname(__file__), "../../../deerflow_bridge/research_profiles.py"))
+
+
+@lru_cache(maxsize=1)
+def _research_profile_module():
+    # The backend can start with only backend/ on sys.path. Load the fixed,
+    # repository-owned pure policy helper rather than depending on a root import.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_drf_research_profiles", _RESEARCH_PROFILE_HELPER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("research profile helper unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
     """启动研究子进程前的漂移防护（2026-07-03 live-surfaced）。
 
@@ -1412,12 +1430,12 @@ def _sync_deerflow_bridge_if_stale(deerflow_dir: str) -> dict[str, Any]:
             "market_tools.py", "search_tools.py", "cached_fetch.py",
             "research_budget.py", "linear_research.py", "research_compaction.py",
             "research_workspace.py", "research_context.py", "research_archive.py",
-            "agentic_research.py", "agentic_bridge.py", "research_quality.py", "research_synthesis.py", "research_admission.py", "research_invocation.py",
+            "agentic_research.py", "agentic_bridge.py", "research_quality.py", "research_synthesis.py", "research_admission.py", "research_invocation.py", "research_profiles.py", "research_scenarios.py",
         ):
             _tool_src = os.path.join(bridge_dir, _tool_mod)
             if os.path.isfile(_tool_src):
                 pairs.append((_tool_src, os.path.join(deerflow_dir, _tool_mod)))
-                if _tool_mod in {"research_compaction.py", "research_workspace.py", "research_context.py", "research_archive.py", "research_admission.py"}:
+                if _tool_mod in {"research_compaction.py", "research_workspace.py", "research_context.py", "research_archive.py", "research_admission.py", "research_profiles.py"}:
                     # The native Gateway starts in backend/ with PYTHONPATH=.;
                     # keep its helper identical to the root bridge's import.
                     pairs.append((
@@ -2226,7 +2244,12 @@ class DeerFlowResearchRunner:
             cmd += ["--synthesis-manifest", str(synthesis_manifest_path)]
 
         env = dict(os.environ)
-        engine = research_engine or env.get("RESEARCH_ENGINE") or "hybrid"
+        select_engine = _research_profile_module().select_engine
+        prior_meta = _read_json(os.path.join(handoff_dir, "meta.json")) if resume else {}
+        if prior_meta is not None and not isinstance(prior_meta, dict):
+            raise ValueError("invalid saved research metadata")
+        engine = select_engine(research_engine or env.get("RESEARCH_ENGINE"), resume=resume,
+                               saved_engine=(prior_meta or {}).get("research_engine"))
         if engine not in {"hybrid", "agentic", "linear"}:
             raise ValueError("unsupported research engine")
         env["RESEARCH_ENGINE"] = engine
@@ -2306,8 +2329,10 @@ class DeerFlowResearchRunner:
         env["RESEARCH_GLOBAL_SUBAGENT_CAP"] = str(
             max(1, int(getattr(Config, "RESEARCH_GLOBAL_SUBAGENT_CAP", 9))))
         if engine == "agentic":
-            env["RESEARCH_GLOBAL_SUBAGENT_CAP"] = "5"
-            env["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = "5"
+            # Five is the default/maximum, not permission to widen a smaller
+            # explicitly configured provider or worker envelope.
+            env["RESEARCH_GLOBAL_SUBAGENT_CAP"] = str(min(5, int(env["RESEARCH_GLOBAL_SUBAGENT_CAP"])))
+            env["RESEARCH_MODEL_CONCURRENCY_GLOBAL"] = str(min(5, max(1, int(env.get("RESEARCH_MODEL_CONCURRENCY_GLOBAL", "5")))))
             env["RESEARCH_SYNTHESIS_WORKERS"] = "5"
             env["RESEARCH_AGENTIC_WORKERS"] = "5"
         # LOOP-009: prediction_market_search runs inside the DeerFlow agent and
@@ -12298,10 +12323,12 @@ class PipelineOrchestrator:
             _evidence_manifest_path = os.path.join(
                 handoff_dir, "evidence_synthesis_manifest.json")
             _synthesis_recovery_manifest: Optional[str] = None
+            _publication_rejected = False
             if _report_candidate:
                 if _contract_present:
                     _integrity_valid = _validate_research_contract(handoff_dir)
                     if not _integrity_valid:
+                        _publication_rejected = True
                         logger.warning(
                             "[%s] 研究 contract manifest 校验失败，拒绝复用混合/篡改产物",
                             state.pipeline_id,
@@ -12315,6 +12342,7 @@ class PipelineOrchestrator:
                                 _evidence_manifest_path),
                         )
                         if _quality_errors:
+                            _publication_rejected = True
                             logger.warning(
                                 "[%s] 研究 contract 完整但未通过发布质量门（%s）；"
                                 "拒绝复用并仅重跑全局综合",
@@ -12339,6 +12367,34 @@ class PipelineOrchestrator:
                 # report.  Lane packs are still independently checksummed by
                 # this manifest, so recover synthesis without replaying research.
                 _synthesis_recovery_manifest = _evidence_manifest_path
+            if not _reuse_research and not _synthesis_recovery_manifest:
+                prior_meta = _read_json(os.path.join(handoff_dir, "meta.json")) or {}
+                prior_judge = _read_json(os.path.join(handoff_dir, "research_report_judge.json")) or {}
+                prior_gate = prior_meta.get("research_report_quality_gate") if isinstance(prior_meta, dict) else None
+                from .research_quality_gate import is_agentic_quality
+                failed_judge = (not is_agentic_quality(prior_meta) and isinstance(prior_judge, dict)
+                                and str(prior_judge.get("verdict", "")).upper() == "FAIL")
+                failed_gate = isinstance(prior_gate, dict) and prior_gate.get("passed") is False
+                failed_actor = False
+                for actor_dir in [handoff_dir, *sorted(glob.glob(os.path.join(handoff_dir, "track_*")))]:
+                    actor_meta = _read_json(os.path.join(actor_dir, "meta.json")) or {}
+                    actor_judge = _read_json(os.path.join(actor_dir, "actor_dossier_judge.json")) or {}
+                    if (not is_agentic_quality(actor_meta) and isinstance(actor_judge, dict)
+                            and str(actor_judge.get("verdict", "")).upper() == "FAIL"):
+                        failed_actor = True
+                        break
+                invalid_contract = _contract_present and not _report_candidate and not _validate_research_contract(handoff_dir)
+                if _publication_rejected or failed_judge or failed_gate or failed_actor or invalid_contract:
+                    state.options["research_recovery_stop"] = {
+                        "reason": "publication_rejected_without_verified_synthesis_inputs",
+                        "automatic_research_replay": False,
+                    }
+                    PipelineManager.save(state)
+                    raise RuntimeError(
+                        "Saved research failed publication checks and has no verified synthesis recovery manifest; "
+                        "automatic full research replay is blocked. Preserve the artifacts and restore verified "
+                        "synthesis inputs, or explicitly start a new pipeline for fresh research."
+                    )
             if _reuse_research:
                 upd(95, "复用已有研究报告，跳过 DeerFlow 研究阶段…")
                 research = _load_research_handoff(handoff_dir)

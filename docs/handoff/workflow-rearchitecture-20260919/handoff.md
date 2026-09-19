@@ -2,7 +2,7 @@
 
 Last updated (UTC): 2026-09-18T21:53:05.823913+00:00
 Status: Current implementation unit Complete (RX-00/RX-01); overall rearchitecture In Progress.
-Current focus: RX-00/RX-01 and the user-prioritized durable agentic research slice are verified offline. See docs/handoff/agentic-research-20260919/handoff.md. Next is RX-02 ontology input binding followed by RX-03 owned invalidation; remote publication remains blocked by GitHub authentication.
+Current focus: RX-00/RX-01, durable agentic research, and the GLM-5.3/judge-hardening slice are verified offline. See docs/handoff/agentic-research-20260919/handoff.md. Next is RX-02 ontology input binding followed by RX-03 owned invalidation; remote publication remains blocked by GitHub authentication.
 
 ## 1) Request and context
 Study backend, deerflow_bridge, drf2, and the requested DeerFlow vendor backend/harness; rearchitect and optimize every stage and its connections on a new branch. The earlier request also asks for an evidence-based recurring-workflow shortlist and only high-confidence missing assets.
@@ -85,3 +85,5 @@ Preserve actor/source semantics, base-fork immutability, and missing-versus-corr
 - 2026-09-18T21:53:05.823913+00:00: Refreshed the current handoff sections after final readback so the approval, implementation, verification and remaining-work summary agrees with the appended history. Historical failed checks and their corrections remain recorded.
 
 2026-09-19T10:51:16.874535+00:00: Completed the user-prioritized agentic research unit after approval. Final4844 backend passes/12 skips/11 expected failures; zero network attempts/source drift, native config smoke and independent review closed. Scope/details/hashes: docs/research/agentic-research-20260919/verification.json. This supersedes the earlier next-work ordering, not the whole rearchitecture status.
+
+2026-09-19T12:55:32.861546+00:00: GLM/judge source unit verified with 5085 backend passes plus34 native SDK checks, no unexpected failures, no network attempts or source drift. Full profile/recovery/canonical-frame work, cross-reviews and saved-run forensics are recorded in the focused agentic handoff and glm-verification.json. Live deployment is separate; all historical token/billing uncertainty remains explicit.

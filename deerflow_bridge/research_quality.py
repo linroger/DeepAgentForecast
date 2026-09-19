@@ -30,6 +30,9 @@ factual accuracy, source retrieval, semantic citation support, or actor provenan
 from __future__ import annotations
 
 import hashlib
+import importlib.util
+from functools import lru_cache
+from pathlib import Path
 import json
 import math
 import re
@@ -49,6 +52,7 @@ _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 _HEADING = re.compile(r"^ {0,3}(#{1,6})\s+\S.*$")
 _CITATION = re.compile(r"\[S([1-9][0-9]*)\]")
 _CITATION_LIKE = re.compile(r"\[S(?=[0-9\s#?+\-\]]|$)[^\]\n]*(?:\]|$)", re.MULTILINE)
+_REFERENCE_LABEL = re.compile(r"\[([^\]\n]*)\]")
 _URL = re.compile(r"https?://[^\s<>\[\]]+")
 _ERROR_LINE = re.compile(
     r"^(?:#{1,6}\s+|[-*>]\s*)*(?:"
@@ -181,10 +185,11 @@ def _valid_url(value) -> bool:
         return False
 
 
-def _link_target(tail: str) -> str | None:
-    """Read one adjacent Markdown link, including balanced URL parentheses."""
+def _link_target(text: str, start: int = 0) -> str | None:
+    """Read an adjacent Markdown link without copying the remaining report."""
     depth = 0
-    for index, char in enumerate(tail):
+    for index in range(start, len(text)):
+        char = text[index]
         if char == "\n":
             break
         if char == "(":
@@ -194,7 +199,7 @@ def _link_target(tail: str) -> str | None:
             if depth == 0:
                 match = re.fullmatch(
                     r'''(?:<([^<>]*)>|(\S+?))(?:[ \t]+(?:"[^"\n]*"|'[^'\n]*'))?''',
-                    tail[1:index],
+                    text[start + 1:index],
                 )
                 return (match[1] or match[2]) if match else None
     return None
@@ -252,13 +257,13 @@ def _check_sources(sources, prose: str, errors: list[str], warnings: list[str]) 
         if match[1] not in urls:
             errors.append(f"citation_unresolved:S{match[1]}")
         # Markdown [S1](url) explicitly binds this marker to a URL.
-        tail = prose[match.end():]
-        if tail.startswith("("):
-            target = _link_target(tail)
+        end = match.end()
+        if prose.startswith("(", end):
+            target = _link_target(prose, end)
             if not _valid_url(target) or target != urls.get(match[1]):
                 errors.append(f"citation_url_mismatch:S{match[1]}")
-        elif tail.startswith("["):
-            reference = re.match(r"\[([^\]\n]*)\]", tail)
+        elif prose.startswith("[", end):
+            reference = _REFERENCE_LABEL.match(prose, end)
             label = _reference_label(reference[1] or f"S{match[1]}") if reference else ""
             target = references.get(label)
             if not _valid_url(target) or target != urls.get(match[1]):
@@ -346,9 +351,15 @@ def _scenario_restatements(prose: str, names: dict[str, float]):
             if len(cells) != len(header):
                 break
             name = cells[name_column].casefold()
+            canonical = all(re.fullmatch(r"sc[1-4]", key) for key in names)
+            if canonical:
+                stable = re.match(r"^(sc[1-4])(?:\s*$|\s*[—–:-])", name)
+                name = stable[1] if stable else "__unbound__"
             percent = _PERCENT.fullmatch(cells[weight_column])
             if name in names and percent:
                 yield name, float(percent[1])
+            elif canonical:
+                yield name, None
 
 
 def _check_scenarios(frame, prose: str, errors: list[str], warnings: list[str]) -> None:
@@ -379,9 +390,41 @@ def _check_scenarios(frame, prose: str, errors: list[str], warnings: list[str]) 
         return
     if not math.isclose(math.fsum(names.values()), 100.0, rel_tol=0.0, abs_tol=1e-6):
         errors.append("scenario_weights_total_not_100")
+    seen = set()
+    canonical = all(re.fullmatch(r"sc[1-4]", key) for key in names)
     for name, weight in _scenario_restatements(prose, names):
-        if not math.isclose(weight, names[name], rel_tol=0.0, abs_tol=1e-6):
+        if name not in names:
+            errors.append("scenario_probability_table_has_unbound_identity")
+            continue
+        seen.add(name)
+        if weight is None:
+            errors.append(f"scenario_probability_unparseable:{name}")
+        elif not math.isclose(weight, names[name], rel_tol=0.0, abs_tol=1e-6):
             errors.append(f"scenario_restatement_mismatch:{name}")
+    if canonical and seen != set(names):
+        errors.append("canonical_scenario_frame_not_fully_represented")
+    if canonical:
+        lines = prose.splitlines()
+        for index in range(len(lines) - 2):
+            header = [cell.casefold() for cell in _table_cells(lines[index])]
+            separator = _table_cells(lines[index + 1])
+            if "|" not in lines[index] or not separator or not all(re.fullmatch(r":?-{3,}:?", cell) for cell in separator):
+                continue
+            name_col = next((i for i, cell in enumerate(header) if cell in _SCENARIO_HEADERS), None)
+            weight_col = next((i for i, cell in enumerate(header) if cell in _WEIGHT_HEADERS), None)
+            if name_col is None or weight_col is None:
+                continue
+            ids = []
+            cursor = index + 2
+            while cursor < len(lines) and "|" in lines[cursor]:
+                cells = _table_cells(lines[cursor])
+                if len(cells) != len(header):
+                    break
+                match = re.match(r"^(sc[1-4])(?:\s*$|\s*[—–:-])", cells[name_col].casefold())
+                ids.append(match[1] if match else "__unbound__")
+                cursor += 1
+            if len(ids) != len(names) or set(ids) != set(names):
+                errors.append("canonical_scenario_table_ids_invalid")
 
 
 def evaluate_report(report: str, sources: list, *, actor_audit: dict | None = None,
@@ -431,8 +474,24 @@ def evaluate_report(report: str, sources: list, *, actor_audit: dict | None = No
     }
 
 
+@lru_cache(maxsize=1)
+def _scenario_module():
+    spec = importlib.util.spec_from_file_location("_quality_scenarios", Path(__file__).with_name("research_scenarios.py"))
+    if spec is None or spec.loader is None:
+        raise ValueError("scenario validation module unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _canonical_frame_input(frame):
+    return (isinstance(frame, list) and bool(frame)
+            and all(isinstance(row, dict) and isinstance(row.get("name"), str)
+                    and re.fullmatch(r"SC[1-4]", row["name"], re.I) for row in frame))
+
+
 def make_receipt(report: str, sources: list, advisory=None, *, actor_audit: dict | None = None,
-                 scenario_frame: list | None = None, min_chars=400) -> dict:
+                 scenario_frame: list | None = None, min_chars=400, scenario_contract=None) -> dict:
     """Snapshot the complete gate result and replay inputs, separate from advice.
 
     Defective reports yield failed receipts. Non-JSON or non-UTF-8 inputs raise
@@ -451,6 +510,13 @@ def make_receipt(report: str, sources: list, advisory=None, *, actor_audit: dict
     receipt = evaluate_report(report, sources, **inputs)
     receipt.update(gate_version=GATE_VERSION, inputs=inputs,
                    advisory=json.loads(_canonical(advisory)))
+    if scenario_contract is not None:
+        contract = _scenario_module().parse_frame(scenario_contract)
+        if _scenario_module().probability_frame(contract) != inputs["scenario_frame"]:
+            raise ValueError("scenario contract does not match probability frame")
+        receipt["scenario_contract"] = contract
+    elif _canonical_frame_input(scenario_frame):
+        raise ValueError("canonical scenario contract is required")
     receipt["receipt_sha256"] = _sha256(_canonical(receipt))
     return receipt
 
@@ -461,7 +527,7 @@ def validate_receipt(receipt, report: str, sources: list) -> list[str]:
     Unknown versions and fields fail closed. This verifies content and recorded
     optional checks, not their producer authority or the run's required policy.
     """
-    if type(receipt) is not dict or set(receipt) != _RECEIPT_KEYS:
+    if type(receipt) is not dict or set(receipt) not in (_RECEIPT_KEYS, _RECEIPT_KEYS | {"scenario_contract"}):
         return ["receipt_schema_invalid"]
     try:
         _canonical(receipt)
@@ -474,6 +540,15 @@ def validate_receipt(receipt, report: str, sources: list) -> list[str]:
     inputs = receipt["inputs"]
     if type(inputs) is not dict or set(inputs) != _INPUT_KEYS:
         return errors + ["receipt_inputs_invalid"]
+    if "scenario_contract" in receipt:
+        try:
+            contract = _scenario_module().parse_frame(receipt["scenario_contract"])
+            if contract != receipt["scenario_contract"] or _scenario_module().probability_frame(contract) != inputs["scenario_frame"]:
+                errors.append("receipt_scenario_contract_mismatch")
+        except (ValueError, TypeError):
+            errors.append("receipt_scenario_contract_invalid")
+    elif _canonical_frame_input(inputs.get("scenario_frame")):
+        errors.append("receipt_scenario_contract_missing")
     expected_hash = _sha256(_canonical({key: value for key, value in receipt.items() if key != "receipt_sha256"}))
     if receipt["receipt_sha256"] != expected_hash:
         errors.append("receipt_hash_mismatch")

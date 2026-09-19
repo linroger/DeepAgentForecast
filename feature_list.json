@@ -186,5 +186,20 @@
       "Run guarded offline regression, native configuration smoke and independent review; document limits without asserting live-provider quality or speed."
     ],
     "passes": true
+  },
+  {
+    "id": "feature_glm53_agentic_hardening",
+    "category": "research-reliability",
+    "description": "Use model-aware GLM-5.3 research budgets and consistent agentic defaults, harden cancellation/recovery/evidence lookup, and prevent judge-driven research replay while retaining verified scenario/publication contracts.",
+    "steps": [
+      "Verify actual GLM capability and serialized mandatory-reasoning payload, context headroom and alternate-model bounds with explicit and pinned policies.",
+      "Exercise new CLI and parent defaults plus legacy resume compatibility and saved-policy drift rejection.",
+      "Search and recall large archived evidence using exact bounded ranges, detect index corruption and preserve prior archive snapshots on migration.",
+      "Race provider capacity cancellation, durable writes, late callbacks, cache writers and resume; prove no duplicate or over-cap provider admission.",
+      "Bind all report writers to one persisted scenario frame and independently replay its probabilities against final report/meta/receipt; preserve advisory judge semantics and critic model provenance.",
+      "Reproduce legacy report/actor judge failures with no synthesis manifest and verify repeated resumes launch no paid research and preserve artifacts.",
+      "Reconcile retained judge-loop evidence without claiming billing or mutating saved runs; pass focused and full offline gates and independent review."
+    ],
+    "passes": true
   }
 ]

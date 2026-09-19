@@ -50,6 +50,20 @@ _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _REF_KEYS = frozenset({"id", "sha256", "bytes", "path"})
 _LEASE_GUARD = threading.Lock()
 _ACTIVE_LEASES = {}
+_SEARCH_CHARS = 1024
+_SEARCH_OVERLAP = 128
+_SEARCH_SKIP_KINDS = frozenset({
+    "task_receipt", "assistant_delta", "assistant_chunk", "native_pass_message",
+    "unverified_partial_message",
+})
+
+
+def _search_terms(text):
+    """Literal Unicode terms, with CJK bigrams for scripts without spaces."""
+    terms = re.findall(r"[^\W_]+", text.casefold())
+    for run in re.findall(r"[\u3400-\u9fff]+", text):
+        terms.extend(run[index:index + 2] for index in range(len(run) - 1))
+    return list(dict.fromkeys(terms))
 
 
 class ResearchWorkspaceError(RuntimeError):
@@ -223,6 +237,7 @@ class ResearchWorkspace:
             # Validate every committed receipt before callers can start execution.
             self.snapshot()
             self._ensure_event_kind_index()
+            self._ensure_search_index()
         except (OSError, sqlite3.Error) as exc:
             raise ResearchWorkspaceError("workspace initialization failed") from exc
 
@@ -351,7 +366,8 @@ class ResearchWorkspace:
                 "CREATE TABLE metadata (singleton INTEGER PRIMARY KEY CHECK(singleton=1), "
                 "schema_version TEXT NOT NULL, identity_json TEXT NOT NULL, identity_sha256 TEXT NOT NULL)",
                 "CREATE TABLE artifacts (id TEXT PRIMARY KEY, sha256 TEXT NOT NULL, bytes INTEGER NOT NULL, "
-                "path TEXT NOT NULL, kind TEXT NOT NULL, record_sha256 TEXT NOT NULL)",
+                "path TEXT NOT NULL, kind TEXT NOT NULL, record_sha256 TEXT NOT NULL, "
+                "searchable INTEGER NOT NULL DEFAULT 0)",
                 "CREATE TABLE tasks (task_id TEXT PRIMARY KEY, inputs_json TEXT NOT NULL, "
                 "status TEXT NOT NULL CHECK(status IN ('pending','done')), receipt_json TEXT, "
                 "record_sha256 TEXT NOT NULL)",
@@ -376,6 +392,200 @@ class ResearchWorkspace:
             conn.execute("CREATE INDEX IF NOT EXISTS events_by_kind ON events(kind, id)")
             if [row[2] for row in conn.execute("PRAGMA index_info(events_by_kind)")] != ["kind", "id"]:
                 raise ResearchWorkspaceError("workspace event-kind index is corrupt")
+
+    def _ensure_search_index(self):
+        """Migrate only after base-store verification, atomically and once.
+
+        The FTS index stores terms, not a second full copy of retained text.
+        Authenticated chunk metadata maps hits to bounded original blob reads.
+        No corpus/index creation or reconciliation occurs on the query path.
+        """
+        with self._transaction(write=True) as conn:
+            self._ensure_search_eligibility(conn)
+            present = {row[0] for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE name IN ('evidence_chunks','evidence_search')",
+            )}
+            if present:
+                if len(present) != 2:
+                    raise ResearchWorkspaceError("incomplete evidence search index")
+                self._validate_search_index(conn)
+                return
+            conn.execute("CREATE TABLE evidence_chunks (id INTEGER PRIMARY KEY, artifact_id TEXT NOT NULL, "
+                         "start INTEGER NOT NULL, end INTEGER NOT NULL, byte_start INTEGER NOT NULL, "
+                         "byte_end INTEGER NOT NULL, sha256 TEXT NOT NULL, record_sha256 TEXT NOT NULL)")
+            conn.execute("CREATE UNIQUE INDEX evidence_chunks_by_artifact ON evidence_chunks(artifact_id,start)")
+            conn.execute("CREATE VIRTUAL TABLE evidence_search USING fts5(terms, content='')")
+            for row in conn.execute("SELECT * FROM artifacts ORDER BY rowid"):
+                record = self._verify("artifact", row)
+                if record["searchable"]:
+                    self._index_artifact(conn, record, record["kind"], self._artifact(conn, record))
+
+    def _ensure_search_eligibility(self, conn):
+        """Migrate internal eligibility without relabeling original evidence.
+
+        A SHA first seen in a streamed fragment may later be a complete result.
+        Its first kind/provenance remains intact; only discovery eligibility is
+        monotonic. Old indexed stores establish this from their existing chunk
+        membership as well as the original kind, then verify index completeness.
+        This migration occurs only after full base-store verification.
+        """
+        if "searchable" in {row[1] for row in conn.execute("PRAGMA table_info(artifacts)")}:
+            return
+        has_chunks = conn.execute("SELECT 1 FROM sqlite_master WHERE name='evidence_chunks'").fetchone()
+        conn.execute("ALTER TABLE artifacts ADD COLUMN searchable INTEGER NOT NULL DEFAULT 0")
+        for row in conn.execute("SELECT * FROM artifacts"):
+            old = dict(row)
+            old.pop("searchable")
+            record = self._verify("artifact", old)
+            was_indexed = has_chunks and conn.execute(
+                "SELECT 1 FROM evidence_chunks WHERE artifact_id=? LIMIT 1", (record["id"],),
+            ).fetchone()
+            record["searchable"] = int(bool(record["bytes"] and (
+                record["kind"] not in _SEARCH_SKIP_KINDS or was_indexed)))
+            conn.execute("UPDATE artifacts SET searchable=?,record_sha256=? WHERE id=?",
+                         (record["searchable"], self._digest("artifact", record), record["id"]))
+
+    def _validate_search_index(self, conn):
+        """Check startup completeness without copying retained artifact bodies.
+
+        A structurally valid FTS table can still have lost all its postings.
+        Verify both membership directions and contiguous authenticated chunk
+        coverage of every searchable artifact. Base blobs were already verified
+        by snapshot(); queries never run this corpus-wide metadata audit.
+        """
+        try:
+            conn.execute("INSERT INTO evidence_search(evidence_search) VALUES ('integrity-check')")
+        except sqlite3.Error as exc:
+            raise ResearchWorkspaceError("corrupt evidence search index postings") from exc
+        for query in (
+            "SELECT id FROM evidence_chunks EXCEPT SELECT rowid FROM evidence_search",
+            "SELECT rowid FROM evidence_search EXCEPT SELECT id FROM evidence_chunks",
+            "SELECT artifact_id FROM evidence_chunks EXCEPT SELECT id FROM artifacts",
+        ):
+            if conn.execute("SELECT 1 FROM (" + query + ") LIMIT 1").fetchone():
+                raise ResearchWorkspaceError("incomplete evidence search index membership")
+        step = _SEARCH_CHARS - _SEARCH_OVERLAP
+        for row in conn.execute("SELECT * FROM artifacts"):
+            record = self._verify("artifact", row)
+            previous = None
+            for row in conn.execute("SELECT * FROM evidence_chunks WHERE artifact_id=? ORDER BY start",
+                                    (record["id"],)):
+                chunk = self._verify("evidence_chunk", row)
+                if (not all(type(chunk[key]) is int for key in ("start", "end", "byte_start", "byte_end"))
+                        or not 0 <= chunk["start"] < chunk["end"]
+                        or chunk["end"] - chunk["start"] > _SEARCH_CHARS
+                        or not 0 <= chunk["byte_start"] < chunk["byte_end"] <= record["bytes"]
+                        or chunk["byte_end"] - chunk["byte_start"] > 4 * _SEARCH_CHARS
+                        or previous is None and (chunk["start"] != 0 or chunk["byte_start"] != 0)
+                        or previous is not None and (
+                            chunk["start"] != previous["start"] + step
+                            or previous["end"] != previous["start"] + _SEARCH_CHARS
+                            or chunk["end"] <= previous["end"]
+                            or not previous["byte_start"] < chunk["byte_start"] <= previous["byte_end"]
+                            or chunk["byte_end"] <= previous["byte_end"]
+                        )):
+                    raise ResearchWorkspaceError("incomplete evidence search index ranges")
+                previous = chunk
+            if ((previous is None and record["searchable"])
+                    or previous is not None and not record["searchable"]
+                    or previous is not None and previous["byte_end"] != record["bytes"]):
+                raise ResearchWorkspaceError("incomplete evidence search index artifact coverage")
+
+    def _index_artifact(self, conn, ref, kind, text):
+        record = self._verify("artifact", conn.execute("SELECT * FROM artifacts WHERE id=?", (ref["id"],)).fetchone())
+        if not text or kind in _SEARCH_SKIP_KINDS and not record["searchable"]:
+            return
+        if not record["searchable"]:
+            record["searchable"] = 1
+            conn.execute("UPDATE artifacts SET searchable=1,record_sha256=? WHERE id=?",
+                         (self._digest("artifact", record), ref["id"]))
+        if conn.execute("SELECT 1 FROM evidence_chunks WHERE artifact_id=? LIMIT 1", (ref["id"],)).fetchone():
+            return
+        byte_start = 0
+        step = _SEARCH_CHARS - _SEARCH_OVERLAP
+        for start in range(0, len(text), step):
+            end = min(start + _SEARCH_CHARS, len(text))
+            excerpt = text[start:end]
+            data = excerpt.encode("utf-8")
+            values = {"artifact_id": ref["id"], "start": start, "end": end,
+                      "byte_start": byte_start, "byte_end": byte_start + len(data),
+                      "sha256": hashlib.sha256(data).hexdigest()}
+            cursor = conn.execute("INSERT INTO evidence_chunks "
+                                  "(artifact_id,start,end,byte_start,byte_end,sha256,record_sha256) "
+                                  "VALUES (?,?,?,?,?,?,'')", tuple(values.values()))
+            values = {"id": cursor.lastrowid, **values}
+            conn.execute("UPDATE evidence_chunks SET record_sha256=? WHERE id=?",
+                         (self._digest("evidence_chunk", values), values["id"]))
+            conn.execute("INSERT INTO evidence_search(rowid,terms) VALUES (?,?)",
+                         (values["id"], " ".join(_search_terms(excerpt))))
+            if end == len(text):
+                break
+            byte_start += len(text[start:start + step].encode("utf-8"))
+
+    def _read_evidence_chunk(self, conn, row):
+        chunk = self._verify("evidence_chunk", row)
+        record = conn.execute("SELECT * FROM artifacts WHERE id=?", (chunk["artifact_id"],)).fetchone()
+        if record is None:
+            raise ResearchWorkspaceError("artifact receipt missing")
+        record = self._verify("artifact", record)
+        ref = self._validate_ref(record)
+        if (not all(type(chunk[key]) is int for key in ("start", "end", "byte_start", "byte_end"))
+                or not 0 <= chunk["start"] < chunk["end"] <= ref["bytes"]
+                or chunk["end"] - chunk["start"] > _SEARCH_CHARS
+                or not 0 <= chunk["byte_start"] < chunk["byte_end"] <= ref["bytes"]
+                or chunk["byte_end"] - chunk["byte_start"] > 4 * _SEARCH_CHARS):
+            raise ResearchWorkspaceError("invalid evidence chunk range")
+        path = self._safe_file(self.root / ref["path"])
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as stream:
+            status = os.fstat(stream.fileno())
+            if not stat.S_ISREG(status.st_mode) or status.st_size != ref["bytes"]:
+                raise ResearchWorkspaceError("artifact size or file type mismatch")
+            stream.seek(chunk["byte_start"])
+            data = stream.read(chunk["byte_end"] - chunk["byte_start"])
+        if hashlib.sha256(data).hexdigest() != chunk["sha256"]:
+            raise ResearchWorkspaceError("evidence chunk hash mismatch")
+        try:
+            excerpt = data.decode("utf-8")
+        except UnicodeError as exc:
+            raise ResearchWorkspaceError("evidence chunk encoding is corrupt") from exc
+        if len(excerpt) != chunk["end"] - chunk["start"]:
+            raise ResearchWorkspaceError("evidence chunk character range mismatch")
+        return {"artifact_id": ref["id"], "kind": _text(record["kind"], "artifact kind")[:80],
+                "bytes": ref["bytes"], "excerpt": excerpt, "start": chunk["start"], "end": chunk["end"],
+                "range_query": f'chars:{chunk["start"]}:{chunk["end"]}'}
+
+    def search_evidence(self, query: str, limit: int = 10) -> dict:
+        """Rank retained artifacts using literal terms and bounded exact ranges.
+
+        Results are discovery data, never source-status or factual assertions.
+        Each returned range is authenticated against its ingestion-time digest;
+        full-blob verification remains part of initialization and read_artifact.
+        """
+        if not isinstance(query, str) or not query.strip() or len(query) > 512:
+            raise ValueError("query must contain 1 to 512 characters")
+        if type(limit) is not int or not 1 <= limit <= 20:
+            raise ValueError("limit must be an integer from 1 to 20")
+        terms = _search_terms(query)
+        if len(terms) > 64:
+            raise ValueError("query contains more than 64 search terms")
+        results = []
+        with self._transaction() as conn:
+            if terms:
+                # No caller syntax reaches MATCH: punctuation/operators are
+                # literal quoted words, combined by our own OR expression.
+                match = " OR ".join('"' + term + '"' for term in terms)
+                rows = conn.execute(
+                    "WITH hits AS MATERIALIZED (SELECT c.*, bm25(evidence_search) AS score "
+                    "FROM evidence_search JOIN evidence_chunks c ON c.id=evidence_search.rowid "
+                    "WHERE evidence_search MATCH ?), "
+                    "ranked AS (SELECT id, row_number() OVER (PARTITION BY artifact_id "
+                    "ORDER BY score,start) AS choice,score FROM hits) "
+                    "SELECT c.* FROM ranked r JOIN evidence_chunks c ON c.id=r.id "
+                    "WHERE r.choice=1 ORDER BY r.score,c.artifact_id LIMIT ?", (match, limit),
+                ).fetchall()
+                results = [self._read_evidence_chunk(conn, row) for row in rows]
+        return {"query": query, "limit": limit, "results": results}
 
     @contextmanager
     def _transaction(self, *, write=False):
@@ -411,6 +621,9 @@ class ResearchWorkspace:
         digest = values.pop("record_sha256")
         if digest != self._digest(kind, values):
             raise ResearchWorkspaceError(f"corrupt {kind} record")
+        if kind == "artifact" and "searchable" in values and (
+                type(values["searchable"]) is not int or values["searchable"] not in (0, 1)):
+            raise ResearchWorkspaceError("corrupt artifact search eligibility")
         return values
 
     def _publish(self, destination, data):
@@ -464,10 +677,10 @@ class ResearchWorkspace:
         if row is not None:
             self._artifact(conn, ref)
             return
-        record = {**ref, "kind": kind}
-        conn.execute("INSERT INTO artifacts VALUES (?,?,?,?,?,?)", (
+        record = {**ref, "kind": kind, "searchable": 0}
+        conn.execute("INSERT INTO artifacts VALUES (?,?,?,?,?,?,?)", (
             ref["id"], ref["sha256"], ref["bytes"], ref["path"], kind,
-            self._digest("artifact", record),
+            self._digest("artifact", record), 0,
         ))
 
     def put_artifact(self, text: str, kind: str) -> dict:
@@ -484,6 +697,7 @@ class ResearchWorkspace:
         with self._transaction(write=True) as conn:
             self._publish(self.root / ref["path"], data)
             self._record_artifact(conn, ref, kind)
+            self._index_artifact(conn, ref, kind, text)
         return ref
 
     def read_artifact(self, ref: dict) -> str:

@@ -32,10 +32,10 @@ def is_agentic_quality(meta) -> bool:
     )
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def _bridge_module(filename: str) -> ModuleType:
     # The only callers use these repository-owned files, never an artifact path.
-    if filename not in {"research_quality.py", "deerflow_research.py"}:
+    if filename not in {"research_quality.py", "deerflow_research.py", "research_scenarios.py"}:
         raise ValueError("Unsupported research quality helper")
     spec = importlib.util.spec_from_file_location(
         "_drf_quality_" + Path(filename).stem, _BRIDGE / filename,
@@ -251,6 +251,17 @@ def _contract_errors(root: str, entries: dict, report: str | None) -> list[str]:
             errors.append(f"research_quality_replay_unavailable:{type(exc).__name__}")
         if isinstance(meta, dict):
             errors.extend(_actor_errors(meta, receipt, actual_report, sources))
+            recorded_frame = receipt.get("scenario_contract")
+            meta_frame = meta.get("research_scenario_frame")
+            if recorded_frame is not None or meta_frame is not None or meta.get("agentic_execution_policy"):
+                try:
+                    validator = _bridge_module("research_scenarios.py")
+                    parsed = validator.parse_frame(meta_frame)
+                    recorded = validator.parse_frame(recorded_frame)
+                    if parsed != recorded or validator.probability_frame(parsed) != receipt.get("inputs", {}).get("scenario_frame"):
+                        errors.append("research_quality_scenario_frame_mismatch")
+                except (ValueError, TypeError, KeyError):
+                    errors.append("research_quality_scenario_frame_invalid")
     return list(dict.fromkeys(errors))
 
 

@@ -407,12 +407,18 @@ def test_sync_applies_model_factory_metadata_overlay(tmp_path, monkeypatch):
     )
     _write(
         factory,
-        '''def create(model_config):
-    return model_config.model_dump(
+        '''def create_chat_model(model_config, thinking_enabled=False, **kwargs):
+    model_class = resolve_class(model_config.use, BaseChatModel)
+    model_settings_from_config = model_config.model_dump(
         exclude={
             "supports_vision",
         },
     )
+    if not model_config.supports_reasoning_effort:
+        kwargs.pop("reasoning_effort", None)
+        model_settings_from_config.pop("reasoning_effort", None)
+    model_instance = model_class(**kwargs, **model_settings_from_config)
+    return model_instance
 ''',
     )
 
@@ -428,6 +434,8 @@ def test_sync_applies_model_factory_metadata_overlay(tmp_path, monkeypatch):
 
     deployed = factory.read_text(encoding="utf-8")
     assert '"context_window_tokens"' in deployed
+    assert 'is_glm_53 = ' in deployed
+    assert 'from deerflow.models.patched_deepseek import PatchedChatDeepSeek' in deployed
     once = deployed
     _sync_deerflow_bridge_if_stale(str(deployed_dir))
     assert factory.read_text(encoding="utf-8") == once

@@ -13,7 +13,8 @@ sending. Independent calls must have independent outer scopes. Every normal or
 exceptional exit settles unreported usage conservatively. Process death leaves
 its reservation held permanently: restarting never refunds uncertain usage.
 
-The ledger pins its initial budget (default 4,000,000; explicit 0 is unlimited).
+The ledger pins its initial budget (workspace execution policy, or 4,000,000 for
+legacy identities; explicit environment override wins, and 0 is unlimited).
 Changing that setting on resume fails closed, rather than resetting allowance.
 Only hashes, operation IDs, counters and static state/reason codes are stored.
 No prompt, tool schema, response content or credentials enter the database.
@@ -125,6 +126,19 @@ def _configured_limit():
 
 def _count(value):
     return type(value) is int and 0 <= value <= _MAX_INT
+
+
+def _workspace_limit(workspace):
+    """Resolve the pinned model policy without changing legacy identities."""
+    if "RESEARCH_AGENTIC_PROMPT_BUDGET_TOKENS" in os.environ:
+        return _configured_limit()
+    policy = workspace.identity.get("execution_policy")
+    if isinstance(policy, dict) and "prompt_budget_tokens" in policy:
+        limit = policy["prompt_budget_tokens"]
+        if not _count(limit):
+            raise ValueError("invalid workspace prompt budget")
+        return limit
+    return DEFAULT_PROMPT_BUDGET_TOKENS
 
 
 def _get(value, name, default=None):
@@ -489,7 +503,7 @@ def model_admission(messages, tools=None):
             current.extend(input_hash, estimate)
             ticket = current
         else:
-            ledger.initialize(_configured_limit())
+            ledger.initialize(_workspace_limit(workspace))
             ticket = ledger.reserve(input_hash, estimate)
     except Exception:
         _stop()
@@ -623,7 +637,7 @@ def snapshot(workspace) -> dict:
         with ledger.inspection() as readiness:
             if not ledger.path.exists():
                 # No calls yet: initialize on first admission, never from a read.
-                limit = _configured_limit()
+                limit = _workspace_limit(workspace)
                 return {
                     "schema_version": SCHEMA_VERSION, "workspace_sha256": ledger.identity,
                     "limit_input_tokens": limit, "spent_input_tokens": 0, "held_input_tokens": 0,

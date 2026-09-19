@@ -1,0 +1,2284 @@
+{
+  "schema_version": "judge-loop-audit/v1",
+  "generated_at_utc": "2026-09-19T11:54:59.979471+00:00",
+  "scope": {
+    "pipeline_id": "pipe_1ee2fae33f8c",
+    "accounting_denominator": "All retained research logs and distinct research budget databases for one pipeline; final report telemetry shown separately. No ensemble/simulation tokens added.",
+    "original_run_root": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c",
+    "worktree_root": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919",
+    "saved_artifacts_read_only": true,
+    "sqlite_access": "mode=ro&immutable=1; all observed WAL files empty or absent",
+    "privacy": "Only selected aggregates, codes, hashes, paths, line numbers and timestamps. No prompts, report prose, gap prose, credentials, URLs, raw messages or payloads."
+  },
+  "lineage": {
+    "matching_recent_pipeline_ids": [
+      "pipe_1ee2fae33f8c"
+    ],
+    "created_at": "2026-09-17T13:56:24.960773+00:00",
+    "updated_at": "2026-09-18T16:03:41.015635+00:00",
+    "status": "completed",
+    "resume_count": 29,
+    "budget_epoch_count": 15,
+    "distinct_budget_databases": 14,
+    "nonzero_budget_databases": 8,
+    "state_engine_pin": null,
+    "research_model_alias": "glm",
+    "final_handoff_engine": "linear",
+    "final_handoff_extract_only": true,
+    "final_handoff_started_at": "2026-09-18T09:52:50.186822+00:00",
+    "final_handoff_finished_at": "2026-09-18T09:56:23.221671+00:00",
+    "stages": {
+      "research": {
+        "status": "completed",
+        "started_at": "2026-09-18T08:40:00.321696+00:00",
+        "finished_at": "2026-09-18T09:56:23.264691+00:00"
+      },
+      "ontology": {
+        "status": "completed",
+        "started_at": "2026-09-18T08:49:23.660905+00:00",
+        "finished_at": "2026-09-18T08:50:19.899533+00:00"
+      },
+      "graph": {
+        "status": "completed",
+        "started_at": "2026-09-18T09:07:56.884352+00:00",
+        "finished_at": "2026-09-18T09:45:21.138374+00:00"
+      },
+      "prepare": {
+        "status": "completed",
+        "started_at": "2026-09-18T10:00:25.769085+00:00",
+        "finished_at": "2026-09-18T10:02:06.759854+00:00"
+      },
+      "run": {
+        "status": "completed",
+        "started_at": "2026-09-18T12:09:20.902184+00:00",
+        "finished_at": "2026-09-18T12:09:20.902184+00:00"
+      },
+      "report": {
+        "status": "completed",
+        "started_at": "2026-09-18T15:06:42.006980+00:00",
+        "finished_at": "2026-09-18T16:03:40.991924+00:00"
+      }
+    },
+    "judge_physical_model_identity": "not recorded in retained judge artifacts, usage phase lines, state model fields, or selected manifest/meta files",
+    "separate_report_stage_model_keys": [
+      "glm:glm-5.3"
+    ],
+    "artifact_presence": {
+      "evidence_synthesis_manifest.json": false,
+      "research_contract_manifest.json": false,
+      "research_checkpoint.json": true,
+      "evidence_pack.md": false,
+      "research_report.md": true,
+      "research_report_judge.json": true
+    },
+    "final_research_telemetry": {
+      "model": "glm",
+      "tokens_in": 0,
+      "tokens_out": 0,
+      "tokens_total": 0,
+      "tool_calls": 0,
+      "results": 0,
+      "wall_s": 213.7
+    },
+    "resume_count_is_not_full_research_replay_count": true
+  },
+  "research_usage": {
+    "summed_logged_aggregates": {
+      "in": 46780291,
+      "out": 2607892,
+      "total": 49388183,
+      "records": 145
+    },
+    "interpretation": "Sum of distinct log usage rows, not a certified provider token total or invoice. Native-turn aggregates lack request IDs; historical overlap/omission cannot be eliminated.",
+    "direct_judge_phase_usage": {
+      "in": 566379,
+      "out": 8859,
+      "total": 575238,
+      "records": 13
+    },
+    "native_turn_usage": {
+      "in": 44251150,
+      "out": 2095903,
+      "total": 46347053,
+      "records": 55
+    },
+    "llm_cache_partition": "unavailable in all retained research usage rows",
+    "by_log": [
+      {
+        "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+        "usage_line_count": 102,
+        "usage_line_range": [
+          84,
+          3432
+        ],
+        "observed_usage_sums": {
+          "in": 13470532,
+          "out": 1004600,
+          "total": 14475132,
+          "records": 102
+        },
+        "phase_aggregates": {
+          "native_turn_aggregate": {
+            "in": 11466196,
+            "out": 729923,
+            "total": 12196119,
+            "records": 26
+          },
+          "synthesis-outline": {
+            "in": 124319,
+            "out": 11365,
+            "total": 135684,
+            "records": 3
+          },
+          "synthesis-section-1": {
+            "in": 61859,
+            "out": 7008,
+            "total": 68867,
+            "records": 3
+          },
+          "synthesis-section-4": {
+            "in": 59644,
+            "out": 5658,
+            "total": 65302,
+            "records": 3
+          },
+          "synthesis-section-3": {
+            "in": 67015,
+            "out": 5897,
+            "total": 72912,
+            "records": 3
+          },
+          "synthesis-section-2": {
+            "in": 66960,
+            "out": 5085,
+            "total": 72045,
+            "records": 3
+          },
+          "synthesis-section-8": {
+            "in": 66030,
+            "out": 5299,
+            "total": 71329,
+            "records": 3
+          },
+          "synthesis-section-6": {
+            "in": 65642,
+            "out": 7085,
+            "total": 72727,
+            "records": 3
+          },
+          "synthesis-section-7": {
+            "in": 60966,
+            "out": 6987,
+            "total": 67953,
+            "records": 3
+          },
+          "synthesis-section-5": {
+            "in": 65104,
+            "out": 6642,
+            "total": 71746,
+            "records": 3
+          },
+          "synthesis-section-9": {
+            "in": 64790,
+            "out": 5465,
+            "total": 70255,
+            "records": 3
+          },
+          "synthesis-section-10": {
+            "in": 64509,
+            "out": 5196,
+            "total": 69705,
+            "records": 3
+          },
+          "synthesis-section-12": {
+            "in": 66586,
+            "out": 7067,
+            "total": 73653,
+            "records": 3
+          },
+          "synthesis-section-11": {
+            "in": 60794,
+            "out": 7187,
+            "total": 67981,
+            "records": 3
+          },
+          "synthesis-section-13": {
+            "in": 65708,
+            "out": 6255,
+            "total": 71963,
+            "records": 3
+          },
+          "synthesis-section-14": {
+            "in": 66318,
+            "out": 6063,
+            "total": 72381,
+            "records": 3
+          },
+          "synthesis-section-16": {
+            "in": 64825,
+            "out": 6475,
+            "total": 71300,
+            "records": 3
+          },
+          "synthesis-section-15": {
+            "in": 64902,
+            "out": 5872,
+            "total": 70774,
+            "records": 3
+          },
+          "synthesis-section-17": {
+            "in": 64918,
+            "out": 7132,
+            "total": 72050,
+            "records": 3
+          },
+          "synthesis-section-18": {
+            "in": 64860,
+            "out": 7308,
+            "total": 72168,
+            "records": 3
+          },
+          "synthesis-summary": {
+            "in": 70299,
+            "out": 5751,
+            "total": 76050,
+            "records": 3
+          },
+          "synthesis-section-19": {
+            "in": 42296,
+            "out": 6407,
+            "total": 48703,
+            "records": 2
+          },
+          "research-report-judge": {
+            "in": 268897,
+            "out": 3742,
+            "total": 272639,
+            "records": 6
+          },
+          "incremental-patch-judge-refine": {
+            "in": 89649,
+            "out": 7673,
+            "total": 97322,
+            "records": 2
+          },
+          "synthesis-section-20": {
+            "in": 18092,
+            "out": 2522,
+            "total": 20614,
+            "records": 1
+          },
+          "structured-extraction": {
+            "in": 142096,
+            "out": 93126,
+            "total": 235222,
+            "records": 3
+          },
+          "structured-extraction-recovery": {
+            "in": 87258,
+            "out": 30410,
+            "total": 117668,
+            "records": 2
+          }
+        },
+        "tool_log_event_count": 599,
+        "coverage": "Logged aggregates only; no provider request IDs, token-cache partition, or complete failed-attempt coverage."
+      },
+      {
+        "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+        "usage_line_count": 33,
+        "usage_line_range": [
+          185,
+          2670
+        ],
+        "observed_usage_sums": {
+          "in": 28880204,
+          "out": 1305436,
+          "total": 30185640,
+          "records": 33
+        },
+        "phase_aggregates": {
+          "native_turn_aggregate": {
+            "in": 28355399,
+            "out": 1068124,
+            "total": 29423523,
+            "records": 19
+          },
+          "actor-dossier-synthesis": {
+            "in": 227323,
+            "out": 232195,
+            "total": 459518,
+            "records": 7
+          },
+          "actor-dossier-judge": {
+            "in": 297482,
+            "out": 5117,
+            "total": 302599,
+            "records": 7
+          }
+        },
+        "tool_log_event_count": 953,
+        "coverage": "Logged aggregates only; no provider request IDs, token-cache partition, or complete failed-attempt coverage."
+      },
+      {
+        "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+        "usage_line_count": 5,
+        "usage_line_range": [
+          87,
+          682
+        ],
+        "observed_usage_sums": {
+          "in": 2877338,
+          "out": 169992,
+          "total": 3047330,
+          "records": 5
+        },
+        "phase_aggregates": {
+          "native_turn_aggregate": {
+            "in": 2877338,
+            "out": 169992,
+            "total": 3047330,
+            "records": 5
+          }
+        },
+        "tool_log_event_count": 117,
+        "coverage": "Logged aggregates only; no provider request IDs, token-cache partition, or complete failed-attempt coverage."
+      },
+      {
+        "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+        "usage_line_count": 5,
+        "usage_line_range": [
+          146,
+          510
+        ],
+        "observed_usage_sums": {
+          "in": 1552217,
+          "out": 127864,
+          "total": 1680081,
+          "records": 5
+        },
+        "phase_aggregates": {
+          "native_turn_aggregate": {
+            "in": 1552217,
+            "out": 127864,
+            "total": 1680081,
+            "records": 5
+          }
+        },
+        "tool_log_event_count": 102,
+        "coverage": "Logged aggregates only; no provider request IDs, token-cache partition, or complete failed-attempt coverage."
+      }
+    ]
+  },
+  "network_budget": {
+    "aggregation_rule": "Sum global counters once per distinct immutable database; JSON is a verified duplicate view. Never add lanes, current snapshots, application-lifetime leases, or deduplicate by stale payload epoch alone.",
+    "global_counters": {
+      "attempts": 4908,
+      "denied_fetch_global": 42,
+      "denied_fetch_lane": 162,
+      "denied_search_global": 75,
+      "fetch_attempts": 2194,
+      "fetch_negative_suppressed": 75,
+      "fetch_network": 1229,
+      "provider_firecrawl_circuit_opens": 9,
+      "provider_firecrawl_circuit_skips": 265,
+      "provider_firecrawl_transport_failures": 61,
+      "provider_jina_circuit_opens": 26,
+      "provider_jina_circuit_skips": 354,
+      "provider_jina_transport_failures": 51,
+      "search_attempts": 2714,
+      "search_network": 2626,
+      "search_singleflight_waits": 5,
+      "denied_search_lane": 8
+    },
+    "epoch_payload_id_mismatch_ordinals": [
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "epochs": [
+      {
+        "ordinal": 1,
+        "directory_epoch_id": "3c30d111-954a-4e7c-8d35-270165c66238",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-001-3c30d111-954a-4e7c-8d35-270165c66238/final_research_budget.json",
+        "snapshot_epoch_id": "3c30d111-954a-4e7c-8d35-270165c66238",
+        "created_at_utc": "2026-09-17T13:56:26.241445+00:00",
+        "updated_at_utc": "2026-09-17T15:49:23.845902+00:00",
+        "global_counters": {
+          "attempts": 1648,
+          "denied_fetch_global": 42,
+          "denied_fetch_lane": 18,
+          "denied_search_global": 75,
+          "fetch_attempts": 670,
+          "fetch_negative_suppressed": 24,
+          "fetch_network": 450,
+          "provider_firecrawl_circuit_opens": 2,
+          "provider_firecrawl_circuit_skips": 82,
+          "provider_firecrawl_transport_failures": 16,
+          "provider_jina_circuit_opens": 11,
+          "provider_jina_circuit_skips": 106,
+          "provider_jina_transport_failures": 15,
+          "search_attempts": 978,
+          "search_network": 900,
+          "search_singleflight_waits": 5
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": true,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-001-3c30d111-954a-4e7c-8d35-270165c66238/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 75,
+            "observations": 106,
+            "cache_hits": 106,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 56,
+            "distinct_url_hashes_in_database": 56
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 314,
+            "observations": 358,
+            "cache_hits": 44,
+            "noncache_observations": 314,
+            "distinct_receipts_in_database": 314,
+            "distinct_url_hashes_in_database": 314
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 389,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 818,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": 0
+      },
+      {
+        "ordinal": 2,
+        "directory_epoch_id": "676daad9-dd89-4a90-8d8f-c61cb9c63efa",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-002-676daad9-dd89-4a90-8d8f-c61cb9c63efa/final_research_budget.json",
+        "snapshot_epoch_id": "3c30d111-954a-4e7c-8d35-270165c66238",
+        "created_at_utc": "2026-09-17T16:48:42.016309+00:00",
+        "updated_at_utc": "2026-09-17T18:33:27.979746+00:00",
+        "global_counters": {
+          "attempts": 256,
+          "fetch_attempts": 74,
+          "fetch_network": 53,
+          "provider_firecrawl_transport_failures": 1,
+          "provider_jina_transport_failures": 1,
+          "search_attempts": 182,
+          "search_network": 182
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-002-676daad9-dd89-4a90-8d8f-c61cb9c63efa/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 13,
+            "observations": 15,
+            "cache_hits": 15,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 13,
+            "distinct_url_hashes_in_database": 13
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 51,
+            "observations": 58,
+            "cache_hits": 7,
+            "noncache_observations": 51,
+            "distinct_receipts_in_database": 51,
+            "distinct_url_hashes_in_database": 51
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 64,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 182,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 3,
+        "directory_epoch_id": "24a93a38-dc45-4361-9fc0-67b662b2283d",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-003-24a93a38-dc45-4361-9fc0-67b662b2283d/final_research_budget.json",
+        "snapshot_epoch_id": "3c30d111-954a-4e7c-8d35-270165c66238",
+        "created_at_utc": "2026-09-17T19:00:39.346012+00:00",
+        "updated_at_utc": "2026-09-17T19:58:41.082407+00:00",
+        "global_counters": {
+          "attempts": 249,
+          "fetch_attempts": 106,
+          "fetch_network": 61,
+          "provider_jina_transport_failures": 1,
+          "search_attempts": 143,
+          "search_network": 143
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-003-24a93a38-dc45-4361-9fc0-67b662b2283d/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 33,
+            "observations": 42,
+            "cache_hits": 42,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 33,
+            "distinct_url_hashes_in_database": 33
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 59,
+            "observations": 63,
+            "cache_hits": 4,
+            "noncache_observations": 59,
+            "distinct_receipts_in_database": 59,
+            "distinct_url_hashes_in_database": 59
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 92,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 143,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 4,
+        "directory_epoch_id": "811a4c7f-a77d-4ccd-9732-ab23df3937cb",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-004-811a4c7f-a77d-4ccd-9732-ab23df3937cb/final_research_budget.json",
+        "snapshot_epoch_id": "3c30d111-954a-4e7c-8d35-270165c66238",
+        "created_at_utc": "2026-09-17T23:11:19.369469+00:00",
+        "updated_at_utc": "2026-09-18T00:46:11.771169+00:00",
+        "global_counters": {
+          "attempts": 196,
+          "fetch_attempts": 72,
+          "fetch_network": 42,
+          "provider_jina_transport_failures": 3,
+          "search_attempts": 124,
+          "search_network": 124
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-004-811a4c7f-a77d-4ccd-9732-ab23df3937cb/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 22,
+            "observations": 28,
+            "cache_hits": 28,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 22,
+            "distinct_url_hashes_in_database": 22
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 36,
+            "observations": 41,
+            "cache_hits": 5,
+            "noncache_observations": 36,
+            "distinct_receipts_in_database": 36,
+            "distinct_url_hashes_in_database": 36
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 58,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 124,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 5,
+        "directory_epoch_id": "b3d33bdb-fef4-47bc-90a1-3ee2512daf92",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-005-b3d33bdb-fef4-47bc-90a1-3ee2512daf92/final_research_budget.json",
+        "snapshot_epoch_id": "3c30d111-954a-4e7c-8d35-270165c66238",
+        "created_at_utc": "2026-09-18T00:54:46.062494+00:00",
+        "updated_at_utc": "2026-09-18T00:54:46.097327+00:00",
+        "global_counters": {},
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-005-b3d33bdb-fef4-47bc-90a1-3ee2512daf92/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [],
+        "positive_cache_aggregates": [],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 6,
+        "directory_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-006-b7ac9011-88e6-4922-8cba-f2ad295d2071/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T01:02:52.134644+00:00",
+        "updated_at_utc": "2026-09-18T02:22:11.728701+00:00",
+        "global_counters": {
+          "attempts": 700,
+          "denied_fetch_lane": 52,
+          "fetch_attempts": 358,
+          "fetch_negative_suppressed": 20,
+          "fetch_network": 180,
+          "provider_firecrawl_circuit_opens": 2,
+          "provider_firecrawl_circuit_skips": 47,
+          "provider_firecrawl_transport_failures": 15,
+          "provider_jina_circuit_opens": 4,
+          "provider_jina_circuit_skips": 72,
+          "provider_jina_transport_failures": 8,
+          "search_attempts": 342,
+          "search_network": 342
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": true,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-006-b7ac9011-88e6-4922-8cba-f2ad295d2071/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 67,
+            "observations": 95,
+            "cache_hits": 95,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 67,
+            "distinct_url_hashes_in_database": 67
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 95,
+            "observations": 111,
+            "cache_hits": 16,
+            "noncache_observations": 95,
+            "distinct_receipts_in_database": 95,
+            "distinct_url_hashes_in_database": 95
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 162,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 300,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 7,
+        "directory_epoch_id": "24d52687-eae2-4e82-97d3-1b469cdda742",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-007-24d52687-eae2-4e82-97d3-1b469cdda742/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T02:40:26.383018+00:00",
+        "updated_at_utc": "2026-09-18T04:20:54.524114+00:00",
+        "global_counters": {
+          "attempts": 731,
+          "denied_fetch_lane": 38,
+          "denied_search_lane": 8,
+          "fetch_attempts": 361,
+          "fetch_negative_suppressed": 16,
+          "fetch_network": 180,
+          "provider_firecrawl_circuit_opens": 3,
+          "provider_firecrawl_circuit_skips": 76,
+          "provider_firecrawl_transport_failures": 12,
+          "provider_jina_circuit_opens": 4,
+          "provider_jina_circuit_skips": 92,
+          "provider_jina_transport_failures": 8,
+          "search_attempts": 370,
+          "search_network": 360
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-007-24d52687-eae2-4e82-97d3-1b469cdda742/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 66,
+            "observations": 116,
+            "cache_hits": 116,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 66,
+            "distinct_url_hashes_in_database": 66
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 74,
+            "observations": 91,
+            "cache_hits": 17,
+            "noncache_observations": 74,
+            "distinct_receipts_in_database": 74,
+            "distinct_url_hashes_in_database": 74
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 140,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 301,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 8,
+        "directory_epoch_id": "e05d082e-7ea6-4ccc-8cad-d197efeeeb24",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-008-e05d082e-7ea6-4ccc-8cad-d197efeeeb24/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T04:26:44.382709+00:00",
+        "updated_at_utc": "2026-09-18T06:15:03.617838+00:00",
+        "global_counters": {
+          "attempts": 715,
+          "denied_fetch_lane": 54,
+          "fetch_attempts": 366,
+          "fetch_negative_suppressed": 15,
+          "fetch_network": 180,
+          "provider_firecrawl_circuit_opens": 2,
+          "provider_firecrawl_circuit_skips": 60,
+          "provider_firecrawl_transport_failures": 14,
+          "provider_jina_circuit_opens": 4,
+          "provider_jina_circuit_skips": 84,
+          "provider_jina_transport_failures": 8,
+          "search_attempts": 349,
+          "search_network": 349
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-008-e05d082e-7ea6-4ccc-8cad-d197efeeeb24/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 73,
+            "observations": 114,
+            "cache_hits": 114,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 73,
+            "distinct_url_hashes_in_database": 73
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 81,
+            "observations": 91,
+            "cache_hits": 10,
+            "noncache_observations": 81,
+            "distinct_receipts_in_database": 81,
+            "distinct_url_hashes_in_database": 81
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 154,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 300,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 9,
+        "directory_epoch_id": "c671690e-a0e9-4ebf-a0c2-f91149482610",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-009-c671690e-a0e9-4ebf-a0c2-f91149482610/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T06:17:09.271039+00:00",
+        "updated_at_utc": "2026-09-18T07:23:20.921374+00:00",
+        "global_counters": {
+          "attempts": 413,
+          "fetch_attempts": 187,
+          "fetch_network": 83,
+          "provider_firecrawl_transport_failures": 3,
+          "provider_jina_circuit_opens": 3,
+          "provider_jina_transport_failures": 7,
+          "search_attempts": 226,
+          "search_network": 226
+        },
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-009-c671690e-a0e9-4ebf-a0c2-f91149482610/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [
+          {
+            "provider": "cache",
+            "rows": 72,
+            "observations": 104,
+            "cache_hits": 104,
+            "noncache_observations": 0,
+            "distinct_receipts_in_database": 72,
+            "distinct_url_hashes_in_database": 72
+          },
+          {
+            "provider": "firecrawl",
+            "rows": 69,
+            "observations": 76,
+            "cache_hits": 7,
+            "noncache_observations": 69,
+            "distinct_receipts_in_database": 69,
+            "distinct_url_hashes_in_database": 69
+          }
+        ],
+        "positive_cache_aggregates": [
+          {
+            "kind": "fetch",
+            "rows": 141,
+            "repeat_hits": 0
+          },
+          {
+            "kind": "search",
+            "rows": 215,
+            "repeat_hits": 0
+          }
+        ],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 10,
+        "directory_epoch_id": "f43c76d5-db24-4e5b-8c2d-8281f95c0af4",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-010-f43c76d5-db24-4e5b-8c2d-8281f95c0af4/final_research_budget.json",
+        "snapshot_epoch_id": "f43c76d5-db24-4e5b-8c2d-8281f95c0af4",
+        "created_at_utc": "2026-09-18T07:43:15.561126+00:00",
+        "updated_at_utc": "2026-09-18T07:43:15.561126+00:00",
+        "global_counters": {},
+        "database_present": false,
+        "payload_epoch_matches_directory": true,
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 11,
+        "directory_epoch_id": "99eba78f-f8cf-4cf3-ae7d-91fb60e564e9",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-011-99eba78f-f8cf-4cf3-ae7d-91fb60e564e9/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T07:45:54.636171+00:00",
+        "updated_at_utc": "2026-09-18T07:46:26.044582+00:00",
+        "global_counters": {},
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-011-99eba78f-f8cf-4cf3-ae7d-91fb60e564e9/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [],
+        "positive_cache_aggregates": [],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 12,
+        "directory_epoch_id": "0313c3cf-3200-449b-bb99-6ff623161d47",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-012-0313c3cf-3200-449b-bb99-6ff623161d47/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T08:18:55.609681+00:00",
+        "updated_at_utc": "2026-09-18T08:25:43.967938+00:00",
+        "global_counters": {},
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-012-0313c3cf-3200-449b-bb99-6ff623161d47/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [],
+        "positive_cache_aggregates": [],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 13,
+        "directory_epoch_id": "2275d642-469b-4f34-a264-e55508b75200",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-013-2275d642-469b-4f34-a264-e55508b75200/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T08:40:02.809941+00:00",
+        "updated_at_utc": "2026-09-18T08:48:22.116013+00:00",
+        "global_counters": {},
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-013-2275d642-469b-4f34-a264-e55508b75200/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [],
+        "positive_cache_aggregates": [],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 14,
+        "directory_epoch_id": "89317b07-a93d-425e-b234-04ab6ef64bf3",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-014-89317b07-a93d-425e-b234-04ab6ef64bf3/final_research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T09:01:18.287329+00:00",
+        "updated_at_utc": "2026-09-18T09:07:27.826416+00:00",
+        "global_counters": {},
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-014-89317b07-a93d-425e-b234-04ab6ef64bf3/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [],
+        "positive_cache_aggregates": [],
+        "sqlite_wal_bytes": null
+      },
+      {
+        "ordinal": 15,
+        "directory_epoch_id": "1b0dba25-770d-4137-8284-ced895866c19",
+        "snapshot_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget.json",
+        "snapshot_epoch_id": "b7ac9011-88e6-4922-8cba-f2ad295d2071",
+        "created_at_utc": "2026-09-18T09:52:59.850946+00:00",
+        "updated_at_utc": "2026-09-18T09:56:00.518154+00:00",
+        "global_counters": {},
+        "database_present": true,
+        "payload_epoch_matches_directory": false,
+        "database_source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-015-1b0dba25-770d-4137-8284-ced895866c19/research_budget.sqlite3",
+        "snapshot_matches_database_global_counters": true,
+        "fetched_source_provider_aggregates": [],
+        "positive_cache_aggregates": [],
+        "sqlite_wal_bytes": null
+      }
+    ],
+    "provider_observation_sums": {
+      "cache": {
+        "rows": 421,
+        "observations": 620,
+        "cache_hits": 620,
+        "noncache_observations": 0,
+        "distinct_receipts_in_database": 402,
+        "distinct_url_hashes_in_database": 402
+      },
+      "firecrawl": {
+        "rows": 779,
+        "observations": 889,
+        "cache_hits": 110,
+        "noncache_observations": 779,
+        "distinct_receipts_in_database": 779,
+        "distinct_url_hashes_in_database": 779
+      }
+    },
+    "distinct_url_hashes_across_databases": 802,
+    "distinct_firecrawl_url_hashes_across_databases": 779,
+    "distinct_source_receipts_across_databases": 978,
+    "after_first_retained_report_publication_failure_epochs_8_9": {
+      "attempts": 1128,
+      "denied_fetch_lane": 54,
+      "fetch_attempts": 553,
+      "fetch_negative_suppressed": 15,
+      "fetch_network": 263,
+      "provider_firecrawl_circuit_opens": 2,
+      "provider_firecrawl_circuit_skips": 60,
+      "provider_firecrawl_transport_failures": 17,
+      "provider_jina_circuit_opens": 7,
+      "provider_jina_circuit_skips": 84,
+      "provider_jina_transport_failures": 15,
+      "search_attempts": 575,
+      "search_network": 575
+    },
+    "firecrawl_billable_calls": null,
+    "firecrawl_credits": null,
+    "actual_dollar_charges": null,
+    "limitations": "fetch_network/search_network are budget counters, not a Firecrawl billing ledger. Provider observations are successful source observations, not invoice credits. Cache hits are already included in observations and must not be added as new network calls."
+  },
+  "judges": [
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_report_judge.json",
+      "verdict": "FAIL",
+      "scores": {
+        "thesis_specificity": 5,
+        "base_rate_usage": 5,
+        "mechanism_chains": 5,
+        "quantitative_density": 5,
+        "contrarian_coverage": 4,
+        "length_vs_target": 4.0,
+        "citation_coverage": 5
+      },
+      "min_score": 4,
+      "mean_score": 4.714285714285714,
+      "gap_count": 4,
+      "gap_keyword_categories": {
+        "length": 2,
+        "unfinished": 0,
+        "citation": 0,
+        "actor": 0,
+        "scenario": 2
+      },
+      "gap_categories_may_overlap": true,
+      "judge_model_recorded": false,
+      "judge_provider_recorded": false,
+      "judge_input": {
+        "report_chars": 80729,
+        "input_chars": 80729,
+        "input_sha256": "9a5558c3ea7f628442f8e359ce3fac43cebab72c257ffa5564ff015ab6600ac8",
+        "truncated": false
+      },
+      "judged_prose": {
+        "sha256": "878a3b59ce6c10b75aceae8053a09fc2ace50e2cd2fb85952104c9f51fbeaabb",
+        "chars": 80730,
+        "stage": "synthesis-final",
+        "scope": "llm-prose"
+      },
+      "length_override": {
+        "measured_prose_words": 28825,
+        "floor_words": 15000,
+        "judge_score": 3.0
+      }
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/actor_dossier_judge.json",
+      "verdict": "FAIL",
+      "scores": {
+        "cast_correctness": 4,
+        "salience_ranking": 4,
+        "per_actor_depth": 3,
+        "relationship_completeness": 3,
+        "history_evolution": 4,
+        "evidence_grounding": 3,
+        "contradiction_handling": 4,
+        "ontology_readiness": 2,
+        "forward_behavior_coverage": 2,
+        "cast_wide_accountability": 1
+      },
+      "min_score": 1,
+      "mean_score": 3.0,
+      "gap_count": 8,
+      "gap_keyword_categories": {
+        "length": 1,
+        "unfinished": 0,
+        "citation": 1,
+        "actor": 5,
+        "scenario": 0
+      },
+      "gap_categories_may_overlap": true,
+      "judge_model_recorded": false,
+      "judge_provider_recorded": false,
+      "judge_input": {
+        "source_chars": 41876,
+        "sanitized_chars": 41878,
+        "input_chars": 41878,
+        "input_sha256": "b228f16d239eb4924fd7abca675c649de09224d648db5c791bb7447077c0c090",
+        "truncated": false
+      },
+      "judged_prose": {},
+      "length_override": null
+    }
+  ],
+  "selected_log_events": [
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 7,
+      "timestamp_utc": "2026-09-18T01:02:51.224801+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 866,
+      "timestamp_utc": "2026-09-18T02:40:25.586213+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 1742,
+      "timestamp_utc": "2026-09-18T04:13:03.914939+00:00",
+      "event": "report_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 1743,
+      "timestamp_utc": "2026-09-18T04:13:03.914974+00:00",
+      "event": "report_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 1832,
+      "timestamp_utc": "2026-09-18T04:20:54.524518+00:00",
+      "event": "report_publication_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 1840,
+      "timestamp_utc": "2026-09-18T04:26:43.544865+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 2664,
+      "timestamp_utc": "2026-09-18T06:07:24.054697+00:00",
+      "event": "report_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 2665,
+      "timestamp_utc": "2026-09-18T06:07:24.054774+00:00",
+      "event": "report_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 2800,
+      "timestamp_utc": "2026-09-18T06:15:03.618364+00:00",
+      "event": "report_publication_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "line": 2808,
+      "timestamp_utc": "2026-09-18T06:17:08.194510+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 7,
+      "timestamp_utc": "2026-09-17T13:56:25.108890+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 510,
+      "timestamp_utc": "2026-09-17T16:48:41.511909+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 769,
+      "timestamp_utc": "2026-09-17T17:39:05.566982+00:00",
+      "event": "actor_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 770,
+      "timestamp_utc": "2026-09-17T17:39:05.567012+00:00",
+      "event": "actor_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 1004,
+      "timestamp_utc": "2026-09-17T18:17:19.270667+00:00",
+      "event": "actor_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 1005,
+      "timestamp_utc": "2026-09-17T18:17:19.270696+00:00",
+      "event": "actor_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 1148,
+      "timestamp_utc": "2026-09-17T18:33:27.980515+00:00",
+      "event": "actor_final_rejudge_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 1157,
+      "timestamp_utc": "2026-09-17T19:00:38.842104+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 1794,
+      "timestamp_utc": "2026-09-17T23:11:18.807316+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2057,
+      "timestamp_utc": "2026-09-17T23:45:46.847726+00:00",
+      "event": "actor_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2058,
+      "timestamp_utc": "2026-09-17T23:45:46.847757+00:00",
+      "event": "actor_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2175,
+      "timestamp_utc": "2026-09-17T23:57:54.366888+00:00",
+      "event": "actor_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2176,
+      "timestamp_utc": "2026-09-17T23:57:54.366920+00:00",
+      "event": "actor_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2410,
+      "timestamp_utc": "2026-09-18T00:29:42.469446+00:00",
+      "event": "actor_judge_round_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2411,
+      "timestamp_utc": "2026-09-18T00:29:42.469471+00:00",
+      "event": "actor_tool_refinement_started"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2671,
+      "timestamp_utc": "2026-09-18T00:46:11.771851+00:00",
+      "event": "actor_final_rejudge_failed"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "line": 2682,
+      "timestamp_utc": "2026-09-18T00:54:45.535139+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+      "line": 7,
+      "timestamp_utc": "2026-09-17T13:56:25.224686+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+      "line": 763,
+      "timestamp_utc": "2026-09-17T16:48:41.572246+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+      "line": 783,
+      "timestamp_utc": "2026-09-17T19:00:38.949737+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+      "line": 803,
+      "timestamp_utc": "2026-09-17T23:11:18.851308+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+      "line": 823,
+      "timestamp_utc": "2026-09-18T00:54:45.483370+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+      "line": 7,
+      "timestamp_utc": "2026-09-17T13:56:25.169204+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+      "line": 574,
+      "timestamp_utc": "2026-09-17T16:48:41.626800+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+      "line": 594,
+      "timestamp_utc": "2026-09-17T19:00:38.898591+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+      "line": 614,
+      "timestamp_utc": "2026-09-17T23:11:18.858792+00:00",
+      "event": "research_client_initialized"
+    },
+    {
+      "source": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+      "line": 634,
+      "timestamp_utc": "2026-09-18T00:54:45.536023+00:00",
+      "event": "research_client_initialized"
+    }
+  ],
+  "final_report_accounting": {
+    "parent_total": {
+      "calls": 383,
+      "cached": 91,
+      "prompt_tokens": 4484139,
+      "completion_tokens": 307101,
+      "total_tokens": 4791240,
+      "latency_ms": 6487871.5
+    },
+    "parent_stage_names": [
+      "report"
+    ],
+    "report_local": {
+      "duration_s": 3418.93,
+      "llm_calls": 382,
+      "tokens": 4791167,
+      "prompt_tokens": 4484115,
+      "completion_tokens": 307052,
+      "latency_ms": 6485748.2
+    },
+    "overlap_rule": "Parent total contains only REPORT. Report-local is overlapping, not additive; difference is one call and 73 tokens. Research aggregate is absent from this final snapshot.",
+    "token_difference_parent_minus_report_local": 73,
+    "billing_status": "No provider invoice or Firecrawl credit receipt was identified; saved cost fields are not reported as actual charges."
+  },
+  "current_verification": {
+    "phase": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-judge-audit-replay-guard02",
+    "results_xml": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-judge-audit-replay-guard02/results.xml",
+    "command_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-judge-audit-replay-guard02/command-completed.json",
+    "pytest_cases": 58,
+    "testcase_counts_by_suite": {
+      "tests.test_judge_replay_guard": 37,
+      "tests.test_agentic_parent_routing": 21
+    },
+    "negative_resume_attempts": 72,
+    "modern_advisory_positive_cases": 1,
+    "exit_code": 0,
+    "network_attempts": 0,
+    "tracked_sources_changed_during_test": [],
+    "scope": "36 failure cases each resumed twice, plus modern advisory non-veto and 21 existing parent-routing cases; temporary fixtures only, not replay of the saved run."
+  },
+  "current_source_hashes": {
+    "deerflow_bridge/deerflow_research.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+      "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/agentic_bridge.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/agentic_bridge.py",
+      "sha256": "aff743e36310225a177e15ea5489a9a7903f1e9eb2066bfd25969389ccf14408",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/research_synthesis.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_synthesis.py",
+      "sha256": "e4c72d4cc98c3de87fbb8041dda3ad6791b98b4c0c6615d29d2a44c5c79050d3",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/research_quality.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_quality.py",
+      "sha256": "9b39cc62a56b9b93b57f7bc45534b7d48255aa84e7e28afb7ffcc22ae9a3a7c9",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/linear_research.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/linear_research.py",
+      "sha256": "9bf997a7e8801b679ec10ea3e4a9e273b8eed5dd8ad0fe8f1ca6a01b1e23e4bd",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/cached_fetch.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/cached_fetch.py",
+      "sha256": "01dd37fab5d448292a5e6c1bbd957ba5a5f14ea09ae506f3be01f0fd8e0db4df",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/research_budget.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_budget.py",
+      "sha256": "909bd1140b7a8c999cec70ac416982f34906965d6b489bb9aa3108f6713c1ac4",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "backend/app/services/pipeline_orchestrator.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/pipeline_orchestrator.py",
+      "sha256": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "backend/tests/test_judge_replay_guard.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_judge_replay_guard.py",
+      "sha256": "db4c12cf28836978186db74bf152823aefd32b03483de36ab607842ac03d61e1",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "backend/tests/test_glm_agentic_profiles.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_glm_agentic_profiles.py",
+      "sha256": "a05cab9148d7f786935ebd8dfb511d96f9078bc47f3dda9cc499697f200df5d2",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/research_scenarios.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_scenarios.py",
+      "sha256": "87d45cc1874f5fb8b6b618564ee08c8df66047d263ce2334faeb660580fabfaa",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "backend/app/services/research_quality_gate.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/research_quality_gate.py",
+      "sha256": "0bf9b6a2e357de1b3747625af45cbde6f3bd266bb1fcd60b2cf8b49d6a14b6c3",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "backend/tests/test_agentic_scenario_integration.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_agentic_scenario_integration.py",
+      "sha256": "a035ea99b17c2df293f6e8c1695b5f9c880b6e83a7826c6df49a7d9e861909ef",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "backend/tests/test_agentic_bridge_integration.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_agentic_bridge_integration.py",
+      "sha256": "2c7d6a73ee2fba5ed973a5f247ffb5d629b41aad2094f40ed4fb96e72e024ada",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/research_profiles.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_profiles.py",
+      "sha256": "5aedd23732b9988874318b97d945aaa99da015b178d8132faa6cb4c843ad16dc",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    },
+    "deerflow_bridge/research_context.py": {
+      "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_context.py",
+      "sha256": "e87cbf3d90d24eff95cadd6c8706ddc60346700c8f346ce9b54e66560787a141",
+      "present_in_full_backend_start_inventory": true,
+      "matches_full_backend_start_inventory": true
+    }
+  },
+  "saved_artifact_inventory": [
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/pipeline_state.json",
+      "sha256": "2537fb8d443306cb2cd7ca6c7423a8af3f2877ffb34978c122ab6d302330e1a3",
+      "bytes": 34935,
+      "mtime_utc": "2026-09-18T16:03:41.016223+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/run_telemetry.json",
+      "sha256": "40cf5000a92677b2511af2f79d6ef8bff10f6bc23c0c1591399c9e393e0fa2ea",
+      "bytes": 2056,
+      "mtime_utc": "2026-09-18T16:03:41.014170+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/telemetry.json",
+      "sha256": "47a572c8540cddc9ce98a50f308ba807960aba9ee18ed600c1630d7182ad996c",
+      "bytes": 1342,
+      "mtime_utc": "2026-09-18T16:03:41.015431+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/meta.json",
+      "sha256": "432af3efa2f091f9736a3c4d9f8bd5285d48f2cf67dedac4dab56270989a6d08",
+      "bytes": 8360,
+      "mtime_utc": "2026-09-18T09:56:23.222476+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/manifest.json",
+      "sha256": "3292576a881fd7b430c1f39191f033147358878481a9147b82bbd8e09a23c017",
+      "bytes": 8898,
+      "mtime_utc": "2026-09-18T16:03:40.994764+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_report.md",
+      "sha256": "45827f9d48f4a2c9d380ddc4097c3bd021198194760614f613ca801cb4424763",
+      "bytes": 136456,
+      "mtime_utc": "2026-09-18T09:52:56.530799+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/sources.json",
+      "sha256": "07856cf3f4f6878ead4ee3b74bef82f3ebe9ab58bb97e26f7aee04261119c39a",
+      "bytes": 20129,
+      "mtime_utc": "2026-09-18T09:07:27.938271+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/linear/state.json",
+      "sha256": "1974a983ac0cc4d2541d357b3465c1157cd213fb52f349fd21744157e07767bb",
+      "bytes": 933,
+      "mtime_utc": "2026-09-18T09:52:56.534702+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_progress.log",
+      "sha256": "fd6f63e1166d9581aa75d99ea884199e0de214dcca5cb6350db2304edd160b52",
+      "bytes": 935328,
+      "mtime_utc": "2026-09-18T09:56:23.221601+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/research_progress.log",
+      "sha256": "00942377d002ca518ed277dacfea30c93997583eec8eb73a84be22d12d96cdc2",
+      "bytes": 620431,
+      "mtime_utc": "2026-09-18T00:54:46.075675+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/research_progress.log",
+      "sha256": "9e58b45741aa502668b1c3b30b50422ea696dbc66e41bfa39c6710e3b752f7b4",
+      "bytes": 219134,
+      "mtime_utc": "2026-09-18T00:54:46.097607+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/research_progress.log",
+      "sha256": "6f9ea1f5eef306bacaeb7928fceaffaa0f18f08783e0f7464bcd99d75291faeb",
+      "bytes": 167315,
+      "mtime_utc": "2026-09-18T00:54:46.086104+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-001-3c30d111-954a-4e7c-8d35-270165c66238/final_research_budget.json",
+      "sha256": "1a4c646d429254fc46b0d499eafe4a686d6fb664d4a911733c537489f7ba4377",
+      "bytes": 5043,
+      "mtime_utc": "2026-09-17T15:49:23.846174+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-001-3c30d111-954a-4e7c-8d35-270165c66238/research_budget.sqlite3",
+      "sha256": "03cba188965849243657a6dd4127694e46ceabbdbae46230e8324ce26bd67b6d",
+      "bytes": 1282048,
+      "mtime_utc": "2026-09-17T15:49:21.399625+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-002-676daad9-dd89-4a90-8d8f-c61cb9c63efa/final_research_budget.json",
+      "sha256": "c14b75cc21d6bc9684179056e1e4de59b57ffe3a69ed09c12137cf3287880cf2",
+      "bytes": 3322,
+      "mtime_utc": "2026-09-17T18:33:27.980045+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-002-676daad9-dd89-4a90-8d8f-c61cb9c63efa/research_budget.sqlite3",
+      "sha256": "45c913a6f7b06c68c05738de591ef5851440c0b5af68cfe9b44e7e55a34e9a0a",
+      "bytes": 299008,
+      "mtime_utc": "2026-09-17T18:23:56.145271+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-003-24a93a38-dc45-4361-9fc0-67b662b2283d/final_research_budget.json",
+      "sha256": "81ff75d56b30f819665601034e535644ad87a7d18853d66b15edfd504a12fd3d",
+      "bytes": 3227,
+      "mtime_utc": "2026-09-17T19:58:41.082659+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-003-24a93a38-dc45-4361-9fc0-67b662b2283d/research_budget.sqlite3",
+      "sha256": "6651e8beecd3ad7a347206255b2a17a5161853ca40113f434a5ceb63dd53d50d",
+      "bytes": 368640,
+      "mtime_utc": "2026-09-17T19:54:47.239022+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-004-811a4c7f-a77d-4ccd-9732-ab23df3937cb/final_research_budget.json",
+      "sha256": "e7177ae182c7b193c7bbb2baa4205283cd65fcf6b62aabd0f53ebd68c1d22ad4",
+      "bytes": 3224,
+      "mtime_utc": "2026-09-18T00:46:11.771413+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-004-811a4c7f-a77d-4ccd-9732-ab23df3937cb/research_budget.sqlite3",
+      "sha256": "d555cf49fa69e1878e0bf0a23d82d3d6fd056e5ffc8ee46ac3a111a3418d567c",
+      "bytes": 262144,
+      "mtime_utc": "2026-09-18T00:36:08.787692+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-005-b3d33bdb-fef4-47bc-90a1-3ee2512daf92/final_research_budget.json",
+      "sha256": "4f9dff0326e0380ed7dc08440ca4c84f2ac0b0704aa81938faa31d3878779106",
+      "bytes": 2369,
+      "mtime_utc": "2026-09-18T00:54:46.097467+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-005-b3d33bdb-fef4-47bc-90a1-3ee2512daf92/research_budget.sqlite3",
+      "sha256": "b1b8fb24def899088a1197dc33ae3d3cb65a3c79878bdad817ad1e9a1064723d",
+      "bytes": 81920,
+      "mtime_utc": "2026-09-18T00:54:46.063506+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-006-b7ac9011-88e6-4922-8cba-f2ad295d2071/final_research_budget.json",
+      "sha256": "3d33b3dfc7aed28be4fb4286d64b2d43f23d4beac349e9b3805472a0dcafa586",
+      "bytes": 3920,
+      "mtime_utc": "2026-09-18T02:22:11.728886+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-006-b7ac9011-88e6-4922-8cba-f2ad295d2071/research_budget.sqlite3",
+      "sha256": "41e62df818240e26dfd8f1d7f89ea155b9b9e614b38ac7af7e23a0838e4b93c4",
+      "bytes": 589824,
+      "mtime_utc": "2026-09-18T02:15:09.679765+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-007-24d52687-eae2-4e82-97d3-1b469cdda742/final_research_budget.json",
+      "sha256": "02cbda3d6a108d8cffd57da2c57796bec9927bed738bebb548d651983b7ed7ce",
+      "bytes": 3930,
+      "mtime_utc": "2026-09-18T04:20:54.524323+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-007-24d52687-eae2-4e82-97d3-1b469cdda742/research_budget.sqlite3",
+      "sha256": "1667cd30948e5c6ff3b90f061a210b3a608298492a53917dadd550f700cd908a",
+      "bytes": 536576,
+      "mtime_utc": "2026-09-18T04:19:21.262631+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-008-e05d082e-7ea6-4ccc-8cad-d197efeeeb24/final_research_budget.json",
+      "sha256": "f7cd37c15183dcba401eb052c10e8a5858a5663a405bcfc53bc12a9e1febd12d",
+      "bytes": 3886,
+      "mtime_utc": "2026-09-18T06:15:03.618123+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-008-e05d082e-7ea6-4ccc-8cad-d197efeeeb24/research_budget.sqlite3",
+      "sha256": "0d9a3fa876d9e6f70708d5b1e2dad5a276105a6e952ada12c13352ba554ff19f",
+      "bytes": 573440,
+      "mtime_utc": "2026-09-18T06:12:09.760590+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-009-c671690e-a0e9-4ebf-a0c2-f91149482610/final_research_budget.json",
+      "sha256": "e65a943391e723659bc2d1836b3e13855330f3b86868027c48c712dd067d3059",
+      "bytes": 3421,
+      "mtime_utc": "2026-09-18T07:23:20.921654+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-009-c671690e-a0e9-4ebf-a0c2-f91149482610/research_budget.sqlite3",
+      "sha256": "05079ae38c937bed67f6465d2631808a025fed6676b2b5b4c345528a09742735",
+      "bytes": 491520,
+      "mtime_utc": "2026-09-18T07:20:10.141898+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-010-f43c76d5-db24-4e5b-8c2d-8281f95c0af4/final_research_budget.json",
+      "sha256": "04118e065e17550c5fb10faead36e667963a1b82761580c6a90d700bfdf71cd9",
+      "bytes": 407,
+      "mtime_utc": "2026-09-18T07:43:15.561269+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-011-99eba78f-f8cf-4cf3-ae7d-91fb60e564e9/final_research_budget.json",
+      "sha256": "f3455fdf5db08b77e10a6738aa58983b10e038177a52015974c0b4875453aad2",
+      "bytes": 2371,
+      "mtime_utc": "2026-09-18T07:46:26.044999+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-011-99eba78f-f8cf-4cf3-ae7d-91fb60e564e9/research_budget.sqlite3",
+      "sha256": "2bb6ecb756e5d95cb5994cc8f9f8d084bf8ae00d7c059c696b8b57f022f7bc38",
+      "bytes": 81920,
+      "mtime_utc": "2026-09-18T07:45:54.636538+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-012-0313c3cf-3200-449b-bb99-6ff623161d47/final_research_budget.json",
+      "sha256": "3309b71eda5aa474609960d182fd674bea95bbf5bc9203b23110a472ebf57b14",
+      "bytes": 2371,
+      "mtime_utc": "2026-09-18T08:25:43.968249+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-012-0313c3cf-3200-449b-bb99-6ff623161d47/research_budget.sqlite3",
+      "sha256": "7c9a98a48585c7731973a6880613c6e7eb3218fbd617c8109b06aeed9484aff4",
+      "bytes": 81920,
+      "mtime_utc": "2026-09-18T08:18:55.610152+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-013-2275d642-469b-4f34-a264-e55508b75200/final_research_budget.json",
+      "sha256": "b183c34e2b40b956147895b97547f986b55bb6ca168d457d79301e6e7829ee20",
+      "bytes": 2371,
+      "mtime_utc": "2026-09-18T08:48:22.116868+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-013-2275d642-469b-4f34-a264-e55508b75200/research_budget.sqlite3",
+      "sha256": "aaec2a2346fcd270587bb994da0c5a5f3877c6303300a28965f34a58e132d8fb",
+      "bytes": 81920,
+      "mtime_utc": "2026-09-18T08:40:02.810345+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-014-89317b07-a93d-425e-b234-04ab6ef64bf3/final_research_budget.json",
+      "sha256": "54847eeded797d0d4bb4424d04b7911688c4d4121bd0c01d469943be1caa9ee5",
+      "bytes": 2371,
+      "mtime_utc": "2026-09-18T09:07:27.828700+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-014-89317b07-a93d-425e-b234-04ab6ef64bf3/research_budget.sqlite3",
+      "sha256": "7a4ae819c1d34a9a5df6ba34684ba33b661c80fc05fdf92ac45a3bd850bf0b3a",
+      "bytes": 81920,
+      "mtime_utc": "2026-09-18T09:01:18.289170+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget.json",
+      "sha256": "80f6d121249f7b130aa282066761b66f6d7aeba08dfa6504c0c34a4f3f0e05bb",
+      "bytes": 2371,
+      "mtime_utc": "2026-09-18T09:56:00.518677+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_budget_epochs/epoch-015-1b0dba25-770d-4137-8284-ced895866c19/research_budget.sqlite3",
+      "sha256": "363fba2c88989e6d7c608082f59068f1361aa2685e16f5d09fe19335717b7c82",
+      "bytes": 81920,
+      "mtime_utc": "2026-09-18T09:52:59.852395+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/research_report_judge.json",
+      "sha256": "8f7d80eb59fc1eba91d257c9d9a8c613143ca7f462e25477d8f29cb064ad395d",
+      "bytes": 1736,
+      "mtime_utc": "2026-09-18T06:15:03.613598+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/actor_dossier_judge.json",
+      "sha256": "6cdee048e218683746e2fa4647bb3418181ee2119f3e3ef93e20c8f94ea02ef7",
+      "bytes": 2792,
+      "mtime_utc": "2026-09-18T00:46:11.777665+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_1/meta.json",
+      "sha256": "2df3dfc58281e62a5f7b87e632ce1df11d0945d11d959352f4c978299ec1b627",
+      "bytes": 6904,
+      "mtime_utc": "2026-09-18T00:54:46.071356+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_2/meta.json",
+      "sha256": "337345f95bf69b46655926d66486c312ef89e22cd781905c43fbda5932817b98",
+      "bytes": 7439,
+      "mtime_utc": "2026-09-18T00:54:46.095832+00:00"
+    },
+    {
+      "path": "/Users/rogerlin/Downloads/DeepResearchForecast/backend/uploads/pipelines/pipe_1ee2fae33f8c/handoff/track_3/meta.json",
+      "sha256": "c94e50e1ddbe30c396de3bf1d26b352cd9c61854dede823e63df67a0ea5d06ff",
+      "bytes": 7492,
+      "mtime_utc": "2026-09-18T00:54:46.083921+00:00"
+    }
+  ],
+  "retained_numeric_probe": {
+    "report_sha256": "45827f9d48f4a2c9d380ddc4097c3bd021198194760614f613ca801cb4424763",
+    "retained_judge_prefix_matches": true,
+    "legacy_scenario_conflict_count": 0,
+    "legacy_helper_tested_source_sha256": "2f48cc356b1de85b550b2a8f7a5fbe6e99cb900e37b70556aafacfe54d472af1",
+    "modern_gate_passed": false,
+    "modern_error_count": 131,
+    "modern_error_counts_by_code": {
+      "citation_marker_malformed": 1,
+      "citation_url_mismatch": 84,
+      "citation_unresolved": 46
+    },
+    "modern_numeric_error_codes": [],
+    "modern_warnings": [
+      "semantic_accuracy_not_checked",
+      "source_retrieval_not_verified",
+      "actor_audit_not_supplied",
+      "scenario_frame_not_supplied"
+    ],
+    "modern_gate_source_sha256": "648866e3160d2d27561c19385a899ff78d44acf0ca1a7210d7f894eb77b01c33",
+    "probability_tables": [
+      {
+        "heading_line": 40,
+        "heading_level": 3,
+        "header_line": 42,
+        "row_lines": [
+          44,
+          45,
+          46,
+          47
+        ],
+        "weights_pct": [
+          40,
+          30,
+          20,
+          10
+        ],
+        "sum_pct": 100,
+        "baseline_row": 44,
+        "baseline_2030_index_range": [
+          190,
+          210
+        ]
+      },
+      {
+        "heading_line": 587,
+        "heading_level": 3,
+        "header_line": 591,
+        "row_lines": [
+          593,
+          594,
+          595,
+          596
+        ],
+        "weights_pct": [
+          55,
+          15,
+          20,
+          10
+        ],
+        "sum_pct": 100,
+        "baseline_row": 593,
+        "baseline_2030_index_range": [
+          190,
+          210
+        ]
+      }
+    ],
+    "exact_scenario_label_overlap_count": 0,
+    "recognized_AF_key_counts": [
+      0,
+      0
+    ],
+    "table_or_near_heading_explicit_revision_marker_found": false,
+    "baseline_metric_discrepancies": [
+      {
+        "year": 2027,
+        "metric_alias": "Metric X",
+        "overview_header_line": 53,
+        "overview_row_line": 57,
+        "overview_value": 185,
+        "later_header_line": 600,
+        "later_row_line": 603,
+        "later_value": 175
+      },
+      {
+        "year": 2027,
+        "metric_alias": "Metric Y",
+        "overview_header_line": 64,
+        "overview_row_line": 67,
+        "overview_value": 1.9,
+        "later_header_line": 600,
+        "later_row_line": 603,
+        "later_value": 1.1
+      }
+    ],
+    "interpretation": "Concrete cross-section numeric discrepancies support the critic concerns. Full scenario labels and metric headers differ; no automatic four-way identity mapping or broad semantic veto is established. Both probability vectors sum to 100, so sum-only validation is insufficient. No gap or report prose is exported."
+  },
+  "critic_provenance_verification": {
+    "results_xml": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-judge-audit-provenance03/results.xml",
+    "command_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-judge-audit-provenance03/command-completed.json",
+    "cases": 1,
+    "exit_code": 0,
+    "network_attempts": 0,
+    "scope": "Modern DEERFLOW_JUDGE_MODEL routing, five requested/served/response model events, and replay with zero additional callbacks; legacy _judge_model fields source-inspected, not separately executed by this audit."
+  },
+  "saved_artifacts_unchanged_after_audit": true,
+  "scenario_frame_followup": {
+    "recorded_at_utc": "2026-09-19T11:58:17.540398+00:00",
+    "status": "verified_offline_bounded",
+    "basis": "User-described parent and validation-owner implementation in progress",
+    "intended_contract": {
+      "canonical_ids": [
+        "SC1",
+        "SC2",
+        "SC3",
+        "SC4"
+      ],
+      "fields": [
+        "names",
+        "probabilities",
+        "horizon"
+      ],
+      "planner_calls": 1,
+      "maximum_format_repair_calls": 1,
+      "accepted_frame_shared_with": [
+        "all_section_prompts",
+        "summary_prompts"
+      ],
+      "exact_bindings": [
+        "producer_metadata",
+        "quality_receipt",
+        "consumer_replay"
+      ],
+      "noncanonical_legacy_frames": "existing behavior preserved"
+    },
+    "coverage_limits": [
+      "Agreement with an accepted frame is not factual or forecasting truth.",
+      "Historical labels are not retroactively mapped.",
+      "Cross-section metric discrepancies require domain analysis and explicit metric identity."
+    ],
+    "review_status": "three_findings_closed",
+    "review_scope": [
+      "planner and repair bounds",
+      "accepted-frame durability and exact cache identity",
+      "all section and summary propagation",
+      "metadata and receipt binding through consumer replay",
+      "fresh mechanical checks after cache reuse",
+      "canonical ID completeness and weight matching",
+      "unchanged legacy non-SC behavior"
+    ],
+    "previous_status": "in_progress_not_verified_by_this_audit",
+    "verified_at_utc": "2026-09-19T12:26:42.853915+00:00",
+    "accepted_frame_binding": "Full scenario_contract (schema, horizon, four IDs/names/probabilities) is receipt-hashed, compared with metadata and projected weights at consumer replay.",
+    "publication_guard": "Required accepted frame is checked before advisory callbacks and before publication for new execution-policy workspaces.",
+    "canonical_tables": "Each recognized Scenario/Probability table requires exactly four unique canonical IDs and matching weights."
+  },
+  "frozen_source_anchor_refresh": {
+    "refreshed_at_utc": "2026-09-19T12:38:07.436551+00:00",
+    "freeze_started_at_utc": "2026-09-19T12:36:02.767477+00:00",
+    "freeze_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03/command-started.json",
+    "tracked_source_hashes_match_freeze": true,
+    "untracked_sources": "Their explicit hashes are recorded separately; the generic runner inventory enumerates tracked files only.",
+    "anchors": [
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 10861,
+        "symbol_or_marker": "def scenario_probability_conflicts(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_quality.py",
+        "line": 365,
+        "symbol_or_marker": "def _check_scenarios(",
+        "sha256": "9b39cc62a56b9b93b57f7bc45534b7d48255aa84e7e28afb7ffcc22ae9a3a7c9"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/cached_fetch.py",
+        "line": 332,
+        "symbol_or_marker": "def get_firecrawl_call_counts(",
+        "sha256": "01dd37fab5d448292a5e6c1bbd957ba5a5f14ea09ae506f3be01f0fd8e0db4df"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_budget.py",
+        "line": 602,
+        "symbol_or_marker": "def record_fetched_source(",
+        "sha256": "909bd1140b7a8c999cec70ac416982f34906965d6b489bb9aa3108f6713c1ac4"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 11855,
+        "symbol_or_marker": "def run_report_judge_refine(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 14135,
+        "symbol_or_marker": "def run_actor_ontology_stage(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 14027,
+        "symbol_or_marker": "def dossier_passes(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 17336,
+        "symbol_or_marker": "judge_required and not report_passes(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/pipeline_orchestrator.py",
+        "line": 12389,
+        "symbol_or_marker": "publication_rejected_without_verified_synthesis_inputs",
+        "sha256": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/pipeline_orchestrator.py",
+        "line": 11188,
+        "symbol_or_marker": "def _run_research_synthesis_recovery(",
+        "sha256": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/pipeline_orchestrator.py",
+        "line": 11666,
+        "symbol_or_marker": "broad baseline evidence lane failed; required shared actor",
+        "sha256": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/agentic_bridge.py",
+        "line": 465,
+        "symbol_or_marker": "def review_and_repair(",
+        "sha256": "aff743e36310225a177e15ea5489a9a7903f1e9eb2066bfd25969389ccf14408"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_synthesis.py",
+        "line": 478,
+        "symbol_or_marker": "def targeted_repairs(",
+        "sha256": "e4c72d4cc98c3de87fbb8041dda3ad6791b98b4c0c6615d29d2a44c5c79050d3"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_quality.py",
+        "line": 430,
+        "symbol_or_marker": "def evaluate_report(",
+        "sha256": "9b39cc62a56b9b93b57f7bc45534b7d48255aa84e7e28afb7ffcc22ae9a3a7c9"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/linear_research.py",
+        "line": 964,
+        "symbol_or_marker": "def _phase_qa(",
+        "sha256": "9bf997a7e8801b679ec10ea3e4a9e273b8eed5dd8ad0fe8f1ca6a01b1e23e4bd"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/pipeline_orchestrator.py",
+        "line": 2015,
+        "symbol_or_marker": "def _flush_failed_research_attempt_spend(",
+        "sha256": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/pipeline_orchestrator.py",
+        "line": 1738,
+        "symbol_or_marker": "RESEARCH_BUDGET_MAX_EPOCHS",
+        "sha256": "c1939475e5725ec39e32a24dd48c52bdd13be90633bc183268c95a6353127813"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 6398,
+        "symbol_or_marker": "def _critic_model_provenance(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/deerflow_research.py",
+        "line": 6570,
+        "symbol_or_marker": "def _synthesize_multipart_impl(",
+        "sha256": "c550f58359bda09a653b6b487d5047a993f774b5c78fb1485f50e5f72a4aa5d2"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_scenarios.py",
+        "line": 41,
+        "symbol_or_marker": "def parse_frame(",
+        "sha256": "87d45cc1874f5fb8b6b618564ee08c8df66047d263ce2334faeb660580fabfaa"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/agentic_bridge.py",
+        "line": 136,
+        "symbol_or_marker": "def scenario_frame_for_workspace(",
+        "sha256": "aff743e36310225a177e15ea5489a9a7903f1e9eb2066bfd25969389ccf14408"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_quality.py",
+        "line": 493,
+        "symbol_or_marker": "def make_receipt(",
+        "sha256": "9b39cc62a56b9b93b57f7bc45534b7d48255aa84e7e28afb7ffcc22ae9a3a7c9"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_quality.py",
+        "line": 524,
+        "symbol_or_marker": "def validate_receipt(",
+        "sha256": "9b39cc62a56b9b93b57f7bc45534b7d48255aa84e7e28afb7ffcc22ae9a3a7c9"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/app/services/research_quality_gate.py",
+        "line": 254,
+        "symbol_or_marker": "recorded_frame = receipt.get(\"scenario_contract\")",
+        "sha256": "0bf9b6a2e357de1b3747625af45cbde6f3bd266bb1fcd60b2cf8b49d6a14b6c3"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_agentic_bridge_integration.py",
+        "line": 322,
+        "symbol_or_marker": "def test_standalone_cli_runs_evidence_then_shared_frame_synthesis_and_reuses_all(",
+        "sha256": "2c7d6a73ee2fba5ed973a5f247ffb5d629b41aad2094f40ed4fb96e72e024ada"
+      },
+      {
+        "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/backend/tests/test_agentic_scenario_integration.py",
+        "line": 21,
+        "symbol_or_marker": "def test_shared_frame_reaches_every_writer_and_survives_exact_resume(",
+        "sha256": "a035ea99b17c2df293f6e8c1695b5f9c880b6e83a7826c6df49a7d9e861909ef"
+      }
+    ],
+    "prior_completed_freeze": {
+      "freeze_started_at_utc": "2026-09-19T12:22:00.138442+00:00",
+      "freeze_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend02/command-started.json"
+    }
+  },
+  "canonical_integration_verification": {
+    "status": "verified_offline_bounded",
+    "review_findings": "all_three_closed",
+    "receipts": {
+      "glm-scenario-crossreview-red01": {
+        "phase": "glm-scenario-crossreview-red01",
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-red01",
+        "started_at_utc": "2026-09-19T12:06:29.939353+00:00",
+        "command_started": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-red01/command-started.json",
+          "sha256": "2b93f3c8f94ce0afdf567ce1fd5bcd99bbaeaaa6b10a468089eefe7c702efc47"
+        },
+        "status": "failed",
+        "tests": 3,
+        "failures": 3,
+        "errors": 0,
+        "skipped": 0,
+        "network_attempts": 0,
+        "exit_code": 1,
+        "completed_at_utc": "2026-09-19T12:06:30.412166+00:00",
+        "guard_processes": 1,
+        "tracked_source_changes": [],
+        "command_completed": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-red01/command-completed.json",
+          "sha256": "3b95a0f937dd79bf813cf54ad8e405aafb3b9ca2136db9692ed52ef1071df37a"
+        },
+        "results_xml": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-red01/results.xml",
+          "sha256": "6e9b3db0fef95d9d2a645afb0053848c5fa0bad65966f174fb00ddea2825a357"
+        }
+      },
+      "glm-scenario-crossreview-recovery02": {
+        "phase": "glm-scenario-crossreview-recovery02",
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-recovery02",
+        "started_at_utc": "2026-09-19T12:07:55.336776+00:00",
+        "command_started": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-recovery02/command-started.json",
+          "sha256": "78508cde2241c608d3264331cc2d9ca1a6f0f0bcd202236904771571c74f1e35"
+        },
+        "status": "passed",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "network_attempts": 0,
+        "exit_code": 0,
+        "completed_at_utc": "2026-09-19T12:07:55.973663+00:00",
+        "guard_processes": 1,
+        "tracked_source_changes": [],
+        "command_completed": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-recovery02/command-completed.json",
+          "sha256": "7d497545a374e5055496f6d1d2a837433188b3954f7c22dbee91759bec1b12f8"
+        },
+        "results_xml": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-recovery02/results.xml",
+          "sha256": "7f5184d802711526e187f4427481918537bc1fc07a3e410b83daae061b27ae72"
+        }
+      },
+      "glm-scenario-crossreview-latest04": {
+        "phase": "glm-scenario-crossreview-latest04",
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-latest04",
+        "started_at_utc": "2026-09-19T12:15:28.836544+00:00",
+        "command_started": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-latest04/command-started.json",
+          "sha256": "6a41445a6d104b50a0ca1ab92574e70fe1453a50c1e0053dee43c7f90e1a7da6"
+        },
+        "status": "passed",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "network_attempts": 0,
+        "exit_code": 0,
+        "completed_at_utc": "2026-09-19T12:15:29.311332+00:00",
+        "guard_processes": 1,
+        "tracked_source_changes": [],
+        "command_completed": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-latest04/command-completed.json",
+          "sha256": "734dae64e6f72773076b213208701e98fdd737498501744bc2df2f66f53987d5"
+        },
+        "results_xml": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-scenario-crossreview-latest04/results.xml",
+          "sha256": "8ad3b4ed8740848f62f76dfba291f9378c9cb0fd3ede3e00ea9ab41922202566"
+        }
+      },
+      "glm-standalone-scenario01": {
+        "phase": "glm-standalone-scenario01",
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-standalone-scenario01",
+        "started_at_utc": "2026-09-19T12:16:20.883826+00:00",
+        "command_started": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-standalone-scenario01/command-started.json",
+          "sha256": "1b057f431aa643c37f9c3da8c411ed6b3859e9f1b62fd0e2b922b6f9ac7c5d6a"
+        },
+        "status": "passed",
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "network_attempts": 0,
+        "exit_code": 0,
+        "completed_at_utc": "2026-09-19T12:17:24.557137+00:00",
+        "guard_processes": 1,
+        "tracked_source_changes": [],
+        "command_completed": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-standalone-scenario01/command-completed.json",
+          "sha256": "981617f4942cd32b907722a31ca568a4d194058d87a1be33f119f548f69d974c"
+        },
+        "results_xml": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-standalone-scenario01/results.xml",
+          "sha256": "dfa81ae037925422bb6914d764e288a7fc41afc3c561fe823761f4172694d658"
+        }
+      },
+      "glm-final-backend02": {
+        "phase": "glm-final-backend02",
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend02",
+        "started_at_utc": "2026-09-19T12:22:00.138442+00:00",
+        "command_started": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend02/command-started.json",
+          "sha256": "c517c9ff76cd5ba7a1243844cb5898e0fc71ebe4918325494cf956cf23a77ea5"
+        },
+        "status": "passed_before_two_line_lint_patch",
+        "tests": 5108,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 12,
+        "network_attempts": 0,
+        "exit_code": 0,
+        "completed_at_utc": "2026-09-19T12:28:10.651606+00:00",
+        "passed": 5085,
+        "expected_failures": 11,
+        "guard_processes": 216,
+        "tracked_source_changes": [],
+        "duration_seconds": 370.507128457999,
+        "command_completed": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend02/command-completed.json",
+          "sha256": "e52ba722c13f52d739bd4c27f3d75fff2557c0958f05f35838c5b465e5387eea"
+        },
+        "results_xml": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend02/results.xml",
+          "sha256": "59625bdd56198a2dd55a6f09582488c057e06f118f50b241c950ec91f76c5c47"
+        },
+        "scope_note": "Completed before two parent-owned lint-only line replacements in research_budget.py; this is not final acceptance for the later source snapshot."
+      },
+      "glm-final-backend03": {
+        "phase": "glm-final-backend03",
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03",
+        "status": "pending_parent_final_record",
+        "started_at_utc": "2026-09-19T12:36:02.767477+00:00",
+        "command_started": {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03/command-started.json",
+          "sha256": "84123f51aa72719843a970917ee5e51416e540b36682fea33cfdbd99c330a325"
+        },
+        "completion_not_claimed_by_this_refresh": true,
+        "scope_note": "Parent is running final validation after the two lint-only changes and will record its final result."
+      }
+    },
+    "native_smoke": {
+      "phase": "glm-native-config-integration02",
+      "status": "passed_reported_by_probe_output",
+      "result": {
+        "passed": true,
+        "scope": "actual native client/config/tool schema; temporary workspace; no model construction or provider calls"
+      },
+      "guard_receipts": [
+        {
+          "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-native-config-integration02/guard-22333.json",
+          "sha256": "e9b32a02cf57ac51eff779755c90dbb2cf548a36d2e1dcb01c1e101f6e96e3cf"
+        }
+      ],
+      "output": {
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-native-config-integration02/output.txt",
+        "sha256": "8b81be77e76dcd1f0ae2d6f5677359046759ec56ed3cacbe32ed051583d5120d"
+      },
+      "probe": {
+        "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-native-config-integration02/probe.py",
+        "sha256": "ae606f8c752cd2ad0c67e75fcede8d2b3c8cd0eb486829363ae66e215729981d"
+      },
+      "completion_receipt_available": false,
+      "network_attempt_records": [],
+      "warning": "One LangChain pending-deprecation warning is present in the output.",
+      "scope_note": "Actual native client/config/tool schema and temporary archive recall; no model construction or provider calls. Probe output and installed-guard record are the available receipts, not a pytest completion receipt."
+    },
+    "limits": [
+      "Synthetic model/provider callbacks were used in the standalone CLI fixture.",
+      "No production provider performance, factual truth, probability calibration, deployment or historical run recovery is established.",
+      "Historical scenario labels and metric discrepancies remain unmapped."
+    ],
+    "final_sdk_validation": {
+      "phase": "glm-final-sdk08",
+      "path": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-sdk08",
+      "status": "pending_parent_final_record",
+      "scope_note": "Parent-owned final SDK validation; this documentation refresh does not claim its result."
+    }
+  },
+  "last_document_refresh_at_utc": "2026-09-19T12:38:07.436551+00:00",
+  "post_backend02_source_delta": {
+    "path": "/Users/rogerlin/.codex/worktrees/drf-rearchitecture-20260919/deerflow_bridge/research_budget.py",
+    "previous_sha256": "6b4eb3c631bf5f11b3e816af2cacf9f891cb61e152e1ebed2d66c2bdf2f2ddf9",
+    "current_sha256": "909bd1140b7a8c999cec70ac416982f34906965d6b489bb9aa3108f6713c1ac4",
+    "change_description": "Parent-reported two lint-only line replacements: lambda variable capture and explicit exception chaining.",
+    "line_anchors_changed": false,
+    "verification_run": "glm-final-backend03",
+    "verification_status": "pending_parent_final_record",
+    "parent_final_status": "verified_backend03_and_sdk08"
+  },
+  "parent_final_verification": {
+    "recorded_at_utc": "2026-09-19T12:55:32.861546+00:00",
+    "backend_passed": 5085,
+    "backend_skips": 12,
+    "backend_expected_failures": 11,
+    "backend_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-backend03/command-completed.json",
+    "native_sdk_passed": 34,
+    "native_sdk_receipt": "/Users/rogerlin/.codex/rearchitecture-evidence/20260919/glm-final-sdk08/command-completed.json",
+    "network_attempts": 0,
+    "source_drift": [],
+    "saved_artifacts_rehashed_unchanged": 46
+  }
+}

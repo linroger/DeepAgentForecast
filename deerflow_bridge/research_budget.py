@@ -25,7 +25,8 @@ import threading
 import time
 import uuid
 from contextlib import asynccontextmanager, closing, contextmanager
-from dataclasses import dataclass
+from contextvars import ContextVar, copy_context
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 
@@ -61,6 +62,106 @@ class Admission:
     allowed: bool
     reason: str = ""
     degraded: bool = False
+
+
+@dataclass
+class _AsyncLeasePoll:
+    """Retain one admission's identity and deadline across async retry attempts."""
+
+    started: float = field(default_factory=time.monotonic)
+    token: str = field(default_factory=lambda: uuid.uuid4().hex)
+    waited: bool = False
+    delay: float = 0.1
+
+
+_ASYNC_LEASE_POLL: ContextVar[_AsyncLeasePoll | None] = ContextVar("research_async_lease_poll", default=None)
+
+
+class _LeaseBusy(Exception):
+    def __init__(self, delay: float):
+        self.delay = delay
+
+
+def _wait_for_lease_capacity(poll, delay, jitter):
+    if poll is not None:
+        poll.waited = True
+        poll.delay = min(1.0, delay * 1.7)
+        # Leave the short SQLite worker entirely; the async owner sleeps instead.
+        raise _LeaseBusy(delay * jitter)
+    time.sleep(delay * jitter)
+
+
+async def _lease_step(context, action):
+    """Drain one blocking attempt/cleanup, retaining context through cancellation."""
+    def blocking():
+        try:
+            return context.run(action), None
+        except BaseException as exc:
+            return None, exc
+
+    future = asyncio.get_running_loop().run_in_executor(None, blocking)
+    cancelled = None
+    while True:
+        try:
+            result, error = await asyncio.shield(future)
+            return result, error, cancelled
+        except asyncio.CancelledError as exc:
+            cancelled = cancelled or exc
+            if future.done():
+                result, error = future.result()
+                return result, error, cancelled
+
+
+@asynccontextmanager
+async def _async_capacity_lease(manager_factory):
+    """Poll capacity without occupying executor threads between attempts."""
+    context = copy_context()
+    context.run(_ASYNC_LEASE_POLL.set, _AsyncLeasePoll())
+    while True:
+        manager = manager_factory()
+        admission, error, cancelled = await _lease_step(context, manager.__enter__)
+        if cancelled is not None:
+            if error is None:
+                # Acquisition won the cancellation race. Release before the
+                # cancelled owner exits; never run its provider/subagent body.
+                _, cleanup_error, _ = await _lease_step(
+                    context, lambda owned=manager, failure=cancelled: owned.__exit__(type(failure), failure, failure.__traceback__),
+                )
+                if cleanup_error is not None:
+                    raise cleanup_error
+            raise cancelled
+        if isinstance(error, _LeaseBusy):
+            await asyncio.sleep(error.delay)
+            continue
+        if error is not None:
+            raise error
+        break
+
+    try:
+        yield admission
+    except BaseException as exc:
+        suppressed, error, cancelled = await _lease_step(
+            context, lambda failure=exc: manager.__exit__(type(failure), failure, failure.__traceback__),
+        )
+        if error is not None:
+            raise error from None
+        if cancelled is not None:
+            try:
+                from research_compaction import ResearchCompactionError
+            except ImportError:  # Standalone budget deployments need no archive helper.
+                ResearchCompactionError = ()
+            # Drain first, then honor cancellation over ordinary provider errors.
+            # An integrity stop must remain visible at the parent boundary.
+            if suppressed or not isinstance(exc, ResearchCompactionError):
+                raise cancelled from None
+        if not suppressed:
+            raise
+    else:
+        _, error, cancelled = await _lease_step(context, lambda: manager.__exit__(None, None, None))
+        if error is not None:
+            raise error
+        if cancelled is not None:
+            raise cancelled
 
 
 def _env_int(name: str, default: int, *, minimum: int = 0) -> int:
@@ -933,11 +1034,12 @@ def model_call_lease(weight: int = 1):
         DEFAULT_MODEL_LEASE_TTL_SECONDS,
         minimum=15,
     )
-    deadline = time.monotonic() + wait_seconds
-    wait_started = time.monotonic()
-    token = uuid.uuid4().hex
-    waited = False
-    poll_delay = 0.1
+    poll = _ASYNC_LEASE_POLL.get()
+    wait_started = poll.started if poll is not None else time.monotonic()
+    deadline = wait_started + wait_seconds
+    token = poll.token if poll is not None else uuid.uuid4().hex
+    waited = poll.waited if poll is not None else False
+    poll_delay = poll.delay if poll is not None else 0.1
     poll_jitter = 0.85 + (int(token[:4], 16) % 31) / 100.0
 
     while True:
@@ -1013,7 +1115,7 @@ def model_call_lease(weight: int = 1):
                 f"({requested} requested, {capacity} global)"
             )
         waited = True
-        time.sleep(poll_delay * poll_jitter)
+        _wait_for_lease_capacity(poll, poll_delay, poll_jitter)
         poll_delay = min(1.0, poll_delay * 1.7)
 
     stop = threading.Event()
@@ -1051,17 +1153,8 @@ def model_call_lease(weight: int = 1):
 async def async_model_call_lease(weight: int = 1):
     """Async adapter that never blocks the LangGraph event loop while waiting."""
 
-    manager = model_call_lease(weight)
-    admission = await asyncio.to_thread(manager.__enter__)
-    try:
+    async with _async_capacity_lease(lambda: model_call_lease(weight)) as admission:
         yield admission
-    except BaseException as exc:
-        suppress = await asyncio.to_thread(
-            manager.__exit__, type(exc), exc, exc.__traceback__)
-        if not suppress:
-            raise
-    else:
-        await asyncio.to_thread(manager.__exit__, None, None, None)
 
 
 def _subagent_capacity() -> int:
@@ -1116,11 +1209,12 @@ def subagent_call_lease():
         DEFAULT_SUBAGENT_LEASE_TTL_SECONDS,
         minimum=15,
     )
-    deadline = time.monotonic() + wait_seconds
-    wait_started = time.monotonic()
-    token = uuid.uuid4().hex
-    waited = False
-    poll_delay = 0.1
+    poll = _ASYNC_LEASE_POLL.get()
+    wait_started = poll.started if poll is not None else time.monotonic()
+    deadline = wait_started + wait_seconds
+    token = poll.token if poll is not None else uuid.uuid4().hex
+    waited = poll.waited if poll is not None else False
+    poll_delay = poll.delay if poll is not None else 0.1
     poll_jitter = 0.85 + (int(token[:4], 16) % 31) / 100.0
 
     while True:
@@ -1201,7 +1295,7 @@ def subagent_call_lease():
                 f"capacity ({capacity} global)"
             )
         waited = True
-        time.sleep(poll_delay * poll_jitter)
+        _wait_for_lease_capacity(poll, poll_delay, poll_jitter)
         poll_delay = min(1.0, poll_delay * 1.7)
 
     stop = threading.Event()
@@ -1238,17 +1332,8 @@ def subagent_call_lease():
 async def async_subagent_call_lease():
     """Async lifecycle adapter that does not block the agent event loop."""
 
-    manager = subagent_call_lease()
-    admission = await asyncio.to_thread(manager.__enter__)
-    try:
+    async with _async_capacity_lease(subagent_call_lease) as admission:
         yield admission
-    except BaseException as exc:
-        suppress = await asyncio.to_thread(
-            manager.__exit__, type(exc), exc, exc.__traceback__)
-        if not suppress:
-            raise
-    else:
-        await asyncio.to_thread(manager.__exit__, None, None, None)
 
 
 def _snapshot() -> dict[str, Any]:
