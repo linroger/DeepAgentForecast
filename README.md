@@ -75,12 +75,58 @@ An earlier showcase run: a deep-mode research pass on the full semiconductor val
 
 Given one natural-language prediction question (for example, *"Will product X reach mainstream adoption within 18 months?"*), DeepAgentForecast:
 
-1. **Researches the web and every material actor autonomously at scale** — the current default runs **three isolated, multi-angle Track-A evidence lanes in parallel** (base evidence · base rates and analogs · incentives / contrarian / markets) and exactly **one shared Track-B actor-intelligence plane** in the broad baseline lane. Track B researches each Tier-1/2 actor across 17 source- and time-bound dimensions—history, values, incentives, motivations, capabilities, constraints, revealed preferences/aversions, alliances, competitors, decision rights/triggers, current actions, future plans, investments, track record, likely actions, red lines, and knowledge state—then passes a checksum-bound dossier into the one global report/extraction namespace. Each Track-A lane follows a staged multi-pass protocol with parallel middle phases and one breadth plane at a time: harness-native scoped subagents by default (global cap 9, at most 3 per lane), or the retained bridge fan-out when harness delegation is not the owner. Deep synthesis targets a **15–22K-word dossier**, with S1–S4 source tiering, triangulation, Polymarket calibration, a ten-dimension actor judge, and a deterministic actor × dimension coverage audit.
+1. **Researches the web and every material actor adaptively** — new runs default to the **agentic engine**: one outer evidence lane, five sequential phases, and five distinct investigators per phase, with up to five model calls in flight. Each investigator chooses searches, fetches and verification steps; discoveries and full evidence are persisted for follow-up and recovery. One shared Track-B plane studies Tier-1/2 actors across 17 source- and time-bound dimensions. Cached multipart synthesis targets a **15–22K-word dossier**, with advisory critique, bounded section repair, and mandatory mechanical publication checks. See [agentic research and GLM-5.3](#agentic-research-and-glm-53).
 2. **Builds a parallel world** — the research is distilled into a temporal knowledge graph with a **tiered, behaviorally-rich ontology**. For current v1, every eligible matched Tier-1/2 actor receives a deterministic, source-bound runtime role and configuration; graph salience cannot truncate that sealed research roster or substitute an unmatched entity.
 3. **Simulates the future unfolding in calendar time** — the forecast **horizon is extracted from your question** ("by 2030", "next 18 months", "2035年底" …) and the span from the research as-of date to that horizon is divided into rounds of **one even calendar unit each** (day / week / half-month / month / quarter / half-year), so the round count **scales with the horizon** (a 2035 question gets more rounds than a 2029 one) and the unit always fits the question — *"by 2030"* → 18 quarterly rounds, *"3 weeks"* → 21 daily rounds. Each round, the LLM personas act as their real-world actors would **over that entire period** — decisions, announcements, alliances, strategic patience — under a per-round **world clock**; researched real-world events fire in the round containing their actual date, and a **world state** evolves between rounds (calendar-scaled inertia + a base-rate entropy floor), feeding a qualitative "what changed last period" digest back to the agents. An optional **multi-seed sensitivity sidecar** re-runs simulation + report and writes `ensemble_forecast.json` without rewriting the sealed primary forecast.
 4. **Forecasts and reports** — a report agent retrieves from both the knowledge graph and the simulation and writes an interactive, sectioned forecast report with **embedded forecast-data charts** (interactive Plotly HTML + PNG pairs: scenario probabilities, binary-forecast dot plots, metric trajectories, model-vs-market), **resolution-equivalent Polymarket anchoring where an accepted exact/near match exists**, and one-click **PDF export**.
 
 Everything is observable in real time: a live research console, the rendered dossier, the knowledge graph, the simulated social feed, and the final forecast all live in one dashboard.
+
+---
+
+## Agentic research and GLM-5.3
+
+New backend and CLI runs default to `agentic`. The research coordinator advances through **scope → primary evidence → actors and incentives → contradictions and risks → forecast implications**. Each phase has five investigators with distinct goals; their native model/tool loops choose where to search, which sources to fetch, and what needs verification. Phases run in sequence to consume verified predecessor evidence. Up to five investigators/model calls run concurrently within the shared capacity envelope; a smaller explicit operator cap remains authoritative.
+
+**Mid-flight discoveries survive interruption.** New questions and their evidence references are saved while agents stream, then admitted into bounded follow-up rounds. Full results, fetched bodies, source identities and frozen phase inputs are stored before task completion. `search_evidence(query, limit=10)` finds archived passages; `read_evidence` retrieves an exact artifact range. Prompt caps limit the current view, not the stored evidence. Cross-run long-term memory stays off to avoid mixing unrelated forecasts.
+
+### Selecting GLM-5.3 and sizing context
+
+For new research runs, set these non-secret values in the root `.env`:
+
+```dotenv
+DEERFLOW_MODEL=glm
+RESEARCH_ENGINE=agentic
+```
+
+Supply `ZHIPUAI_API_KEY` privately as described in the provider setup. The tracked **research** alias `glm` selects `glm-5.3`; `LLM_PROVIDER` / `LLM_MODEL_NAME` separately control graph, simulation and final-report models. Existing runtime `deer-flow/config.yaml` is preserved by setup, so reconcile its `glm` stanza with the [tracked configuration](deerflow_bridge/config.yaml) when upgrading. GLM reasoning stays enabled; tool-free calls use low reasoning effort. Merely selecting an engine does not change an existing run's saved model or policy.
+
+| New GLM-5.3 workspace setting | Default |
+|---|---:|
+| `RESEARCH_AGENTIC_CONTEXT_WINDOW_TOKENS` | 1,048,576 |
+| `RESEARCH_AGENTIC_WORKING_TOKENS` | 262,144 |
+| `RESEARCH_AGENTIC_RETRIEVAL_TOKENS` | 32,768 |
+| `RESEARCH_AGENTIC_RESERVED_OUTPUT_TOKENS` | 65,536 |
+| `RESEARCH_AGENTIC_PROMPT_OVERHEAD_TOKENS` | 32,768 |
+| `RESEARCH_AGENTIC_SAFETY_MARGIN_TOKENS` | 32,768 |
+| Native compaction trigger / retained context | 294,912 / 65,536 |
+| `RESEARCH_AGENTIC_TASK_STEPS` | 24 |
+| `RESEARCH_AGENTIC_MAX_FOLLOWUPS` / `RESEARCH_AGENTIC_DISCOVERY_ROUNDS` | 8 / 3 |
+| `RESEARCH_AGENTIC_PROMPT_BUDGET_TOKENS` | 12,000,000 |
+| `RESEARCH_AGENTIC_PHASE_DEADLINE_S` | 3,600 |
+| `RESEARCH_AGENTIC_CALL_TIMEOUT_S` | 600 |
+
+The working/retrieval selector conservatively estimates tokens from UTF-8 bytes; these values are not character caps or tokenizer measurements. A million-token capacity need not be replayed on every turn: bounded task views, archived tool results, exact recall and durable compaction control repeated input while retaining complete originals. The step setting translates into a native graph recursion envelope, not an exact physical-call count. Input allowance is **per workspace** (evidence and synthesis have separate workspaces), includes cached input once, and is not a dollar or Firecrawl-credit limit. Working, output, overhead and safety allowances must fit the declared window. Smaller alternate models are checked against their own pinned capacity before sending. Changing a saved policy requires a deliberately separate run; ambient overrides cannot silently widen a resume.
+
+### Judge behavior, publication and recovery
+
+Five scoped reviewers provide **advice**. A subjective `FAIL` or unavailable score cannot veto modern publication or restart research. One repair round can propose changes to at most five uniquely named sections; malformed or mechanically worse proposals retain the original. Citation binding, structure, required actor coverage and explicit scenario consistency still determine whether publication is allowed.
+
+Before section writing, one cached planner establishes four scenarios (`SC1`–`SC4`) with names, weights totaling 100%, and a horizon; at most one format repair is allowed. Every section, expansion and summary receives that accepted frame. `meta.json` and `research_quality.json` bind the **full frame**, exact report, ordered sources and actor audit, and the backend independently checks the contract. Duplicate scenario rows, inconsistent weights, missing frames and changed horizons/names are rejected. This enforces internal consistency; it does not prove forecast calibration, factual truth or consistency of every free-form metric.
+
+Use validated `--resume` recovery to reuse completed tasks, actor passes and successful synthesis completions. Timeouts stop new admissions and late publication while ownership is retained until admitted callbacks drain. Agentic `--extract-only` is rejected before mutation. Explicit `--engine hybrid` or `--engine linear` remains available; saved unpinned legacy runs retain hybrid. A legacy report/actor judge failure without verified synthesis inputs now stops automatic fresh research replay, even if the report is missing or short. Preserving rejected evidence does not authorize publication.
+
+The [research runbook](docs/research/agentic-research-20260919/README.md) covers policy and archive details. The [judge-loop audit](docs/research/agentic-research-20260919/judge-loop-audit.md) distinguishes observed historical usage from unverified billing and records supported numeric concerns. [Final verification](docs/research/agentic-research-20260919/glm-verification.json) reports 5,085 backend passes (12 skips, 11 expected failures, 21 warnings), 34 native SDK passes and a native configuration/tool smoke check, with no provider calls. These are offline correctness results, not a speed or cost benchmark. Archive search requires SQLite FTS5; drain old research workers before upgrading code/schema. No saved run is migrated or resumed merely by updating this repository.
 
 ---
 
@@ -111,10 +157,12 @@ The [full DeerFlow 2.0 architecture atlas](docs/architecture/deerflow2/DEERFLOW_
 The current Stage-1 subprocess uses the **embedded `DeerFlowClient`**, while the native gateway/Runs API is an implemented DeerFlow 2 surface and the transport selected by the pre-cutover deterministic DRF2 driver.
 
 ```text
-current:  Flask orchestrator → isolated subprocess lane(s) → embedded DeerFlowClient
-          → lead model 1..N ↔ tools 0..N
-          → optional child agent loops + conditional context summarization
-          → evidence packs → global synthesis/judge/extraction → sealed research contract
+current:  Flask orchestrator → one isolated evidence lane → durable agentic coordinator
+          → five sequential phases × five scoped investigators → embedded DeerFlowClient
+          → adaptive model ↔ tools + archive recall + durable compaction
+          → evidence + shared actor dossier → canonical scenario plan
+          → cached multipart synthesis → advisory review / bounded repair
+          → extraction + mechanical publication checks → sealed research contract
 
 native:   client → FastAPI thread/run service → RunManager/worker
           → the same lead-agent assembly → checkpoint/store/journal → SSE replay/end
@@ -126,13 +174,13 @@ target B: deterministic driver → persistent Runs API slash-skill lead runs
           → KG MCP through skills; provisional simulation HTTP client has no matching server adapter (pre-cutover)
 ```
 
-Native DeerFlow 2 can also generate titles and long-term memory. The active research bridge disables title generation because a headless one-shot title is never displayed and would spend an otherwise unused LLM call; it disables persistent memory to prevent cross-run contamination and background model calls. Context summarization remains active but conditional: it triggers at 80K tokens, retains the latest 16K tokens, summarizes the complete discarded span, and inherits the active run model when no summary model is named. There is no truthful fixed provider-call count: each lead or subagent pass is itself an agent loop, and synthesis sections, judges, recovery, markets, retries, outer lanes, and resume state add conditional calls.
+Native title generation and cross-run long-term memory are disabled in the research bridge. Durable **per-run** task memory, evidence recall and compaction remain enabled. New GLM-5.3 workspaces compact at 294,912 tokens and retain 65,536; conservative profiles retain the 80K/16K baseline. Compaction archives original messages before replacement, and inherits the active model unless another model is explicitly configured. Provider-call counts remain data-dependent because investigations, discovery, synthesis and recovery contain bounded adaptive loops.
 
 The rest of the live system receives DeerFlow’s sealed Stage-1 contract:
 
 | Component | Role |
 |---|---|
-| **DeerFlow 2.0 Stage 1** | Three isolated Track-A evidence-only lanes plus exactly one shared baseline Track-B actor plane by default, followed by one global synthesis/judge/extraction owner. Track B produces a source-bound actor dossier and accountable 17-dimension coverage ledger; manifest v3 seals it with the evidence lanes before global synthesis. Four skills—`deep-research`, `actor-ontology-research`, `prediction-markets`, and `forecast-visuals`—are deployed and allowlisted, then activated per workflow. |
+| **DeerFlow 2.0 Stage 1** | Durable agentic research: five sequential phases with five scoped investigators each, one shared 17-dimension actor dossier, then canonical scenario planning, cached synthesis, advisory review, extraction and mechanical publication. The `deep-research`, `actor-ontology-research`, `prediction-markets` and `forecast-visuals` skills are activated per workflow. Legacy hybrid topology remains available explicitly. |
 | **MiroFish / OASIS** | A multi-agent social-simulation engine built on CAMEL-AI's OASIS. A current `actor-intelligence/v1` run preserves every eligible matched Tier-1/2 actor regardless of the legacy cap, compiles one deterministic role per actor, and serializes it into simulated **Twitter + Reddit**; optional programmatic audience fillers are added only when explicitly configured. |
 | **Local Graphiti KG** | A **temporal knowledge graph (GraphRAG)** that glues the two engines together — the open-source [Graphiti](https://github.com/getzep/graphiti) engine (`graphiti-core==0.29.2`, the same engine Zep Cloud was built on) running **locally on an embedded FalkorDB** (the `falkordblite` package — no Docker, no server process, no account, **no API key**). The dossier is ingested here; entities and relations are extracted locally via your configured `LLM_PROVIDER` (so it works even with the no-key CLI providers), and vector embeddings are computed locally by a sentence-transformers multilingual model. |
 | **ReportAgent** | A tool-augmented section loop: capable providers use native function/tool calls, while unsupported providers use the ReAct text fallback. Its `insight_forge` path retrieves over the graph and explicitly labeled simulation diagnostics before the final forecast report is sealed. |
@@ -152,7 +200,7 @@ Actor realism is a sealed cross-stage data path, not a longer persona prompt. Th
 | **Stage 3 graph** | Before prose ingestion, `actor-graph-seed-manifest/v1` deterministically fixes canonical actor/type/alias nodes, relationships, UUIDs, claim hashes, and causal attributes. A strict physical `actor-graph-seed-readback/v1` is checked after seeding and again after prose extraction, entity resolution, pruning, or graph reuse. Prose may enrich the graph but cannot silently replace the canonical actor identities or sealed relationships. |
 | **Stage 4 context and configuration** | One `actor-context/v1` pack per selected actor separates shared public evidence, documented evidence *about* the actor, actor beliefs/knowledge, public contested evidence, analyst inference, unknowns, and a six-field typed gap audit (`reason`, `attempted_queries`, `receipt_ids`, `result_ids`, `attempt_count`, `exhausted`). Canonical actor configuration is generated deterministically only from the sealed behavior projection; the public world contains only explicitly public, source-bound evidence. Analyst inference and gap audit data remain sealed for accountability but do not become actor knowledge or behavioral config tokens. |
 | **Stage 4→5 runtime bytes** | `actor-role/v2` is the sole behavioral profile authority. Twitter receives that role in `user_char` with only the documented newline normalization; Reddit stores it in `persona`, while legacy demographic fields are empty loader placeholders. The effective Reddit model system message is a deterministic role-only wrapper plus only the optional sealed `world_brief` and calendar vocabulary from `simulation_config.json`. The parent runner revalidates the role, context, cast, profile, and `simulation-config-manifest/v1` seals; the child repeats the config/profile checks, rebuilds the effective Reddit message, and attests its final bytes before the first model action. |
-| **Calls and compatibility** | The hardening after Track B adds **no new LLM call families** beyond the audited census: claim/receipt/lineage/family/report reception, ontology projection, graph seed/readback, context selection, role compilation, public-world/config projection, and all seals are deterministic. It deepens the existing Track-B research/completion/synthesis/judge families; current canonical configuration also skips the legacy activity-config LLM batch. Invocation counts within agent loops remain data-dependent. Runs admitted with the pinned v1 policy fail closed; explicitly disabled or pre-policy runs keep their documented legacy path, and legacy `actor-role/v1` is exact-byte reuse only—never silently recompiled or upgraded. The native gateway and both `drf2/` topologies remain pre-cutover. |
+| **Calls and compatibility** | The deterministic actor reception and runtime-role compilation add **no LLM calls**: claim/receipt/lineage/family/report reception, ontology projection, graph seed/readback, context selection, role compilation, public-world/config projection, and all seals are deterministic. It deepens the existing Track-B research/completion/synthesis/judge families; current canonical configuration also skips the legacy activity-config LLM batch. Invocation counts within agent loops remain data-dependent. Runs admitted with the pinned v1 policy fail closed; explicitly disabled or pre-policy runs keep their documented legacy path, and legacy `actor-role/v1` is exact-byte reuse only—never silently recompiled or upgraded. The native gateway and both `drf2/` topologies remain pre-cutover. |
 
 ### Current live 6-stage pipeline
 
@@ -181,7 +229,7 @@ flowchart LR
     P([One prompt]) --> R
 
     subgraph DeerFlow["DeerFlow 2 (subprocess + isolated venv)"]
-        R["1. research<br/>3 Track-A evidence lanes + 1 shared Track-B actor plane<br/>→ one global synthesis / extraction owner"]
+        R["1. research<br/>5 phases × 5 investigators + shared actor dossier<br/>→ one global synthesis / extraction owner"]
     end
 
     R --> O["2. ontology<br/>LLM over bounded canonical actor claims<br/>derives entity + edge types"]
@@ -204,7 +252,7 @@ flowchart LR
 
 ### The full workflow, in granular detail
 
-Every box below is a real code path — stage entry conditions, per-stage internals, quality gates, and the durable artifacts each step reads and writes. Solid arrows are the happy path; the judge FAIL edge and the dotted state/KG edges are the recovery and persistence paths. See the current-source [whole-system architecture atlas](docs/architecture/DEEPRESEARCHFORECAST_SYSTEM_ATLAS.md) for the complete map, status qualifications, and `file:line` references.
+This diagram reflects the current agentic Stage-1 default and its downstream handoffs. A failed mechanical gate preserves artifacts; it does not trigger fresh research. The [whole-system architecture atlas](docs/architecture/DEEPRESEARCHFORECAST_SYSTEM_ATLAS.md) documents the earlier baseline; its Stage-1 lane topology and model-call census predate the [agentic update](docs/research/agentic-research-20260919/README.md).
 
 ```mermaid
 flowchart TD
@@ -213,22 +261,17 @@ flowchart TD
 
     subgraph S1["STAGE 1 · RESEARCH (0–30%) — DeerFlow subprocesses, isolated venv"]
         SYNC["Runtime skill + bridge sync<br/>SHA-256 vs deployed deer-flow/ (fail-closed)"] --> EPOCH
-        EPOCH["Tool-budget epoch (SQLite ledger)<br/>attempts 1800 · searches 900 · fetches 450<br/>max 3 epochs per pipeline"] --> LANES
-        subgraph LANES["3 parallel evidence-only lanes (angle-specialized)"]
-            direction LR
-            L1["Track 1 · base evidence<br/>Track A + shared Track-B actor plane"]
-            L2["Track 2 · base rates & analogs"]
-            L3["Track 3 · incentives · contrarian · markets"]
-        end
-        LANES --> LOOP["Per-lane Track-A deep loop<br/>opening → scope → 3 scoped phases in parallel → forecast implications<br/>+ one breadth plane: harness subagents (global cap 9; default ≤3/lane)<br/>OR bridge per-KIQ fan-out (width ≤8)<br/>+ adaptive gap passes (plateau stop)<br/>tools: web_search · web_fetch (cached) · prediction_market_search"]
-        L1 --> ACTOR["Shared Track B<br/>actor landscape → cast-wide 17-dimension completion<br/>→ dossier synthesis → 10-dimension judge/refine<br/>→ deterministic source-bound coverage audit"]
-        LOOP --> PACKS["3 evidence_pack.md + sources.json pairs<br/>+ one actor dossier / coverage / optional judge<br/>sealed into evidence_synthesis_manifest.json v3"]
+        EPOCH["Durable tool and model budgets<br/>one outer evidence lane · shared model cap ≤5"] --> LOOP
+        LOOP["Five sequential phases × five distinct investigators<br/>scope → evidence → actors → risks → implications<br/>adaptive model/tool loops · durable discoveries<br/>search_evidence + read_evidence · resumable task receipts"] --> PACKS
+        LOOP --> ACTOR["One shared Track-B dossier<br/>17 source-bound dimensions<br/>advisory critique + mandatory coverage audit"]
+        PACKS["Evidence/source packs + actor dossier<br/>sealed evidence_synthesis_manifest.json"]
         ACTOR --> PACKS
-        PACKS --> GS["Global synthesis subprocess<br/>outline → multi-part sections → merge<br/>≤ 2 attempts · synthesis-only recovery on resume"]
-        GS --> JUDGE{"7-dimension report judge<br/>byte-bound scorecard"}
-        JUDGE -- PASS --> EXTRACT["One structured extraction owner<br/>actors.json with actor-intelligence/v1 · timeline.json<br/>quantitative.json · contested.json · markets · charts/"]
-        JUDGE -- FAIL --> GS
-        EXTRACT --> CONTRACT["Research contract promotion<br/>manifest-last · rollback-capable<br/>research_report.md sealed"]
+        PACKS --> GS["Cached canonical SC1–SC4 frame<br/>outline → parallel sections → summary<br/>resume verified tasks and successful completions"]
+        GS --> REVIEW["Five advisory reviewers<br/>one bounded repair round · ≤5 sections"]
+        REVIEW --> EXTRACT["Structured extraction + citation finalization<br/>actors · timeline · quantitative · markets · charts"]
+        EXTRACT --> QUALITY{"Mechanical quality + actor contract<br/>exact report/source/frame binding"}
+        QUALITY -- valid --> CONTRACT["Research contract promotion<br/>manifest-last · rollback-capable"]
+        QUALITY -- invalid --> STOP["Preserve artifacts and stop publication<br/>no automatic fresh-research replay"]
     end
 
     CONTRACT --> ONT
@@ -284,9 +327,10 @@ flowchart TD
 
 **Stage by stage:**
 
-1. **research (multi-angle, actor-deep, manifest-routed, at scale)** — the default orchestrator fans out **three Track-A evidence-only subprocesses** (base evidence · base rates and analogs · incentives / contrarian / markets). The broad baseline lane also owns exactly **one shared Track-B actor plane**; the other lanes cannot emit a competing dossier. Track B performs a landscape pass, a cast-wide completion pass over all 17 `actor-intelligence/v1` dimensions, tool-free dossier synthesis, a ten-dimension judge/refine loop, and a deterministic fetched-source-bound coverage audit. Manifest v3 seals the three evidence/source packs together with that one dossier, its coverage sidecar, baseline sources, and optional judge before a fresh child performs the only global outline, multi-part synthesis, report judge, structured extraction, market reconciliation, chart finalization, and contract promotion. Harness subagents and bridge fan-out remain alternative breadth planes. Deep synthesis targets **15–22K words**; live **Polymarket** priors remain calibration anchors. The file-based handoff contract can contain:
+1. **research (adaptive, durable, source-bound)** — one evidence subprocess coordinates five sequential phases with five scoped investigators each and one shared Track-B dossier. Full results, discoveries, sources and input identities are retained for exact task reuse. The actor plane preserves the 17-dimensional `actor-intelligence/v1` contract and mandatory fetched-source coverage audit. Sealed evidence and actor artifacts feed one canonical scenario plan, cached multipart synthesis, advisory review, bounded section repair, extraction and mechanical publication. Deep synthesis targets **15–22K words**. The handoff includes:
    - `research_report.md` — the broad *deep-research* dossier (Track A; augments the graph, ontology, and situation context)
-   - `actor_dossier.md` · `actor_dossier_coverage.json` · optional `actor_dossier_judge.json` — the shared Track-B ranked cast, 17-dimension accountability ledger, and byte-bound quality decision
+   - `actor_dossier.md` · `actor_dossier_coverage.json` · optional `actor_dossier_judge.json` — the shared Track-B ranked cast, 17-dimension accountability ledger, and byte-bound advisory review
+   - `research_quality.json` — exact final report/source/actor/frame checks; `meta.json` also retains the accepted `research_scenario_frame`
    - `actors.json` — the unified extracted cast and relationships, deterministically normalized to `actor-intelligence/v1` with claim-level source/time/epistemic fields, explicit gaps, aggregate coverage, and final report/dossier/source/actor-roster hashes
    - `sources.json` · `prediction_requirement.txt` · `timeline.json` · `meta.json` · `research_progress.log` · `market_price_history.json` (90-day Polymarket price series for anchored markets)
 2. **ontology** — an LLM derives **entity types + edge types** from the sealed research material, the prediction question, and a bounded current-v1 projection containing only canonical actor IDs/aliases/tiers and receipt-bound claims. It tags each entity with an **archetype + simulation tier** (so reporters, outlets, and abstract concepts become graph *context* rather than actors) and each edge with a **family + valence**. Flat legacy role/stance/brief fields are not an alternate current-v1 input.
@@ -300,7 +344,7 @@ flowchart TD
 ## Features
 
 - **One prompt → full forecast.** A single question drives the entire research → simulation → report pipeline end to end.
-- **Autonomous deep research at scale.** Three **parallel multi-angle Track-A lanes** run web search and full-text fetch and publish sealed evidence packs into one global synthesis namespace. At `deep` depth, DeerFlow runs a staged multi-pass protocol (source mapping, primary-evidence sweep, actor/incentive analysis, contradiction/risk testing, forecast-input synthesis, final long-form synthesis), one bounded breadth plane (harness subagents by default, or the bridge fan-out), a **research judge→refine loop**, universal **S1–S4 source tiering** + triangulation top-up, and a **multi-part parallel synthesis** that assembles **15–22K-word dossiers**.
+- **Adaptive deep research.** Five scoped investigators per phase choose their next research steps, persist mid-flight discoveries, and recall complete archived evidence. Cached multipart synthesis targets **15–22K words**. Advisory review improves named sections within a bounded repair round; mechanical checks govern publication.
 - **Prediction-market grounding (Polymarket).** During research, implied probabilities are pulled **keyless** from Polymarket's public **Gamma + CLOB** APIs via LLM **market-shaped queries** with a **relevance gate**, injected as pre-research **calibration anchors**. At report time, each binary is evaluated for an exact/near resolution-equivalent market match; only accepted matches receive a `market_anchor` and the 10pp-divergence rationale rule. Anchored forecasts can use **dual-time requoting** (research-time vs. now, with Δ) and **90-day price-history** charts; unavailable or unsuitable markets degrade safely without a forced anchor.
 - **Deterministic report visualization + PDF.** A no-LLM visualization layer renders **interactive Plotly charts** (HTML + PNG pairs, matplotlib fallback) and embeds them in the report — default slots carry forecast data only (scenario probabilities, binary dot plot, model-vs-market dumbbell, metric trajectories, forecast revisions, timeline, actor network, world-state trajectory, market price history); pipeline-meta diagnostics are opt-in. A **PDF export** (pandoc / XeLaTeX, CJK-safe) is available on demand.
 - **Multi-seed sensitivity sidecar & adaptive context.** When explicitly enabled, extra simulation + report lanes are pooled into `ensemble_forecast.json`; the audited primary forecast is unchanged. Context slices (prior sections, personas, world brief) are **budgeted to the provider's context window**.
@@ -317,7 +361,7 @@ flowchart TD
 - **Fail-fast preflight.** `npm run doctor` checks basic file/directory presence, imports, and provider prerequisites in seconds, and `POST /api/research/run` validates keys/credentials/checkout before any spend.
 - **Bilingual UI.** English + 中文, toggled from the Settings menu.
 - **Run history.** A drawer lists past pipeline runs for quick review.
-- **Resilient by design.** Error guards, a tool-free synthesis net, depth-aware research watchdog with report salvage, per-section graceful degradation, atomic state writes, and orphan reconciliation (including stranded research processes) across restarts.
+- **Resilient by design.** Durable task and synthesis reuse, bounded admission and deadlines, late-callback ownership fences, mechanical publication checks, atomic state writes and orphan reconciliation preserve work across interruptions.
 
 ---
 
@@ -438,14 +482,15 @@ Most behavior knobs have degrade-safe defaults. After `setup.sh` has assembled t
 | Knob | Default | Purpose |
 |---|---|---|
 | `LLM_PROVIDER` | `claude-cli` | Active provider for the report + simulation stages (also drives local graph extraction). |
+| `RESEARCH_ENGINE` | `agentic` | Fresh-run default; explicit `hybrid` / `linear` and saved legacy policies remain supported. |
 | `DEERFLOW_MODEL` | `claude` | Model for the deep-research stage (configured independently from `LLM_PROVIDER`). |
 | `DEERFLOW_RESEARCH_DEPTH` | `deep` | `quick` / `standard` / `deep`; `deep` runs the full multi-pass protocol. |
-| `RESEARCH_PARALLEL_TRACKS` | `3` | Parallel multi-angle Track-A evidence lanes (base evidence / base rates / incentives-markets). |
-| `RESEARCH_GLOBAL_SYNTHESIS` | `true` | With more than one lane, seal three evidence packs and the single baseline actor dossier into manifest v3, then run one fresh global synthesis/judge/extraction child. |
-| `DEERFLOW_DUAL_TRACK` | `true` | Enable the shared Track-B actor plane. In the default three-lane topology it runs exactly once in the broad baseline lane, not once per evidence angle. |
+| `RESEARCH_PARALLEL_TRACKS` | `3` (hybrid) | Legacy hybrid lane count. Agentic uses one outer evidence lane with five internal investigators. |
+| `RESEARCH_GLOBAL_SYNTHESIS` | `true` | One global synthesis/extraction/publication owner consumes sealed evidence and the shared actor dossier. |
+| `DEERFLOW_DUAL_TRACK` | `true` | Enable the shared Track-B actor dossier. |
 | `RESEARCH_MULTIPART_SYNTHESIS` | *(empty → deep-only)* | Outline → parallel section writing → stitch → length gate, for 15–22K-word dossiers. |
-| `RESEARCH_FANOUT_WIDTH` | `8` | Max retained bridge per-KIQ/per-actor fanout width; suppressed while harness delegation owns the breadth plane. |
-| `DEERFLOW_SUBAGENTS` / `RESEARCH_GLOBAL_SUBAGENT_CAP` | `true` / `9` | Enable harness scoped workers under one global cap; three default lanes derive at most three child workers each. |
+| `RESEARCH_FANOUT_WIDTH` | `8` (hybrid) | Legacy bridge fan-out limit; agentic uses its own five-investigator scheduler. |
+| `DEERFLOW_SUBAGENTS` / `RESEARCH_GLOBAL_SUBAGENT_CAP` | agentic: nested off / `5` | Agentic disables nested delegation and honors smaller explicit caps. Legacy hybrid baseline: `true` / `9`. |
 | `RESEARCH_MCP_KG` | `true` | Expose an existing backend graph to fork/continue/resume research via stdio MCP; no-op on a first run with no `graph_id`. |
 | `FIRECRAWL_API_KEY` | *(empty)* | **Recommended.** With a [Firecrawl](https://firecrawl.dev) key, `web_fetch` uses Firecrawl v2 `/scrape` as the **primary** extractor (managed, JS-rendering; anonymous Jina becomes the fallback) and `web_search` uses v2 `/search` as its backend when no `SERPER_API_KEY`/`TAVILY_API_KEY` is set (replacing keyless DDG). Empty → previous Jina/DDG behavior. Spend controls: `RESEARCH_FIRECRAWL_SEARCH_LIMIT` (default 5) caps billed results per search, `RESEARCH_FIRECRAWL_MAX_AGE_SECONDS` (default 172800) serves unchanged pages from Firecrawl's cache instead of a fresh billed scrape, and `RESEARCH_FIRECRAWL_MAX_FETCH_CALLS_PER_PROCESS`/`RESEARCH_FIRECRAWL_MAX_SEARCH_CALLS_PER_PROCESS` (400/300) hard-cap billed calls per research subprocess. |
 | `PREDICTION_MARKETS_ENABLED` | `true` | Pull keyless Polymarket priors and inject them as calibration anchors. |
@@ -529,7 +574,7 @@ FLASK_DEBUG=false                # dev only: exposes the Werkzeug debugger + rel
 | `ZHIPUAI_API_KEY` | DEERFLOW_MODEL=glm | DeerFlow research key when running GLM. |
 | `DEERFLOW_RESEARCH_DEPTH` | No | Depth of the research stage: `quick` / `standard` / `deep`. `deep` runs multiple scoped research passes before final synthesis. |
 | `DEERFLOW_RESEARCH_LANGUAGE` | No | Language of the research output. |
-| `DEERFLOW_RESEARCH_TIMEOUT` | No | Research watchdog override (seconds). Unset = depth-aware base budget: quick 900 / standard 7200 / deep 21600, multiplied by 1.5 when dual-track, subagents, or bridge fan-out is enabled. If the report was already written when the watchdog fires, the run is salvaged instead of discarded. |
+| `DEERFLOW_RESEARCH_TIMEOUT` | No | Outer research-process watchdog override in seconds; separate from pinned agentic phase/call deadlines. Retained outputs must pass publication checks before reuse. |
 | `OASIS_SEMAPHORE` / `OASIS_CLI_SEMAPHORE` | No | Concurrent LLM-call cap during simulation (API providers / CLI providers). In dual-platform parallel runs each platform gets half, so the cap is the true global in-flight limit. |
 | `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | No | Retry budget and maximum backoff for **transient local-graph read errors**. The graph runs locally now, so there are no rate limits or 429s — these knobs only smooth over occasional transient read failures. Defaults are `2` and `90`. |
 | `LLM_CLI_USE_API_KEY` | No | `claude-cli` strips a stray `ANTHROPIC_API_KEY` from the subprocess env by default (it would silently switch billing from your subscription to the API). Set `true` to keep it. |
@@ -624,7 +669,7 @@ The entire UI is **bilingual** (English + 中文).
 - **File-based handoff contract over a subprocess.** The DeerFlow ↔ backend bridge is a file-based handoff contract executed in a subprocess, keeping DeerFlow's LangChain/LangGraph dependencies fully isolated from the backend.
 - **Structured actor intelligence end to end.** DeerFlow 2's final `actors.json` carries `actor-intelligence/v1`: 17 source/time/epistemic dimensions, explicit gaps and producer hashes. Ontology receives a bounded projection while the graph and PREPARE retain the canonical artifact. PREPARE creates hash-bound `actor-context/v1` packs, a sanitized `actor-role/v2`, a bounded config projection, and platform role manifests. The runner validates the cast, report, actors, context, role fragment, full profile field and platform manifest immediately before launch; deleting state or setting counts to zero cannot downgrade researched roles to generic personas. Sealed legacy `actor-role/v1` remains resumable only through its exact-byte, no-context compatibility path.
 - **Research error guard.** An error guard prevents an LLM-error or degraded message from being mistaken for a real research report — it fails fast, so no contamination flows downstream.
-- **Tool-free "synthesis net".** If the research agent exhausts its step budget on tool calls before writing, or hits a provider **structural** error on the final write, the report is synthesized directly from the gathered (checkpointed) research via a clean single-turn call.
+- **Recoverable research synthesis.** Agentic synthesis caches successful completions and preserves evidence when a gate fails. The older single-turn synthesis fallback remains a legacy path; it cannot replace a failed modern scenario plan or publication contract.
 - **Per-section graceful degradation.** In the ReportAgent, a single section's LLM error becomes a placeholder while the rest of the report still produces a partial result.
 - **Robust state management.** Atomic state writes, process-group cleanup, and orphan reconciliation across restarts keep runs consistent.
 
@@ -632,15 +677,14 @@ The entire UI is **bilingual** (English + 中文).
 
 ## Architecture & recent enhancements
 
-The six-stage pipeline above is the skeleton; recent releases both hardened every joint of it **and** scaled the research + report stages up by a step-change. The changes below are architectural rather than incremental — some change what the system *refuses to do* (fake success, fabricate narrative, hedge forecasts), others multiply what it can do (15–22K-word dossiers, parallel research, embedded charts, market anchoring). The backend suite now runs **1074 tests**.
+The six-stage pipeline above is the skeleton; recent releases both hardened every joint of it **and** scaled the research + report stages up by a step-change. The changes below are architectural rather than incremental — some change what the system *refuses to do* (fake success, fabricate narrative, hedge forecasts), others multiply what it can do (15–22K-word dossiers, parallel research, embedded charts, market anchoring). The GLM follow-up passed **5,085 backend tests**, with 12 skips and 11 expected failures, plus 34 native SDK checks. See the [verification manifest](docs/research/agentic-research-20260919/glm-verification.json); these are offline results, not provider performance measurements.
 
 ### Deep research at scale
 
-- **Multi-part parallel synthesis.** Instead of a single completion (whose length is the physical ceiling on a dossier), the synthesis stage derives an outline, writes the sections **in parallel** (each with keyword-sharded context), stitches them deterministically, and enforces one 15–22K-word dossier envelope plus a shared output-token ledger across outline, section attempts, retries, expansions, and summary (`RESEARCH_MULTIPART_SYNTHESIS`, `RESEARCH_SYNTHESIS_MIN_WORDS`, `RESEARCH_SYNTHESIS_MAX_WORDS`). Deep synthesis fails closed rather than promoting concatenated pass notes.
-- **Parallel evidence, shared actor intelligence.** The default orchestrator runs **three** evidence-only Track-A subprocesses at once—base evidence, base rates/analogs, and incentives/contrarian/markets—while the broad baseline lane alone runs Track B. It seals three evidence packs plus one source-bound actor dossier into manifest v3 and starts one fresh global synthesis/judge/extraction child (`RESEARCH_GLOBAL_SYNTHESIS=true`); it does **not** merge three publishable reports or three competing casts. The older full-report merge is a compatibility path when global synthesis is disabled.
-- **One bounded breadth plane.** After the opening scope pass, harness-native scoped subagents are the default breadth mechanism; the bridge's per-KIQ/per-actor fan-out (`RESEARCH_DEEP_FANOUT`, `RESEARCH_FANOUT_WIDTH`, maximum width 8) is suppressed while harness delegation owns that plane. Three default outer lanes share a global subagent cap of 9, deriving at most 3 child workers per lane; deep protocol phases 2–4 may also run in parallel (`RESEARCH_PARALLEL_PHASES`).
-- **Two independent judge→refine gates.** The shared Track-B dossier runs its own ten-dimension judge plus mandatory deterministic source-bound cast × 17-dimension audit before global synthesis; the unified Track-A report then runs its separate report judge/refine loop. An explicit final actor `FAIL` or failed coverage audit cannot seed the report or simulation (`RESEARCH_REPORT_JUDGE`, `ACTOR_DOSSIER_JUDGE`).
-- **Universal source tiering + triangulation.** Every fetched source gets an S1–S4 tier (a baseline tier when the domain table and model both miss), and the top single-sourced load-bearing claims get a dedicated triangulation pass before final synthesis (`RESEARCH_UNIVERSAL_TIERING`, `RESEARCH_TRIANGULATION_TOPUP`).
+- **Adaptive breadth with bounded concurrency.** Five sequential phases each have five distinct investigators. Native tool loops choose what to research; durable discovery rounds add follow-ups. Nested delegation is disabled so concurrency does not multiply across layers.
+- **Persistent evidence and synthesis.** Full artifacts, frozen phase inputs, actor passes and successful synthesis completions are reusable. Indexed archive search and exact-range recall make omitted context accessible without replaying the entire conversation.
+- **Advisory critique with mechanical publication.** Five reviewers can propose one bounded round of section repairs. Citations, structure, required actor coverage and the full canonical scenario contract are checked independently before publication. A subjective `FAIL` cannot launch a full research replay.
+- **Model-aware multipart synthesis.** An accepted SC1–SC4 frame reaches every section and summary. Context and output allowances are pinned for actual target models, including smaller alternates; cached calls do not consume physical-call allowance again.
 
 ### Prediction-market grounding (Polymarket, keyless)
 
@@ -762,10 +806,10 @@ DeepAgentForecast/
 | **`claude-cli` returns 401 / bills the API instead of my subscription** | A stray `ANTHROPIC_API_KEY` in your environment. It is stripped from the CLI subprocess automatically; run `claude` once to refresh the OAuth login. (Set `LLM_CLI_USE_API_KEY=true` if you *want* API-key billing.) |
 | **Provider switch didn't take effect** | The runtime switch applies to **new runs** only. Start a fresh pipeline after switching. |
 | **Frontend can't reach the API** | The frontend proxies `/api` → `5001`. Confirm the backend is running on port 5001 (`npm run dev` starts both). The UI shows a "Lost connection" banner if the backend stops responding mid-run. |
-| **Research stage times out** | The watchdog's base budgets are depth-aware (quick 900s / standard 7200s / deep 21600s) and become 1.5× when dual-track, subagents, or bridge fan-out is enabled. Deep mode intentionally runs multiple research passes, so it is slower; override with `DEERFLOW_RESEARCH_TIMEOUT` or reduce research `depth`. If the report was already written when the watchdog fired, the run salvages it and continues. |
+| **Research stage times out** | Distinguish the outer `DEERFLOW_RESEARCH_TIMEOUT` watchdog from the pinned per-phase and per-call deadlines. Preserve the workspace, inspect the typed stop, and use validated resume after admitted workers drain. Completed tasks and successful synthesis calls can be reused; publication still requires the final mechanical receipt. |
 | **Deep research logs `[FORCED STOP] Tool web_search called N times` from pass 2 onward** | Upstream DeerFlow accumulates per-tool call counts across all turns of a thread, starving later research passes. Re-run `./setup.sh` to apply the bridge middleware patch (per-run counter resets) and pick up the research-grade `web_search`/`web_fetch` limits in `deerflow_bridge/config.yaml` (if you keep your own `deer-flow/config.yaml`, merge the `loop_detection.tool_freq_overrides` stanza by hand). |
 | **Need to stop a long run** | Click **Cancel** in the run header (or `POST /api/research/<id>/cancel`). Research/simulation subprocesses are terminated immediately. |
-| **A run failed (or was cancelled) midway** | Click **Resume** in the run header (or `POST /api/research/<id>/resume`). Completed research, graph, simulation and report deliverables are reused only after manifest/hash/schema and stage-health revalidation; invalid or corrupt artifacts are regenerated. The pipeline restarts from the first stage that still needs work, including after an interrupted backend run. |
+| **A run failed (or was cancelled) midway** | Use **Resume** (or `POST /api/research/<id>/resume`). Reuse requires manifest/hash/schema and stage-health checks. Agentic task and synthesis receipts support partial recovery. A legacy judge rejection without verified synthesis inputs stops for investigation instead of silently launching fresh research. |
 | **A report section shows a placeholder** | Per-section graceful degradation: one section's LLM error becomes a placeholder while the rest of the report is still produced. Re-run if needed. |
 
 ---

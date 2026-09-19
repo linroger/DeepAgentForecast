@@ -76,6 +76,7 @@ npm start         # 后端 :5001 + 前端 :3000；流式日志 + 阶段标记
 - [快速上手](#快速上手)
 - [演示](#演示)
 - [它能做什么](#它能做什么)
+- [智能体研究与 GLM-5.3](#智能体研究与-glm-53)
 - [架构总览](#架构总览)
 - [当前实际运行的六阶段管线](#当前实际运行的六阶段管线)
 - [功能特性](#功能特性)
@@ -99,12 +100,58 @@ npm start         # 后端 :5001 + 前端 :3000；流式日志 + 阶段标记
 
 把一个开放性问题（例如「2035 年电动车市场会怎样演化？」）交给 DeepAgentForecast，它会：
 
-- **自动联网研究每个关键行动者（规模化）**：当前默认路径并行运行**三条相互隔离的 Track-A 多角度 evidence-only 证据轨**（基础证据 · 基率与参照类 · 激励/反面/市场），并只在广义基础轨运行**一条共享的 Track-B 行动者智能平面**。Track B 对每位第 1/2 层行动者研究 17 个带来源与时间边界的维度——历史、价值观、激励、动机、能力、约束、已显露的偏好/厌恶、联盟、竞争者、决策权/触发器、当前行动、未来计划、投资、历史记录、可能行动、红线和知识状态——再把经校验和绑定的角色档案送入唯一的全局报告/抽取命名空间。每条 Track-A 轨执行分阶段多轮协议，并且每次只启用一种广度机制：默认 harness scoped 子代理（三轨共享上限 9，每轨至多 3 个），或在 harness 未接管时启用旧桥接扇出。深度综合目标为 **1.5–2.2 万词**，并带 S1–S4 来源分级、三角验证、Polymarket 校准、十维行动者评审与确定性的「行动者 × 维度」来源覆盖审计。
+- **自适应联网研究与行动者深研**：新运行默认采用 **agentic 引擎**，在一条外层证据轨内依次推进五个阶段，每阶段安排五位职责不同的研究智能体，模型调用最多五路并发。智能体自主选择搜索、抓取与核验步骤；新发现与完整证据持续落盘，支持后续追问和恢复。一条共享 Track-B 流程对第 1/2 层行动者开展 17 个带来源与时间边界的维度研究。可复用的多段综合以 **1.5–2.2 万词**档案为目标，采用建议性评审、有界章节修补与强制机械发布校验。详见[智能体研究与 GLM-5.3](#智能体研究与-glm-53)。
 - **构建高保真平行世界**：把研究成果蒸馏进一张带**分层、行为画像丰富的本体**的时序知识图谱（GraphRAG）。当前 v1 会为所有合格且身份匹配的 Tier-1/2 行动者确定性编译来源绑定的运行时角色与配置；图谱显著度不能截断封存的研究阵容，也不能用不匹配实体替代行动者。
 - **以日历时间模拟未来演化**：系统会从你的问题中**自动抽取预测判定日**（「到 2030 年」「未来 18 个月」「2035 年底」……），把研究基准日到判定日之间的时间跨度切分为**每轮一个整日历单位**（日 / 周 / 半月 / 月 / 季度 / 半年）的回合 —— 轮数随判定日**动态伸缩**（问到 2035 的轮数多于问到 2029 的），单位也始终与问题匹配：「到 2030 年」→ 18 个季度轮，「三周内」→ 21 个单日轮。每一轮，LLM 人格都在**世界时钟**下扮演真实行动者**在整个时段内**会做的事 —— 决策、公告、结盟或战略性按兵不动；调研得到的真实事件会在其实际日期所在的回合触发；**世界态**在轮与轮之间演化（日历尺度惯性 + 基率熵底），并把「上一时段发生了什么」的定性摘要回灌给智能体。可选的**多种子敏感性侧车**会重跑模拟+报告并写入 `ensemble_forecast.json`，但不会改写已封存的主预测。
 - **产出可交互预测报告**：由报告 Agent 在图谱与模拟之上做工具增强的检索，综合写出一份分章节的预测报告 —— 内嵌**预测数据图表**（交互式 Plotly，HTML + PNG 成对输出：情景概率、二元预测点图、指标轨迹、模型 vs 市场）；只有在找到并接受完全 / 近似判定等价的市场匹配时，预测才会获得 **Polymarket 锚点**；同时支持一键 **PDF 导出**。
 
 整条链路由 **一个提示词（one prompt）** 触发，全程自动衔接，无需人工在各阶段之间手动搬运中间产物。
+
+---
+
+## 智能体研究与 GLM-5.3
+
+新的后端和 CLI 运行默认使用 `agentic`。研究协调器依次推进**范围界定 → 原始证据 → 行动者与激励 → 矛盾与风险 → 预测启示**。每个阶段安排五位目标不同的研究者，其原生模型/工具循环自主决定搜索方向、抓取来源和核验内容。阶段顺序执行，以消费已验证的前序证据；在共享容量约束内，研究者及模型调用最多五路并发，显式设置的更小上限仍然有效。
+
+**中途发现不会因中断而丢失。** 智能体流式运行时，新问题及其证据引用即被保存，随后进入有界的追问轮次。任务完成前，完整结果、抓取正文、来源身份与冻结的阶段输入均已落盘。`search_evidence(query, limit=10)` 查找归档段落，`read_evidence` 读取指定产物的精确区间。提示词上限限制当前视图，不会截掉已保存的证据。跨运行长期记忆仍关闭，避免混入无关预测的信息。
+
+### 选择 GLM-5.3 与配置上下文
+
+为新的研究运行，在根目录 `.env` 设置以下非敏感值：
+
+```dotenv
+DEERFLOW_MODEL=glm
+RESEARCH_ENGINE=agentic
+```
+
+按照提供方配置说明私下填写 `ZHIPUAI_API_KEY`。受版本管理的**研究**别名 `glm` 对应 `glm-5.3`；图谱、模拟和最终报告模型另由 `LLM_PROVIDER` / `LLM_MODEL_NAME` 控制。安装脚本保留已有 `deer-flow/config.yaml`，升级时须对照[受版本管理的配置](deerflow_bridge/config.yaml)核对其 `glm` 段。GLM 推理始终开启，免工具调用采用低推理强度。选择引擎本身不会改变已有运行保存的模型或策略。
+
+| 新 GLM-5.3 工作区设置 | 默认值 |
+|---|---:|
+| `RESEARCH_AGENTIC_CONTEXT_WINDOW_TOKENS` | 1,048,576 |
+| `RESEARCH_AGENTIC_WORKING_TOKENS` | 262,144 |
+| `RESEARCH_AGENTIC_RETRIEVAL_TOKENS` | 32,768 |
+| `RESEARCH_AGENTIC_RESERVED_OUTPUT_TOKENS` | 65,536 |
+| `RESEARCH_AGENTIC_PROMPT_OVERHEAD_TOKENS` | 32,768 |
+| `RESEARCH_AGENTIC_SAFETY_MARGIN_TOKENS` | 32,768 |
+| 原生上下文压缩触发值 / 保留量 | 294,912 / 65,536 |
+| `RESEARCH_AGENTIC_TASK_STEPS` | 24 |
+| `RESEARCH_AGENTIC_MAX_FOLLOWUPS` / `RESEARCH_AGENTIC_DISCOVERY_ROUNDS` | 8 / 3 |
+| `RESEARCH_AGENTIC_PROMPT_BUDGET_TOKENS` | 12,000,000 |
+| `RESEARCH_AGENTIC_PHASE_DEADLINE_S` | 3,600 |
+| `RESEARCH_AGENTIC_CALL_TIMEOUT_S` | 600 |
+
+工作视图与检索选择器按 UTF-8 字节保守估算 token；这些值并非字符上限，也不是 tokenizer 实测值。百万 token 容量不意味着每轮都要重放百万 token：有界任务视图、工具结果归档、精确召回与持久化压缩共同控制重复输入，同时保留完整原文。步骤设置会转换为原生图递归范围，并非精确的实际调用次数。输入额度按**每个工作区**计算（证据与综合分别使用工作区），缓存输入只计一次，并不等同于美元或 Firecrawl 额度上限。工作视图、输出、提示开销与安全余量之和必须装入声明窗口；较小替代模型在发送前按自身固定容量校验。修改已保存策略需要有意创建独立运行，环境变量不能在恢复时悄悄扩大预算。
+
+### 评审模型、发布关卡与恢复
+
+五位限定职责的评审者提供**建议**。主观 `FAIL` 或无法取得评分，不会否决现代流程的发布，也不会重启研究。一轮修补最多针对五个名称唯一的章节；格式错误或使机械校验结果变差的方案不会替换原文。引用绑定、结构、必需的行动者覆盖和显式情景一致性仍决定能否发布。
+
+撰写章节前，一个可缓存的规划调用确定四个情景（`SC1`–`SC4`）及其名称、总和为 100% 的权重和预测期限，最多允许一次格式修复。每个章节、扩写和摘要都接收这份已接受的框架。`meta.json` 与 `research_quality.json` 绑定**完整框架**、精确报告、按序来源和行动者审计，后端独立复验契约。重复情景行、权重冲突、框架缺失及期限/名称变更均被拒绝。这保证内部一致性，不代表预测已校准、事实必然正确，或所有自由文本指标都一致。
+
+通过已验证的 `--resume` 复用完成的任务、行动者 pass 与成功综合补全。超时会停止接纳新任务和延迟发布，并保留执行所有权直至已接纳回调退出。agentic 的 `--extract-only` 在修改产物前即被拒绝。仍可显式选择 `--engine hybrid` 或 `--engine linear`；未固定引擎的旧存档继续使用 hybrid。旧报告/行动者评审失败且没有已验证综合输入时，现在会阻止自动重跑联网研究，即使报告缺失或过短也不例外。保留被拒绝的证据并不意味着允许发布。
+
+[研究运行手册](docs/research/agentic-research-20260919/README.md)说明策略与归档细节；[评审循环审计](docs/research/agentic-research-20260919/judge-loop-audit.md)区分已观察的历史用量与未核实账单，并保留有证据支持的数值疑点。[最终验证清单](docs/research/agentic-research-20260919/glm-verification.json)记录后端 5,085 项通过（12 跳过、11 预期失败、21 条警告）、原生 SDK 34 项通过，以及原生配置/工具冒烟检查，未调用提供方。这些是离线正确性证据，并非速度或成本基准。归档搜索需要 SQLite FTS5；升级代码/数据库结构前，应等待旧研究任务退出。更新仓库本身不会迁移或恢复任何已保存运行。
 
 ---
 
@@ -135,10 +182,12 @@ DeepAgentForecast 是一套本地六阶段应用，而不是一个独立的研�
 当前 Stage 1 子进程走的是**内嵌 `DeerFlowClient`**。原生 Gateway / Runs API 已在 DeerFlow 2 中实现，也是切换前 DRF2 确定性驱动器选定的传输面。
 
 ```text
-当前：Flask 编排器 → 1..N 个隔离子进程证据轨 → 内嵌 DeerFlowClient
-      → 主模型 1..N 次 ↔ 工具 0..N 次
-      → 可选子智能体循环 + 条件式上下文摘要
-      → 证据包 → 全局综合 / 评审 / 抽取 → 封存的研究契约
+当前：Flask 编排器 → 一条隔离证据轨 → 持久化 agentic 协调器
+      → 五个顺序阶段 × 每阶段五位研究者 → 内嵌 DeerFlowClient
+      → 自适应模型 ↔ 工具 + 归档检索 + 持久化上下文压缩
+      → 证据 + 共享行动者档案 → 规范情景计划
+      → 缓存多段综合 → 建议性评审 / 有界修补
+      → 抽取 + 机械发布校验 → 封存的研究契约
 
 原生：客户端 → FastAPI thread/run 服务 → RunManager / worker
       → 同一套主智能体装配 → checkpoint / store / journal → SSE 重放 / end
@@ -150,13 +199,13 @@ DeepAgentForecast 是一套本地六阶段应用，而不是一个独立的研�
         → 通过技能访问 KG MCP；暂行模拟 HTTP 客户端尚无匹配服务端适配器（尚未切换）
 ```
 
-原生 DeerFlow 2 还支持标题生成与长期记忆。当前研究桥接关闭标题生成，是因为无界面的单次研究不会显示标题，多做一次只会产生未使用的 LLM 调用；关闭持久记忆则是为了防止跨运行污染与后台模型调用。上下文摘要仍处于启用状态，但只在上下文达到 8 万 token 时触发：保留最近 1.6 万 token，对被丢弃的完整区段做摘要；未单独指定摘要模型时继承当前运行模型。模型调用次数没有诚实的固定值：每个主智能体或子智能体 pass 本身都是 agent loop，而综合章节、评审、恢复、市场、重试、外层证据轨与恢复位置都会增加条件调用。
+研究桥接关闭原生标题生成与跨运行长期记忆，避免无用调用和跨任务污染；**单次运行内**的持久化任务记忆、证据检索与上下文压缩仍然启用。新 GLM-5.3 工作区在 294,912 token 触发压缩并保留 65,536；保守配置保留 80K/16K 基线。压缩会先归档原始消息再替换，未单独指定模型时继承当前模型。研究、发现、综合和恢复包含有界自适应循环，因此不存在固定的模型调用次数。
 
 DeerFlow 封存 Stage-1 契约后，当前实际运行系统由以下组件继续接收：
 
 | 组件 | 作用 |
 |---|---|
-| **DeerFlow 2.0 Stage 1** | 默认三条隔离的 Track-A evidence-only 证据轨，加上恰好一条由基础轨拥有的共享 Track-B 行动者平面，之后由唯一的全局综合 / 评审 / 抽取流程接管。Track B 产出来源绑定的行动者档案与可问责的 17 维覆盖台账；manifest v3 在全局综合前把它与三条证据轨一起封存。`deep-research`、`actor-ontology-research`、`prediction-markets` 与 `forecast-visuals` 四个技能按工作流激活。 |
+| **DeerFlow 2.0 Stage 1** | 持久化 agentic 研究：五个顺序阶段、每阶段五位研究者，一份共享的 17 维行动者档案，随后执行规范情景规划、缓存综合、建议性评审、抽取与机械发布校验。按工作流激活 `deep-research`、`actor-ontology-research`、`prediction-markets`、`forecast-visuals` 技能；旧 hybrid 拓扑可显式选择。 |
 | **MiroFish / OASIS** | 基于 CAMEL-AI OASIS 的群体模拟引擎。当前 `actor-intelligence/v1` 会保留所有合格且身份匹配的 Tier-1/2 行动者，不受旧式上限截断，并为每位行动者确定性编译同一角色到模拟 Twitter + Reddit；只有显式配置时才添加程序化受众填充者。 |
 | **本地 Graphiti KG** | 运行在嵌入式 FalkorDB 上的时序知识图谱（GraphRAG）；档案在此灌入，实体 / 关系由配置的 `LLM_PROVIDER` 抽取，向量由本地多语言 sentence-transformers 模型计算。无需 Docker、独立服务或图数据库 Key。 |
 | **ReportAgent** | 按章节运行工具增强循环：有能力的提供方使用原生函数/工具调用，其余路径回退 ReAct 文本协议；通过 `insight_forge` 检索图谱与明确标注的模拟诊断，再封存预测报告。 |
@@ -176,7 +225,7 @@ DeerFlow 封存 Stage-1 契约后，当前实际运行系统由以下组件继�
 | **阶段 3：图谱** | 灌入研究正文之前，`actor-graph-seed-manifest/v1` 已确定规范行动者/类型/别名节点、关系、UUID、claim 哈希与因果属性。系统在种子写入后，以及正文抽取、实体消歧、剪枝或图谱复用之后，严格校验物理 `actor-graph-seed-readback/v1`。正文可以丰富图谱，但不能悄然替换规范行动者身份或已封存关系。 |
 | **阶段 4：上下文与配置** | 每个入选行动者都有一份 `actor-context/v1`，严格区分共享公开证据、关于行动者的文献证据、行动者自身信念/知识、公开争议证据、分析师推断、未知，以及六字段类型化缺口审计（`reason`、`attempted_queries`、`receipt_ids`、`result_ids`、`attempt_count`、`exhausted`）。规范行动者配置只从已封存的行为投影确定性生成；公共世界只接纳明确公开且绑定来源的证据。分析师推断和缺口审计为问责而封存，但不会变成行动者知识或行为配置 token。 |
 | **阶段 4→5：运行时字节** | `actor-role/v2` 是唯一行为档案权威。Twitter 的 `user_char` 等于该角色内容，仅做有文档约定的换行归一化；Reddit 的 `persona` 也是该角色，旧式人口统计字段只是空的加载器占位。真正交给 Reddit 模型的 system message，是确定性的纯角色包装，再加上 `simulation_config.json` 中可选且已封存的 `world_brief` 与日历词汇。父 runner 先重验角色、上下文、阵容、档案与 `simulation-config-manifest/v1` 封印；子进程再复验配置/档案，重建 Reddit 实际消息，并在首次模型行动前证明其最终字节。 |
-| **调用与兼容性** | Track B 之后的加固在已审计清单之外**不增加新的 LLM 调用族**：主张/收据/血缘/行为族/报告接收、本体投影、图谱种子/回读、上下文选择、角色编译、公共世界/配置投影与全部封印均为确定性操作。它加深既有 Track-B 研究/补全/综合/评审调用族；当前规范配置还会跳过旧式 activity-config LLM 批调用。agent loop 内的实际调用次数仍由数据决定。按 v1 策略准入的运行 fail closed；显式关闭该策略或策略固定机制出现前的运行保留有文档说明的旧路径，旧 `actor-role/v1` 只能按原字节复用，绝不静默重编译或升级。原生 Gateway 与两个 `drf2/` 拓扑仍处于切换前状态。 |
+| **调用与兼容性** | 确定性的行动者接收与运行时角色编译**不增加 LLM 调用**：主张/收据/血缘/行为族/报告接收、本体投影、图谱种子/回读、上下文选择、角色编译、公共世界/配置投影与全部封印均为确定性操作。它加深既有 Track-B 研究/补全/综合/评审调用族；当前规范配置还会跳过旧式 activity-config LLM 批调用。agent loop 内的实际调用次数仍由数据决定。按 v1 策略准入的运行 fail closed；显式关闭该策略或策略固定机制出现前的运行保留有文档说明的旧路径，旧 `actor-role/v1` 只能按原字节复用，绝不静默重编译或升级。原生 Gateway 与两个 `drf2/` 拓扑仍处于切换前状态。 |
 
 **端口约定**
 
@@ -193,7 +242,7 @@ DeerFlow 封存 Stage-1 契约后，当前实际运行系统由以下组件继�
 
 ```mermaid
 flowchart LR
-    A["1 · research<br/>三条 Track-A 证据轨 + 一条共享 Track-B 行动者平面<br/>→ 唯一的全局综合 / 抽取流程"] --> B["2 · ontology<br/>从有界规范行动者主张生成本体"]
+    A["1 · research<br/>五阶段 × 五位研究者 + 一份共享行动者档案<br/>→ 唯一的全局综合 / 抽取流程"] --> B["2 · ontology<br/>从有界规范行动者主张生成本体"]
     B --> C["3 · graph<br/>确定性行动者种子 + 严格回读<br/>再做正文抽取 / 消歧 / 剪枝"]
     C --> D["4 · prepare<br/>封存认知上下文 + 类型化缺口<br/>规范角色 / 配置 / 公共世界"]
     D --> E["5 · run<br/>群体模拟（日历时间<br/>每轮一个时间单位）"]
@@ -211,7 +260,7 @@ flowchart LR
 
 ### 全流程精细视图
 
-下图中的每个方框都对应一条真实代码路径——阶段进入条件、阶段内部步骤、质量门与每一步读写的持久化产物。实线为主路径；judge 的 FAIL 边与虚线的状态/图谱边是恢复与持久化路径。完整拓扑、状态限定与 `file:line` 引用见当前源码版[全系统架构图谱](docs/architecture/DEEPRESEARCHFORECAST_SYSTEM_ATLAS.md)。
+下图反映当前默认 agentic 研究流程及其下游交接。机械关卡失败会保留产物，不会触发重新联网研究。[全系统架构图谱](docs/architecture/DEEPRESEARCHFORECAST_SYSTEM_ATLAS.md)记录较早的基线；其中的 Stage-1 轨道拓扑与调用族清单早于本次[智能体研究升级](docs/research/agentic-research-20260919/README.md)。
 
 ```mermaid
 flowchart TD
@@ -220,22 +269,17 @@ flowchart TD
 
     subgraph S1["阶段 1 · 深度研究（0–30%）— DeerFlow 2 子进程 · 独立 venv"]
         SYNC["运行时技能 + 桥接同步<br/>与已部署 deer-flow/ 做 SHA-256 比对（漂移即拒绝）"] --> EPOCH
-        EPOCH["工具预算纪元（SQLite 台账）<br/>尝试 1800 · 搜索 900 · 抓取 450<br/>每条管线至多 3 个纪元"] --> LANES
-        subgraph LANES["3 条并行 evidence-only 证据轨（各有专属视角）"]
-            direction LR
-            L1["轨 1 · 基础证据<br/>Track A + 共享 Track-B 行动者平面"]
-            L2["轨 2 · 基率与历史类比"]
-            L3["轨 3 · 激励 · 反面 · 市场"]
-        end
-        LANES --> LOOP["每轨 Track-A 深度循环<br/>开局 → 划界 → 3 个限定阶段并行 → 预测启示<br/>+ 单一广度面：harness 子代理（全局上限 9；默认每轨 ≤3）<br/>或桥接层每 KIQ 扇出（宽度 ≤8）<br/>+ 自适应补缺轮（平台期即停）<br/>工具：web_search · web_fetch（带缓存）· prediction_market_search"]
-        L1 --> ACTOR["共享 Track B<br/>行动者版图 → 全阵容 17 维补全<br/>→ 档案综合 → 十维评审/精修<br/>→ 确定性的来源绑定覆盖审计"]
-        LOOP --> PACKS["三组 evidence_pack.md + sources.json<br/>+ 一份行动者档案 / 覆盖审计 / 可选评审<br/>封存进 evidence_synthesis_manifest.json v3"]
+        EPOCH["持久化工具与模型预算<br/>一条外层证据轨 · 共享模型并发上限 ≤5"] --> LOOP
+        LOOP["五个顺序阶段 × 每阶段五位不同职责研究者<br/>划界 → 证据 → 行动者 → 风险 → 预测启示<br/>自适应模型/工具循环 · 持久化发现<br/>search_evidence + read_evidence · 可恢复任务回执"] --> PACKS
+        LOOP --> ACTOR["一份共享 Track-B 档案<br/>17 个来源绑定维度<br/>建议性评审 + 强制覆盖审计"]
+        PACKS["证据/来源包 + 行动者档案<br/>封存 evidence_synthesis_manifest.json"]
         ACTOR --> PACKS
-        PACKS --> GS["全局综合子进程<br/>大纲 → 多段章节 → 合并<br/>≤ 2 次尝试 · 恢复时仅重跑综合"]
-        GS --> JUDGE{"七维报告评审<br/>记分牌与字节绑定"}
-        JUDGE -- 通过 --> EXTRACT["唯一的结构化抽取流程<br/>带 actor-intelligence/v1 的 actors.json · timeline.json<br/>quantitative.json · contested.json · 市场 · charts/"]
-        JUDGE -- 不通过 --> GS
-        EXTRACT --> CONTRACT["研究契约晋升<br/>manifest 最后落盘 · 可回滚<br/>research_report.md 封存"]
+        PACKS --> GS["缓存的 SC1–SC4 规范情景<br/>大纲 → 并行章节 → 摘要<br/>复用已验证任务与成功补全"]
+        GS --> REVIEW["五位建议性评审者<br/>一轮有界修补 · 至多五节"]
+        REVIEW --> EXTRACT["结构化抽取 + 引用定稿<br/>行动者 · 时间线 · 数量数据 · 市场 · 图表"]
+        EXTRACT --> QUALITY{"机械质量校验 + 行动者契约<br/>绑定完整报告/来源/情景"}
+        QUALITY -- 合格 --> CONTRACT["研究契约晋升<br/>manifest 最后写入 · 可回滚"]
+        QUALITY -- 不合格 --> STOP["保留产物并停止发布<br/>不自动重跑联网研究"]
     end
 
     CONTRACT --> ONT
@@ -291,7 +335,7 @@ flowchart TD
 
 | 阶段 | 名称 | 说明 |
 |------|------|------|
-| 1 | **research（多角度 · 行动者深研 · manifest 路由 · 规模化）** | 默认编排器扇出**三条 Track-A evidence-only 子进程**（基础证据 · 基率与参照类 · 激励/反面/市场）。广义基础轨同时独占**一条共享 Track-B 行动者平面**；其它轨不得产出竞争档案。Track B 执行动作者版图、全阵容 17 个 `actor-intelligence/v1` 维度补全、免工具档案综合、十维评审/精修与确定性的已抓取来源覆盖审计。manifest v3 把三组证据/来源包和这一份行动者档案、覆盖侧车、基础轨来源与可选评审封存后，再由全新的子进程统一完成唯一的大纲、多段综合、报告评审、结构化抽取、市场对账、图表收尾与契约晋升。其它契约包括 `research_report.md`、`actors.json`、`sources.json`、`prediction_requirement.txt`、`timeline.json`、`meta.json`、`research_progress.log` 与 `market_price_history.json`。 |
+| 1 | **research（自适应、持久化、来源绑定）** | 一条证据子进程协调五个顺序阶段，每阶段五位研究者，并维护一份共享 Track-B 档案。完整结果、发现、来源和输入身份均持久化，支持精确复用。行动者流程保留 17 维 `actor-intelligence/v1` 与强制来源覆盖审计。封存证据与行动者产物进入规范情景规划、缓存多段综合、建议性评审、有界修补、抽取和机械发布校验。交接包括 `research_report.md`、`actors.json`、`sources.json`、`timeline.json`、`research_quality.json`，以及在 `meta.json` 中保存的 `research_scenario_frame`。 |
 | 2 | **ontology（本体生成）** | LLM 依据封存研究材料、预测问题，以及一份只含规范行动者 ID/别名/层级与收据绑定主张的有界当前 v1 投影，推导实体类型和关系类型；每个实体带**原型（archetype）+ 模拟层级（tier）**，每条关系带**族（family）+ 极性（valence）**。旧式扁平 role/stance/brief 字段不是当前 v1 的备用输入。 |
 | 3 | **graph（图谱构建）** | 系统先把结构化行动者智能转换为 `actor-graph-seed-manifest/v1`：使用稳定 UUID、claim 哈希、极性/方向/符号、强度/等级、有效期与时滞，确定规范行动者/类型/别名节点及来源绑定关系。物理写入后必须通过严格 `actor-graph-seed-readback/v1`；正文抽取、实体消歧、剪枝与复用后会再次校验同一契约。随后才把选定研究正文分块灌入本地 Graphiti，正文不得覆盖规范行动者身份。`GRAPH_CHUNK_SOURCE=dossier_only` 优先使用 `actor_dossier.md`，不存在时使用封存报告；`both` 才同时灌入。FalkorDB 存储和 sentence-transformers 嵌入在本地完成，Graphiti 抽取复用 `LLM_PROVIDER`。 |
 | 4 | **prepare（环境搭建）** | 当前 `actor-intelligence/v1` 会保留**所有合格且身份匹配的 Tier-1/2 行动者**，不受 `ACTOR_CAST_MAX` 影响；不匹配的图节点和通用回退会被拒绝。任何可执行角色编译前，封存的 `actor-context/v1` 都会区分公共局势证据、关于行动者的文献事实、行动者知识/信念、公开争议证据、分析师推断、未知与类型化研究缺口。当前 v1 的角色与每行动者配置均为确定性生成，只使用封存的规范行为投影与明确公开且绑定来源的世界事实；不会调用人格/配置 LLM，也绝不回退到扁平 role/stance/influence/memory/incentive 字段。`actor-role/v2` 是唯一行为档案权威：Twitter `user_char` 是该角色的换行归一化结果；Reddit `persona` 是该角色，人口统计字段为空占位。`simulation-config-manifest/v1` 封住精确配置字节及全部阵容/上下文/角色/档案绑定。若编排器随后应用获授权的情景覆盖或 WorldState 种子，会以幂等方式更新配置、重建封印，并在 RUN 前立即校验。已完成的只读复用会校验现有的状态绑定封印，但不会改写或重封；子进程在封印校验后还会哈希自己真正载入的精确字节，从而关闭校验/使用间隙。时间线由判定日确定性推导。 |
@@ -303,7 +347,7 @@ flowchart TD
 ## 功能特性
 
 - **一句话 → 完整预测**：单个问题端到端驱动「研究 → 模拟 → 报告」整条管线，无需在阶段间手动搬运中间产物。
-- **规模化自主深度研究**：**三条并行的多角度 Track-A 证据轨**执行联网搜索与全文抓取，将封存证据包交给一个全局综合命名空间。选择 `deep` 深度时，DeerFlow 会执行分阶段多轮协议（来源版图、原始证据、行动者/激励、矛盾/风险、预测输入、最终长文综合），使用一种有界广度机制（默认 harness 子代理，或桥接扇出）、**研究 judge→refine 环**、通用 **S1–S4 来源分级**与三角验证，再以**多段并行综合**产出 **1.5–2.2 万词**深度档案。
+- **自适应深度研究**：每阶段五位研究者自主选择下一步，持续保存中途发现，并按需召回完整归档证据。缓存多段综合以 **1.5–2.2 万词**为目标；建议性评审在一轮有界修补中改善指定章节，机械校验决定能否发布。
 - **预测市场锚定（Polymarket）**：研究阶段通过 LLM 生成的**市场化检索词**+**相关性门控**，从 Polymarket 官方 **Gamma + CLOB** API **无需 Key** 拉取隐含概率，注入为研究前**校准锚点**。报告阶段会逐条评估是否存在完全 / 近似判定等价的市场；只有接受的匹配才写入 `market_anchor` 并应用 10pp 分歧说明规则。已锚定预测可做**双时态重报价**（研究期价 vs 现价 + Δ）并渲染 **90 天价格历史**；没有合适市场或网络失败时会安全降级为不锚定。
 - **确定性报告可视化 + PDF**：一个免 LLM 的可视化层渲染**交互式 Plotly 图表**（HTML + PNG 成对输出，matplotlib 兜底）并内嵌进报告——默认槽位只放**预测数据**（情景概率含集成误差带、二元预测点图、模型 vs 市场哑铃、研究抽取的指标轨迹、跨版本预测修订、事件时间线、角色网络、世界态轨迹、市场价格历史），来源构成 sunburst、影响力/显著度代理值等元数据诊断图**默认关闭、仅可显式开启**；可按需 **PDF 导出**（pandoc / XeLaTeX，中文安全）。
 - **多种子敏感性侧车 & 自适应上下文**：显式开启后，额外的模拟+报告轨会汇总到 `ensemble_forecast.json`，但不改写已审计的主预测；上下文切片（前序章节、人设、世界简报）会**按提供方上下文窗口预算化**。
@@ -320,7 +364,7 @@ flowchart TD
 - **秒级预检（fail-fast）**：`npm run doctor` 几秒内检查基础文件 / 目录、导入与提供方前置条件；`POST /api/research/run` 会在产生任何花费之前校验 Key / 凭据 / DeerFlow 检出。
 - **双语界面**：English + 中文，可在设置菜单一键切换。
 - **运行历史**：抽屉中列出历史管线运行，便于快速回看。
-- **为韧性而设计**：错误守卫、无工具的综合兜底网、随深度自适应且可抢救报告的研究看门狗、逐章优雅降级、原子化状态写入，以及跨重启的孤儿对账（包括滞留的研究进程）。
+- **为韧性而设计**：持久化任务与综合复用、有界准入与时限、延迟回调所有权保护、机械发布校验、原子化写入与孤儿进程对账，共同保留中断前的成果。
 
 ---
 
@@ -432,14 +476,15 @@ npm start          # 后端 :5001 + 前端 :3000；实时日志 + 阶段标记
 | 旋钮 | 默认值 | 用途 |
 |---|---|---|
 | `LLM_PROVIDER` | `claude-cli` | 报告 + 模拟阶段的当前提供方（也驱动本地图谱抽取）。 |
+| `RESEARCH_ENGINE` | `agentic` | 新运行默认值；`hybrid` / `linear` 可显式选择，旧存档保留原策略。 |
 | `DEERFLOW_MODEL` | `claude` | 深度研究阶段的模型（独立于 `LLM_PROVIDER` 配置）。 |
 | `DEERFLOW_RESEARCH_DEPTH` | `deep` | `quick` / `standard` / `deep`；`deep` 跑完整多轮协议。 |
-| `RESEARCH_PARALLEL_TRACKS` | `3` | 并行多角度 Track-A 证据轨（基础证据 / 基率 / 激励-市场）。 |
-| `RESEARCH_GLOBAL_SYNTHESIS` | `true` | 多于一轨时，把三份 evidence-only 证据包与基础轨唯一的行动者档案一起封存进 manifest v3，再启动一个全新的全局综合 / 评审 / 抽取子进程。 |
-| `DEERFLOW_DUAL_TRACK` | `true` | 启用共享 Track-B 行动者平面。在默认三轨拓扑中，它只在广义基础轨运行一次，而不是每个证据角度运行一次。 |
+| `RESEARCH_PARALLEL_TRACKS` | `3` (hybrid) | agentic 固定为一条外层证据轨，内部五位研究者并发；此旧设置不把它扩成三条轨。 |
+| `RESEARCH_GLOBAL_SYNTHESIS` | `true` | 汇总封存证据与共享行动者档案，由一个全局流程综合、抽取并校验发布。 |
+| `DEERFLOW_DUAL_TRACK` | `true` | 启用一份共享 Track-B 行动者档案。 |
 | `RESEARCH_MULTIPART_SYNTHESIS` | *（空 → 仅 deep）* | 大纲 → 并行分节撰写 → 缝合 → 长度门，产出 1.5–2.2 万词档案。 |
-| `RESEARCH_FANOUT_WIDTH` | `8` | 旧桥接 per-KIQ/per-actor 扇出宽度上限；harness delegation 接管广度面时被抑制。 |
-| `DEERFLOW_SUBAGENTS` / `RESEARCH_GLOBAL_SUBAGENT_CAP` | `true` / `9` | 在一个全局上限下启用 harness scoped workers；默认三轨推导为每轨至多三个子代理。 |
+| `RESEARCH_FANOUT_WIDTH` | `8` (hybrid) | 旧桥接扇出上限；agentic 使用自身的五研究者调度器。 |
+| `DEERFLOW_SUBAGENTS` / `RESEARCH_GLOBAL_SUBAGENT_CAP` | agentic：禁用嵌套 / `5` | agentic 关闭嵌套委派，避免并发相乘；显式更小上限仍生效。旧 hybrid 基线为 `true` / `9`。 |
 | `RESEARCH_MCP_KG` | `true` | fork / continue / resume 时通过 stdio MCP 暴露已有后端图谱；首跑无 `graph_id` 时无操作。 |
 | `FIRECRAWL_API_KEY` | *（空）* | **推荐配置。**配置 [Firecrawl](https://firecrawl.dev) key 后：`web_fetch` 以 Firecrawl v2 `/scrape` 为**主抓**（托管渲染抓取，匿名 Jina 降为回退）；未配 `SERPER_API_KEY`/`TAVILY_API_KEY` 时 `web_search` 以 v2 `/search` 为后端（取代零 key 的社区 DDG）。留空 → 保持原 Jina/DDG 行为。花费护栏：`RESEARCH_FIRECRAWL_SEARCH_LIMIT`（默认 5）钳制单次搜索计费结果条数，`RESEARCH_FIRECRAWL_MAX_AGE_SECONDS`（默认 172800）让未变页面吃 Firecrawl 端缓存而非全新计费抓取，`RESEARCH_FIRECRAWL_MAX_FETCH_CALLS_PER_PROCESS`/`RESEARCH_FIRECRAWL_MAX_SEARCH_CALLS_PER_PROCESS`（400/300）为单研究子进程计费调用硬上限。 |
 | `PREDICTION_MARKETS_ENABLED` | `true` | 拉取无 Key 的 Polymarket 先验并注入为校准锚。 |
@@ -522,7 +567,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 | `ZHIPUAI_API_KEY` | DEERFLOW_MODEL=glm | 研究阶段运行 GLM 时的 DeerFlow Key。 |
 | `DEERFLOW_RESEARCH_DEPTH` | 否 | 研究阶段的深度：`quick` / `standard` / `deep`。`deep` 会先运行多轮分主题调研，再做最终长文综合。 |
 | `DEERFLOW_RESEARCH_LANGUAGE` | 否 | 研究产出的语言。 |
-| `DEERFLOW_RESEARCH_TIMEOUT` | 否 | 研究看门狗超时覆盖（秒）。不设置时基础预算为 quick 900 / standard 7200 / deep 21600；开启双轨、子代理或桥接扇出时再乘 1.5。若看门狗触发时报告其实已经写完，该次运行会被抢救回来而不是丢弃。 |
+| `DEERFLOW_RESEARCH_TIMEOUT` | 否 | 外层研究进程看门狗覆盖值（秒），与 agentic 固定的阶段/单次调用时限分别生效。保留的输出必须通过发布校验后才能复用。 |
 | `OASIS_SEMAPHORE` / `OASIS_CLI_SEMAPHORE` | 否 | 模拟期间的 LLM 并发调用上限（API 提供方 / CLI 提供方）。双平台并行运行时每个平台各分一半，因此该上限是真正的全局在途上限。 |
 | `ZEP_MAX_RETRIES` / `ZEP_RATE_LIMIT_MAX_SLEEP_SECONDS` | 否 | 本地图谱读取遇到瞬态错误时的重试预算与最大等待秒数（保留旧变量名；本地运行不再有 429 / 限流）。默认分别为 `2` 和 `90`。 |
 | `LLM_CLI_USE_API_KEY` | 否 | `claude-cli` 默认会从子进程环境中剥除多余的 `ANTHROPIC_API_KEY`（否则会悄悄把计费从订阅切到 API）。设为 `true` 可保留。 |
@@ -540,7 +585,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 |------|------|------|
 | `POST` | `/research/run` | 触发一次运行。请求体 `{prompt, mode(full\|research_only), depth(quick\|standard\|deep), max_rounds?, project_name?, language?, research_language?, model?}` → `{pipeline_id}`。`language` 是规范字段，`research_language` 是兼容别名；`model` 可逐次覆盖 DeerFlow 模型。路由会先做整套配置预检，有问题时返回可操作的 `400`。 |
 | `POST` | `/research/<id>/cancel` | **取消一条运行中的管线** —— 杀掉研究子进程组 / 停止 OASIS 模拟；其余阶段在下一个检查点退出。 |
-| `POST` | `/research/<id>/resume` | **恢复失败/被取消的管线** —— 先做配置预检，再重新校验已完成阶段的 manifest / 健康状态，只复用健康交付物，并从第一个仍需处理的阶段继续。 |
+| **运行中途失败或取消** | 点击 **Resume**（或 `POST /api/research/<id>/resume`）。复用须通过 manifest、哈希、schema 和阶段健康检查。agentic 任务及综合回执支持部分恢复；旧评审失败且缺少已验证综合输入时会停止并要求排查，不会悄悄重跑联网研究。 |
 | `DELETE` | `/research/<id>` | **删除一条已结束的运行记录**（含 handoff 产物）。运行中的管线须先取消（返回 `409`）。 |
 | `POST` | `/research/clean` | **批量清理失败/已取消的运行**。请求体 `{statuses?: ["failed","cancelled"]}`；`running`/`completed` 永不触碰。 |
 | `GET` | `/research/status/<id>` | 查询管线状态（终态：`completed` / `failed` / `cancelled`）。 |
@@ -610,7 +655,7 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 - **基于文件的交接契约**：DeerFlow 与后端之间通过运行在子进程之上的「基于文件的交接契约」通信，实现依赖隔离。
 - **结构化行动者智能端到端贯通**：DeerFlow 2 的最终 `actors.json` 携带 `actor-intelligence/v1`：17 个带来源/时间/认知状态的维度、明确缺口与生产者哈希。本体只接收有界投影，图谱和 PREPARE 则保留完整权威产物。PREPARE 生成哈希绑定的 `actor-context/v1`、经过消毒的 `actor-role/v2`、有界配置投影与平台角色 manifest。运行器在启动前校验阵容、报告、actors、上下文、角色片段、完整档案字段和平台 manifest；删除状态或把计数伪装为零也不能把已研究角色降级成通用人格。旧 `actor-role/v1` 只能经逐字节、无上下文的封存兼容路径恢复。
 - **研究产物错误守卫**：一道错误守卫会防止「LLM 报错 / 降级提示」被误当作真实研究报告（快速失败，不污染下游）。
-- **无工具的「综合兜底网」**：若研究 Agent 在动笔前就把步数预算耗在工具调用上，或在最终写作时遭遇提供方的结构性错误，系统会直接基于已采集（已检查点保存）的研究材料，用一次干净的单轮调用综合产出报告。
+- **可恢复的研究综合**：agentic 缓存成功补全，关卡失败时保留证据。旧单次补全兜底仅用于兼容路径，不能绕过失败的现代情景规划或发布契约。
 - **报告 Agent 逐章优雅降级**：单个章节的 LLM 错误只会变成该章节的占位内容，其余章节仍可产出，得到一份部分完成的报告。
 - **健壮的状态与进程治理**：原子化状态写入 + 进程组清理 + 重启后的孤儿进程对账。
 
@@ -618,15 +663,14 @@ FLASK_DEBUG=false                # 仅限开发：暴露 Werkzeug 调试器 + �
 
 ## 架构与最新增强
 
-上文的六阶段管线是骨架；近期的版本既把它的每一个关节都加固了一遍，**又**把研究与报告阶段做了一次阶跃式扩容。以下改动是架构性的而非零敲碎打 —— 有些改变的是系统*拒绝做什么*（伪造成功、编造叙事、对冲预测），有些则成倍放大它能做什么（1.5–2.2 万词档案、并行研究、内嵌图表、市场锚定）。后端测试套件现已覆盖 **1074 个测试**。
+上文的六阶段管线是骨架；近期的版本既把它的每一个关节都加固了一遍，**又**把研究与报告阶段做了一次阶跃式扩容。以下改动是架构性的而非零敲碎打 —— 有些改变的是系统*拒绝做什么*（伪造成功、编造叙事、对冲预测），有些则成倍放大它能做什么（1.5–2.2 万词档案、并行研究、内嵌图表、市场锚定）。GLM 升级最终离线验收为 **5,085 通过、12 跳过、11 预期失败**，另有 34 项原生 SDK 检查通过；详见[验证清单](docs/research/agentic-research-20260919/glm-verification.json)。这些结果不代表线上提供方性能。
 
 ### 规模化深度研究
 
-- **多段并行合成**：不再用单次补全（其长度就是档案的物理天花板），合成阶段先推导大纲，**并行**撰写各分节（各带关键词分片上下文），确定性缝合，并在 **1.5–2.2 万词**总档案边界内，为大纲、分节初稿、截断重试、扩写和摘要共用一个输出 token 账本（`RESEARCH_MULTIPART_SYNTHESIS`、`RESEARCH_SYNTHESIS_MIN_WORDS`、`RESEARCH_SYNTHESIS_MAX_WORDS`）。深研合成失败会保留证据并失败关闭，不会把 pass notes 冒充报告。
-- **并行证据、共享行动者智能**：默认编排器同时运行**三个 evidence-only Track-A** 研究子进程——基础证据、基率/参照类、激励/反面/市场——并只让广义基础轨运行 Track B。它把三份证据包与一份来源绑定的行动者档案封入 manifest v3，再启动一个全新的全局 synthesis/judge/extraction 子进程（`RESEARCH_GLOBAL_SYNTHESIS=true`）；默认路径既不合并三份可发布报告，也不产生三套竞争阵容。关闭全局综合才进入旧的兼容合并路径。
-- **单一有界广度面**：开场 scope pass 后默认由 harness 原生 scoped 子代理承担广度；只要 harness 已接管，桥接层的 per-KIQ/per-actor 扇出（`RESEARCH_DEEP_FANOUT`、`RESEARCH_FANOUT_WIDTH`，宽度至多 8）就会被抑制。默认三条外轨共享全局子代理上限 9，推导为每轨至多 3 个；深度协议 phase 2–4 仍可并行（`RESEARCH_PARALLEL_PHASES`）。
-- **两道独立 judge→refine 门**：共享 Track-B 档案先执行十维评审，再通过强制的「阵容 × 17 维」已抓取来源覆盖审计；随后，统一 Track-A 报告再执行自己的报告评审/精修。行动者最终明确 `FAIL` 或覆盖审计失败时，不得为报告或模拟提供种子（`RESEARCH_REPORT_JUDGE`、`ACTOR_DOSSIER_JUDGE`）。
-- **通用来源分级 + 三角验证**：每个已抓取来源都拿到 S1–S4 分级（域名表与模型都命不中时给基线分级），最强的单源载重声明在最终合成前跑一次专门的三角验证 pass（`RESEARCH_UNIVERSAL_TIERING`、`RESEARCH_TRIANGULATION_TOPUP`）。
+- **有界并发下的自适应广度**：五个顺序阶段各有五位不同职责研究者，原生工具循环决定下一步研究内容，持久化发现轮追加追问。禁用嵌套委派，避免各层并发相乘。
+- **持久证据与可复用综合**：完整产物、冻结的阶段输入、行动者 pass 和成功的综合补全均可复用。索引检索与精确区间召回让未进入当前上下文的证据仍可访问，无需重放整段对话。
+- **建议性评审与机械发布**：五位评审者可提出一轮有界章节修补；发布前独立校验引用、结构、行动者覆盖与完整规范情景契约。主观 `FAIL` 不会触发整轮联网研究重跑。
+- **适配实际模型的多段综合**：接受的 SC1–SC4 情景框架传递给所有章节与摘要。上下文和输出额度按实际模型固定，包括较小的替代模型；缓存命中不重复消耗实际调用额度。
 
 ### 预测市场锚定（Polymarket，无需 Key）
 
@@ -758,9 +802,9 @@ DeepAgentForecast/
 | 后端起来了但前端 `/api` 请求 404 | 确认后端在 `:5001` 运行，且前端开发服务器（`:3000`）已将 `/api` 代理至 `5001`；用 `npm run dev` 同时启动两端最为稳妥。 |
 | `git` / `uv` / `node` 缺失或版本过旧 | 满足环境要求：普通 clone 需要 `git` 获取固定 DeerFlow 基础版本，Node.js ≥ 20.19，后端与 DeerFlow 2.0 都使用 Python 3.12，并安装最新版 `uv`。`./setup.sh` 会就缺失项给出告警与安装提示。 |
 | 想停止一次长时间运行 | 点击运行头部的**取消**按钮（或 `POST /api/research/<id>/cancel`）。研究/模拟子进程会被立即终止，停止消耗配额。 |
-| 运行中途失败（或被取消） | 点击运行头部的**继续**按钮（或 `POST /api/research/<id>/resume`）。已完成的研究、图谱、模拟与报告交付物只有在 manifest / 哈希 / schema 与阶段健康检查重新通过后才会复用；无效或损坏的产物会重新生成。管线从第一个仍需处理的阶段继续，后端中断恢复也遵循同一规则。 |
+| **运行中途失败或取消** | 点击 **Resume**（或 `POST /api/research/<id>/resume`）。复用须通过 manifest、哈希、schema 和阶段健康检查。agentic 任务及综合回执支持部分恢复；旧评审失败且缺少已验证综合输入时会停止并要求排查，不会悄悄重跑联网研究。 |
 | 深度研究从第 2 轮起反复出现 `[FORCED STOP] Tool web_search called N times` | 上游 DeerFlow 的循环检测按线程累计同一工具的调用次数，会饿死后续研究轮次。重新运行 `./setup.sh` 应用桥接中间件补丁（计数按轮次重置），并获取 `deerflow_bridge/config.yaml` 中面向研究的 `web_search`/`web_fetch` 上限（若你维护自己的 `deer-flow/config.yaml`，请手动合并 `loop_detection.tool_freq_overrides` 段）。 |
-| 研究阶段超时 | 看门狗基础预算按深度分级（quick 900s / standard 7200s / deep 21600s）；开启双轨、子代理或桥接扇出时乘 1.5。deep 模式刻意运行多轮研究因此更慢；可用 `DEERFLOW_RESEARCH_TIMEOUT` 覆盖或调低研究 `depth`。若看门狗触发时报告已写出，本次运行会打捞报告并继续。 |
+| **研究阶段超时** | 区分外层 `DEERFLOW_RESEARCH_TIMEOUT` 看门狗与工作区固定的阶段/单次调用时限。保留工作区，检查停止原因，等待已接纳任务退出后通过校验恢复；可复用已完成任务和成功综合调用，发布仍须通过最终机械回执。 |
 | 报告某个章节显示占位提示 | 这是逐节降级：单个章节的 LLM 错误会留下明确占位提示，其他章节仍继续生成。需要完整版本时可重新运行。 |
 
 ---
